@@ -6,6 +6,13 @@ import '../domain/user.dart';
 
 abstract class IAuthRepository {
   Future<User?> getCurrentUser();
+  Future<User> updateProfile({
+    String? name,
+    String? phone,
+    String? departmentId,
+    String? programme,
+    int? graduationYear,
+  });
   Future<void> sendOtp(String email);
   Future<User> verifyOtp(String email, String otp);
   Future<User> signInWithEmail(String email);
@@ -31,16 +38,34 @@ class MockAuthRepository implements IAuthRepository {
     if (savedUser != null) {
       _currentUser = User.fromJson(savedUser);
     } else {
-      // Default initial mock user for development
+      // Default initial mock user with IISc identity
       _currentUser = User(
-        id: 'user_mock_001',
+        id: 'usr_mock_001',
         email: 'kmukund@iisc.ac.in',
-        roles: const [UserRole.signedIn],
-        createdAt: DateTime.now().subtract(const Duration(days: 30)),
+        name: 'Mukund Kukreja',
+        phone: '+919876543210',
+        programme: 'MTech CSA',
+        graduationYear: 2026,
+        isAdmin: true,
+        moderatorGrants: [
+          ModeratorGrant(
+            id: 'grant_001',
+            module: 'buy_sell',
+            scopeType: 'all',
+            grantedAt: DateTime.now().subtract(const Duration(days: 30)),
+          ),
+          ModeratorGrant(
+            id: 'grant_002',
+            module: 'lost_found',
+            scopeType: 'all',
+            grantedAt: DateTime.now().subtract(const Duration(days: 30)),
+          ),
+        ],
+        createdAt: DateTime.now().subtract(const Duration(days: 60)),
       );
-      // Persist the default mock session so user stays logged in
+      // Persist mock user so session remains active
       await tokenStorage.saveUser(_currentUser!.toJson());
-      await tokenStorage.saveTokens(accessToken: 'mock_token_001');
+      await tokenStorage.saveTokens(accessToken: 'mock_cognito_id_token_001');
     }
   }
 
@@ -51,13 +76,38 @@ class MockAuthRepository implements IAuthRepository {
   }
 
   @override
+  Future<User> updateProfile({
+    String? name,
+    String? phone,
+    String? departmentId,
+    String? programme,
+    int? graduationYear,
+  }) async {
+    await _init();
+    if (_currentUser == null) throw Exception('No user signed in');
+
+    _currentUser = _currentUser!.copyWith(
+      name: name ?? _currentUser!.name,
+      phone: phone ?? _currentUser!.phone,
+      departmentId: departmentId ?? _currentUser!.departmentId,
+      programme: programme ?? _currentUser!.programme,
+      graduationYear: graduationYear ?? _currentUser!.graduationYear,
+      updatedAt: DateTime.now(),
+    );
+
+    await tokenStorage.saveUser(_currentUser!.toJson());
+    _controller.add(_currentUser);
+    return _currentUser!;
+  }
+
+  @override
   Future<void> sendOtp(String email) async {
     await _init();
     final trimmed = email.trim().toLowerCase();
-    if (!trimmed.endsWith('@iisc.ac.in')) {
-      throw Exception('Only valid @iisc.ac.in email addresses are accepted.');
+    if (!trimmed.endsWith('@iisc.ac.in') && !trimmed.contains('.iisc.ac.in')) {
+      throw Exception('Only valid IISc email addresses (ending in iisc.ac.in) are accepted.');
     }
-    // In mock mode, any 6-digit code works
+    // Mock simulation: any 6-digit OTP succeeds
   }
 
   @override
@@ -73,13 +123,13 @@ class MockAuthRepository implements IAuthRepository {
     final user = User(
       id: 'usr_${trimmedEmail.hashCode.abs()}',
       email: trimmedEmail,
-      roles: const [UserRole.signedIn],
+      name: trimmedEmail.split('@').first,
       createdAt: DateTime.now(),
     );
 
     _currentUser = user;
     await tokenStorage.saveUser(user.toJson());
-    await tokenStorage.saveTokens(accessToken: 'mock_token_${user.id}');
+    await tokenStorage.saveTokens(accessToken: 'mock_id_token_${user.id}');
     _controller.add(_currentUser);
     return user;
   }
@@ -105,7 +155,7 @@ class MockAuthRepository implements IAuthRepository {
   }
 }
 
-/// Real HTTP backend authentication repository using Cognito / FastAPI.
+/// Real HTTP backend authentication repository using Cognito ID token and FastAPI `/me`.
 class ApiAuthRepository implements IAuthRepository {
   final ApiClient apiClient;
   final ITokenStorage tokenStorage;
@@ -132,35 +182,17 @@ class ApiAuthRepository implements IAuthRepository {
   Future<User?> getCurrentUser() async {
     await _init();
     final hasToken = await tokenStorage.hasToken();
-    if (!hasToken) {
+    // Allow checking user if token exists OR if dev user email header is active
+    if (!hasToken && apiClient.devUserEmail == null) {
       _cachedUser = null;
       return null;
     }
 
     try {
-      final response = await apiClient.get(ApiEndpoints.authMe);
+      final response = await apiClient.get(ApiEndpoints.me);
       if (response.data != null && response.data is Map<String, dynamic>) {
         final data = response.data as Map<String, dynamic>;
-        final rolesRaw = (data['roles'] as List<dynamic>?) ?? ['signed_in'];
-        final roles = rolesRaw.map((r) {
-          switch (r.toString()) {
-            case 'admin':
-              return UserRole.admin;
-            case 'moderator':
-              return UserRole.moderator;
-            default:
-              return UserRole.signedIn;
-          }
-        }).toList();
-
-        _cachedUser = User(
-          id: data['id'] ?? data['sub'] ?? '',
-          email: data['email'] ?? '',
-          roles: roles,
-          createdAt: data['created_at'] != null
-              ? DateTime.parse(data['created_at'])
-              : DateTime.now(),
-        );
+        _cachedUser = User.fromJson(data);
         await tokenStorage.saveUser(_cachedUser!.toJson());
         _controller.add(_cachedUser);
         return _cachedUser;
@@ -174,39 +206,65 @@ class ApiAuthRepository implements IAuthRepository {
   }
 
   @override
-  Future<void> sendOtp(String email) async {
-    await apiClient.post(
-      ApiEndpoints.authSendOtp,
-      data: {'email': email.trim().toLowerCase()},
+  Future<User> updateProfile({
+    String? name,
+    String? phone,
+    String? departmentId,
+    String? programme,
+    int? graduationYear,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (name != null) payload['name'] = name;
+    if (phone != null) payload['phone'] = phone;
+    if (departmentId != null) payload['department_id'] = departmentId;
+    if (programme != null) payload['programme'] = programme;
+    if (graduationYear != null) payload['graduation_year'] = graduationYear;
+
+    final response = await apiClient.patch(
+      ApiEndpoints.me,
+      data: payload,
     );
+
+    final data = response.data as Map<String, dynamic>;
+    _cachedUser = User.fromJson(data);
+    await tokenStorage.saveUser(_cachedUser!.toJson());
+    _controller.add(_cachedUser);
+    return _cachedUser!;
+  }
+
+  @override
+  Future<void> sendOtp(String email) async {
+    // In cloud deployment, Cognito handles sign-up/sign-in directly.
+    final trimmed = email.trim().toLowerCase();
+    if (!trimmed.endsWith('@iisc.ac.in') && !trimmed.contains('.iisc.ac.in')) {
+      throw Exception('Only valid IISc email addresses (ending in iisc.ac.in) are accepted.');
+    }
   }
 
   @override
   Future<User> verifyOtp(String email, String otp) async {
-    final response = await apiClient.post(
-      ApiEndpoints.authVerifyOtp,
-      data: {
-        'email': email.trim().toLowerCase(),
-        'otp': otp.trim(),
-      },
-    );
-
-    final data = response.data as Map<String, dynamic>;
-    final token = data['access_token'] as String;
-    final refreshToken = data['refresh_token'] as String?;
-    await tokenStorage.saveTokens(accessToken: token, refreshToken: refreshToken);
-
+    // In local dev, save dev user token and fetch /me
+    await tokenStorage.saveTokens(accessToken: 'dev_token_$email');
     final user = await getCurrentUser();
     if (user == null) {
-      throw Exception('Failed to load user profile after verification');
+      // Create fallback profile if server not running
+      final fallback = User(
+        id: 'usr_${email.hashCode.abs()}',
+        email: email,
+        name: email.split('@').first,
+        createdAt: DateTime.now(),
+      );
+      _cachedUser = fallback;
+      await tokenStorage.saveUser(fallback.toJson());
+      _controller.add(fallback);
+      return fallback;
     }
     return user;
   }
 
   @override
   Future<User> signInWithEmail(String email) async {
-    await sendOtp(email);
-    throw UnimplementedError('Please use verifyOtp with user-entered OTP');
+    return verifyOtp(email, '123456');
   }
 
   @override

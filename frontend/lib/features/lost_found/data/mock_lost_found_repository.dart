@@ -1,197 +1,265 @@
-import 'package:flutter/material.dart';
-import '../../../core/enums/sort_option.dart';
+import 'package:flutter/material.dart' show DateTimeRange;
+import '../../../../core/enums/sort_option.dart';
+import '../../../../core/models/category_ref.dart';
+import '../../../../core/models/contact.dart';
+import '../../../../core/models/page.dart';
+import '../../../../core/models/photo.dart';
+import '../../../../core/models/user_ref.dart';
 import '../domain/lost_found_item.dart';
 import 'lost_found_repository.dart';
 
 /// In-memory mock repository for Lost & Found reports.
 class MockLostFoundRepository implements ILostFoundRepository {
-  final List<LostFoundItem> _mockReports = [
+  final List<CategoryRef> _categories = [
+    const CategoryRef(id: 1, name: 'ID Cards'),
+    const CategoryRef(id: 2, name: 'Electronics'),
+    const CategoryRef(id: 3, name: 'Personal Belongings'),
+    const CategoryRef(id: 4, name: 'Bags'),
+    const CategoryRef(id: 5, name: 'Keys'),
+    const CategoryRef(id: 6, name: 'Others'),
+  ];
+
+  late final List<LostFoundItem> _mockReports = [
     // --- 1 image, landscape ---
     LostFoundItem(
       id: '1',
-      reporterId: 'user_mukund',
-      reporterContact: 'mukundk@iisc.ac.in',
-      title: 'IISc Student ID Card (Blue Lanyard)',
+      kind: PostType.lost,
       description:
           'Lost somewhere between Physics Canteen and Main Library. '
           'Name on card: Mukund K., Roll No: 24CSE0042. '
           'Blue fabric lanyard with IISc logo clip. Please contact ASAP.',
-      category: 'ID Cards',
+      categoryRef: const CategoryRef(id: 1, name: 'ID Cards'),
+      occurredAt: DateTime.now().subtract(const Duration(hours: 3)),
       location: 'Physics Department / Library Lawn',
-      imageUrls: const ['https://picsum.photos/seed/idcard/600/400'],
-      type: PostType.lost,
-      eventTime: 'Today at 2:15 PM',
+      coverPhotoUrl: 'https://picsum.photos/seed/idcard/600/400',
+      photos: const [
+        Photo(s3Key: 'mock_lf_1', url: 'https://picsum.photos/seed/idcard/600/400', sortOrder: 0),
+      ],
       status: ReportStatus.open,
-      dateReported: DateTime.now().subtract(const Duration(hours: 3)),
+      reporter: const UserRef(id: 'user_mukund', name: 'Mukund K.'),
+      contact: const Contact(email: 'mukundk@iisc.ac.in', phone: '+919876543210'),
+      createdAt: DateTime.now().subtract(const Duration(hours: 3)),
     ),
     // --- 3 images: landscape, portrait, square ---
     LostFoundItem(
       id: '2',
-      reporterId: 'user_sufyan',
-      reporterContact: 'sufyana@iisc.ac.in',
-      title: 'Sony WH-1000XM4 Noise Cancelling Headphones',
+      kind: PostType.lost,
       description:
           'Black carrying case with headphone and auxiliary cable inside. '
           'Left on table near window in the reading room. Serial no. on label inside case. '
           'Model: WH-1000XM4, Colour: Midnight Black. Very urgent — they are expensive.',
-      category: 'Electronics',
+      categoryRef: const CategoryRef(id: 2, name: 'Electronics'),
+      occurredAt: DateTime.now().subtract(const Duration(days: 1)),
       location: 'Main Library 2nd Floor Reading Room',
-      imageUrls: const [
-        'https://picsum.photos/seed/headphones1/700/450', // landscape
-        'https://picsum.photos/seed/headphones2/400/550', // portrait
-        'https://picsum.photos/seed/headphones3/500/500', // square
+      coverPhotoUrl: 'https://picsum.photos/seed/headphones1/700/450',
+      photos: const [
+        Photo(s3Key: 'mock_lf_2a', url: 'https://picsum.photos/seed/headphones1/700/450', sortOrder: 0),
+        Photo(s3Key: 'mock_lf_2b', url: 'https://picsum.photos/seed/headphones2/400/550', sortOrder: 1),
+        Photo(s3Key: 'mock_lf_2c', url: 'https://picsum.photos/seed/headphones3/500/500', sortOrder: 2),
       ],
-      type: PostType.lost,
-      eventTime: 'Yesterday at 7:00 PM',
       status: ReportStatus.open,
-      dateReported: DateTime.now().subtract(const Duration(days: 1)),
+      reporter: const UserRef(id: 'user_sufyan', name: 'Sufyan Azam'),
+      contact: const Contact(email: 'sufyana@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(days: 1)),
     ),
     // --- 2 images, both square ---
     LostFoundItem(
       id: '3',
-      reporterId: 'user_dinky',
-      reporterContact: 'dinkyl@iisc.ac.in',
-      title: 'BoAt Airdopes Wireless Earbuds Case',
+      kind: PostType.found,
       description:
           'Found black charging case (no earbuds inside) sitting on canteen bench. '
           'Handed over to security guard post #2. Please bring ID proof when claiming.',
-      category: 'Electronics',
+      categoryRef: const CategoryRef(id: 2, name: 'Electronics'),
+      occurredAt: DateTime.now().subtract(const Duration(hours: 5)),
       location: 'Central Canteen Complex',
-      imageUrls: const [
-        'https://picsum.photos/seed/earbuds1/500/500',
-        'https://picsum.photos/seed/earbuds2/500/500',
+      coverPhotoUrl: 'https://picsum.photos/seed/earbuds1/500/500',
+      photos: const [
+        Photo(s3Key: 'mock_lf_3a', url: 'https://picsum.photos/seed/earbuds1/500/500', sortOrder: 0),
+        Photo(s3Key: 'mock_lf_3b', url: 'https://picsum.photos/seed/earbuds2/500/500', sortOrder: 1),
       ],
-      type: PostType.found,
-      eventTime: 'Today at 11:30 AM',
       status: ReportStatus.open,
-      dateReported: DateTime.now().subtract(const Duration(hours: 5)),
+      reporter: const UserRef(id: 'user_dinky', name: 'Dinky Lakhani'),
+      contact: const Contact(email: 'dinkyl@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(hours: 5)),
     ),
     // --- 1 image, portrait ---
     LostFoundItem(
       id: '4',
-      reporterId: 'user_adithya',
-      reporterContact: 'adithyac@iisc.ac.in',
-      title: 'Leather Wallet (Brown)',
+      kind: PostType.found,
       description:
           'Found brown bifold wallet containing driver\'s licence, IISc mess card, '
           'and some cash. No credit cards found. Kept safely in CSA department office. '
           'Contact CSA office (Room 104) with proof of identity.',
-      category: 'Personal Belongings',
+      categoryRef: const CategoryRef(id: 3, name: 'Personal Belongings'),
+      occurredAt: DateTime.now().subtract(const Duration(days: 2)),
       location: 'CSA Department Foyer',
-      imageUrls: const ['https://picsum.photos/seed/wallet/400/600'],
-      type: PostType.found,
-      eventTime: 'Oct 20, 2026 at 5:00 PM',
+      coverPhotoUrl: 'https://picsum.photos/seed/wallet/400/600',
+      photos: const [
+        Photo(s3Key: 'mock_lf_4', url: 'https://picsum.photos/seed/wallet/400/600', sortOrder: 0),
+      ],
       status: ReportStatus.open,
-      dateReported: DateTime.now().subtract(const Duration(days: 2)),
+      reporter: const UserRef(id: 'user_adithya', name: 'Adithya Chippa'),
+      contact: const Contact(email: 'adithyac@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(days: 2)),
     ),
-    // --- 4 images: ultra-wide, portrait, landscape, square ---
+    // --- 4 images ---
     LostFoundItem(
       id: '5',
-      reporterId: 'user_ramesh',
-      reporterContact: 'rameshk@iisc.ac.in',
-      title: 'Blue Titan Wristwatch (Analog)',
+      kind: PostType.lost,
       description:
           'Lost at the basketball court near SERC building. '
           'Titan Edge series, blue dial, stainless steel strap. '
           'Engraved "Always" on the case back. Sentimental value.',
-      category: 'Personal Belongings',
+      categoryRef: const CategoryRef(id: 3, name: 'Personal Belongings'),
+      occurredAt: DateTime.now().subtract(const Duration(days: 1, hours: 6)),
       location: 'SERC Basketball Court',
-      imageUrls: const [
-        'https://picsum.photos/seed/watch1/800/350',
-        'https://picsum.photos/seed/watch2/400/600',
-        'https://picsum.photos/seed/watch3/600/400',
-        'https://picsum.photos/seed/watch4/500/500',
+      coverPhotoUrl: 'https://picsum.photos/seed/watch1/800/350',
+      photos: const [
+        Photo(s3Key: 'mock_lf_5a', url: 'https://picsum.photos/seed/watch1/800/350', sortOrder: 0),
+        Photo(s3Key: 'mock_lf_5b', url: 'https://picsum.photos/seed/watch2/400/600', sortOrder: 1),
+        Photo(s3Key: 'mock_lf_5c', url: 'https://picsum.photos/seed/watch3/600/400', sortOrder: 2),
+        Photo(s3Key: 'mock_lf_5d', url: 'https://picsum.photos/seed/watch4/500/500', sortOrder: 3),
       ],
-      type: PostType.lost,
-      eventTime: 'Yesterday at 6:00 PM',
       status: ReportStatus.open,
-      dateReported: DateTime.now().subtract(const Duration(days: 1, hours: 6)),
+      reporter: const UserRef(id: 'user_ramesh', name: 'Ramesh K.'),
+      contact: const Contact(email: 'rameshk@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 6)),
     ),
-    // --- no images (tests empty-state gracefully) ---
+    // --- no images ---
     LostFoundItem(
       id: '6',
-      reporterId: 'user_pooja',
-      reporterContact: 'poojas@iisc.ac.in',
-      title: 'Prescription Glasses (Rimless)',
+      kind: PostType.lost,
       description:
           'Rimless frameless rectangular glasses in a black hard case. '
           'Power: L -2.5 R -2.0. Left at the Gymkhana chess club table.',
-      category: 'Personal Belongings',
+      categoryRef: const CategoryRef(id: 3, name: 'Personal Belongings'),
+      occurredAt: DateTime.now().subtract(const Duration(days: 3)),
       location: 'Gymkhana Building — Chess Club Area',
-      imageUrls: const [],
-      type: PostType.lost,
-      eventTime: '3 days ago',
+      coverPhotoUrl: null,
+      photos: const [],
       status: ReportStatus.open,
-      dateReported: DateTime.now().subtract(const Duration(days: 3)),
+      reporter: const UserRef(id: 'user_pooja', name: 'Pooja S.'),
+      contact: const Contact(email: 'poojas@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(days: 3)),
     ),
-    // --- 2 images: landscape wide, landscape standard ---
+    // --- 2 images ---
     LostFoundItem(
       id: '7',
-      reporterId: 'user_gymkhana',
-      reporterContact: 'gymkhana@iisc.ac.in',
-      title: 'Decathlon Quechua 20L Hiking Backpack (Red)',
+      kind: PostType.found,
       description:
           'Red and black daypack found near Tata Institute. '
           'Contains a water bottle and a rain cover. '
           'Submitted to Gymkhana reception desk.',
-      category: 'Bags',
+      categoryRef: const CategoryRef(id: 4, name: 'Bags'),
+      occurredAt: DateTime.now().subtract(const Duration(days: 1, hours: 12)),
       location: 'Tata Institute of Fundamental Research Gate Area',
-      imageUrls: const [
-        'https://picsum.photos/seed/bag1/800/400',
-        'https://picsum.photos/seed/bag2/600/400',
+      coverPhotoUrl: 'https://picsum.photos/seed/bag1/800/400',
+      photos: const [
+        Photo(s3Key: 'mock_lf_7a', url: 'https://picsum.photos/seed/bag1/800/400', sortOrder: 0),
+        Photo(s3Key: 'mock_lf_7b', url: 'https://picsum.photos/seed/bag2/600/400', sortOrder: 1),
       ],
-      type: PostType.found,
-      eventTime: 'Oct 21, 2026 at 9:00 AM',
       status: ReportStatus.open,
-      dateReported: DateTime.now().subtract(const Duration(days: 1, hours: 12)),
+      reporter: const UserRef(id: 'user_gymkhana', name: 'Gymkhana Staff'),
+      contact: const Contact(email: 'gymkhana@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 12)),
     ),
   ];
+
+  @override
+  Future<PaginatedResponse<LostFoundItem>> fetchReportsPage({
+    required PostType type,
+    String query = '',
+    int? categoryId,
+    List<ReportStatus>? statusList,
+    String? reporterId,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final filtered = _mockReports.where((item) {
+      final matchesType = item.kind == type;
+      final q = query.toLowerCase().trim();
+      final matchesQuery = q.isEmpty ||
+          item.description.toLowerCase().contains(q) ||
+          item.location.toLowerCase().contains(q) ||
+          item.category.toLowerCase().contains(q);
+      final matchesCategory = categoryId == null || item.categoryRef.id == categoryId;
+      final matchesStatus =
+          statusList == null || statusList.isEmpty || statusList.contains(item.status);
+      final matchesReporter = reporterId == null || reporterId.isEmpty || item.reporter.id == reporterId;
+
+      return matchesType && matchesQuery && matchesCategory && matchesStatus && matchesReporter;
+    }).toList();
+
+    filtered.sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+
+    if (offset >= filtered.length) {
+      return PaginatedResponse(items: [], limit: limit, offset: offset, hasMore: false);
+    }
+
+    final endIndex = (offset + limit).clamp(0, filtered.length);
+    final slice = filtered.sublist(offset, endIndex);
+    final hasMore = filtered.length > offset + limit;
+
+    return PaginatedResponse(
+      items: slice,
+      limit: limit,
+      offset: offset,
+      hasMore: hasMore,
+    );
+  }
 
   @override
   Future<List<LostFoundItem>> fetchReports({
     PostType? type,
     String query = '',
     String category = 'All',
+    int? categoryId,
     DateTimeRange? dateRange,
     SortOption sortOption = SortOption.newest,
+    List<ReportStatus>? statusList,
+    String? reporterId,
     int page = 1,
     int limit = 50,
+    int offset = 0,
   }) async {
     var list = _mockReports.where((item) {
-      final matchesType = type == null || item.type == type;
+      final matchesType = type == null || item.kind == type;
       final q = query.toLowerCase().trim();
       final matchesQuery = q.isEmpty ||
-          item.title.toLowerCase().contains(q) ||
           item.description.toLowerCase().contains(q) ||
           item.location.toLowerCase().contains(q) ||
           item.category.toLowerCase().contains(q);
-      final matchesCategory =
-          category == 'All' || item.category.toLowerCase() == category.toLowerCase();
+      final matchesCategory = category == 'All' ||
+          item.category.toLowerCase() == category.toLowerCase() ||
+          (categoryId != null && item.categoryRef.id == categoryId);
+      final matchesStatus =
+          statusList == null || statusList.isEmpty || statusList.contains(item.status);
+      final matchesReporter = reporterId == null || reporterId.isEmpty || item.reporter.id == reporterId;
 
       bool matchesDate = true;
       if (dateRange != null) {
-        matchesDate = item.dateReported
+        matchesDate = item.createdAt
                 .isAfter(dateRange.start.subtract(const Duration(seconds: 1))) &&
-            item.dateReported.isBefore(dateRange.end.add(const Duration(seconds: 1)));
+            item.createdAt.isBefore(dateRange.end.add(const Duration(seconds: 1)));
       }
 
-      return matchesType && matchesQuery && matchesCategory && matchesDate;
+      return matchesType && matchesQuery && matchesCategory && matchesStatus && matchesReporter && matchesDate;
     }).toList();
 
     if (sortOption == SortOption.oldest) {
-      list.sort((a, b) => a.dateReported.compareTo(b.dateReported));
+      list.sort((a, b) => a.occurredAt.compareTo(b.occurredAt));
     } else {
-      list.sort((a, b) => b.dateReported.compareTo(a.dateReported));
+      list.sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
     }
 
-    final startIndex = (page - 1) * limit;
-    if (startIndex >= list.length) return [];
-    final endIndex = (startIndex + limit).clamp(0, list.length);
-    return list.sublist(startIndex, endIndex);
+    final effectiveOffset = offset > 0 ? offset : (page > 1 ? (page - 1) * limit : 0);
+    if (effectiveOffset >= list.length) return [];
+    final endIndex = (effectiveOffset + limit).clamp(0, list.length);
+    return list.sublist(effectiveOffset, endIndex);
   }
 
   @override
-  Future<LostFoundItem?> getReportById(String id) async {
+  Future<LostFoundItem?> getReportById(String id, {PostType type = PostType.lost}) async {
     try {
       return _mockReports.firstWhere((item) => item.id == id);
     } catch (_) {
@@ -200,21 +268,107 @@ class MockLostFoundRepository implements ILostFoundRepository {
   }
 
   @override
-  Future<LostFoundItem> submitReport(LostFoundItem report) async {
-    _mockReports.insert(0, report);
-    return report;
+  Future<LostFoundItem> submitReport(
+    LostFoundItem report, {
+    List<String> photoKeys = const [],
+  }) async {
+    // Simulate finding possible matches of opposite kind in the same category
+    final oppositeKind = report.kind == PostType.lost ? PostType.found : PostType.lost;
+    final matches = _mockReports
+        .where(
+          (r) =>
+              r.kind == oppositeKind &&
+              r.categoryRef.id == report.categoryRef.id &&
+              r.status == ReportStatus.open,
+        )
+        .toList();
+
+    final itemWithMatches = report.copyWith(
+      possibleMatches: matches.isNotEmpty ? matches : null,
+    );
+
+    _mockReports.insert(0, itemWithMatches);
+    return itemWithMatches;
   }
 
   @override
-  Future<void> resolveReport(String id) async {
+  Future<LostFoundItem> updateReport(
+    String id, {
+    required PostType type,
+    String? description,
+    int? categoryId,
+    DateTime? occurredAt,
+    String? location,
+  }) async {
+    final index = _mockReports.indexWhere((it) => it.id == id);
+    if (index == -1) throw Exception('Report not found');
+
+    CategoryRef newCat = _mockReports[index].categoryRef;
+    if (categoryId != null) {
+      newCat = _categories.firstWhere(
+        (c) => c.id == categoryId,
+        orElse: () => CategoryRef(id: categoryId, name: 'Other'),
+      );
+    }
+
+    final updated = _mockReports[index].copyWith(
+      description: description,
+      categoryRef: newCat,
+      occurredAt: occurredAt,
+      location: location,
+      updatedAt: DateTime.now(),
+    );
+    _mockReports[index] = updated;
+    return updated;
+  }
+
+  @override
+  Future<void> updateStatus(String id, PostType type, ReportStatus status) async {
     final index = _mockReports.indexWhere((item) => item.id == id);
     if (index != -1) {
-      _mockReports[index] = _mockReports[index].copyWith(status: ReportStatus.resolved);
+      _mockReports[index] = _mockReports[index].copyWith(status: status);
     }
   }
 
   @override
-  Future<void> deleteReport(String id) async {
+  Future<void> replacePhotos(String id, PostType type, List<String> photoKeys) async {
+    final index = _mockReports.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      final newPhotos = photoKeys.asMap().entries.map((e) {
+        return Photo(
+          s3Key: e.value,
+          url: 'https://picsum.photos/seed/${e.value}/600/400',
+          sortOrder: e.key,
+        );
+      }).toList();
+
+      _mockReports[index] = _mockReports[index].copyWith(
+        photos: newPhotos,
+        coverPhotoUrl: newPhotos.isNotEmpty ? newPhotos.first.url : null,
+      );
+    }
+  }
+
+  @override
+  Future<void> deleteReport(String id, PostType type, {String? reason}) async {
     _mockReports.removeWhere((item) => item.id == id);
+  }
+
+  @override
+  Future<List<CategoryRef>> fetchCategories() async {
+    return List.unmodifiable(_categories);
+  }
+
+  @override
+  Future<CategoryRef> createCategory(String name) async {
+    final clean = name.trim();
+    final existing = _categories.where(
+      (c) => c.name.toLowerCase() == clean.toLowerCase(),
+    );
+    if (existing.isNotEmpty) return existing.first;
+
+    final newCat = CategoryRef(id: _categories.length + 1, name: clean);
+    _categories.add(newCat);
+    return newCat;
   }
 }

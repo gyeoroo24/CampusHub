@@ -1,26 +1,72 @@
-/// Backend API endpoint routes matching FastAPI routers.
+/// Backend API endpoint routes matching FastAPI routers (/api/v1).
 class ApiEndpoints {
   ApiEndpoints._();
 
   static const String version = '/api/v1';
 
-  // --- Auth & User ---
-  static const String authMe = '$version/auth/me';
-  static const String authLogin = '$version/auth/login';
-  static const String authSendOtp = '$version/auth/send-otp';
-  static const String authVerifyOtp = '$version/auth/verify-otp';
-  static const String authRefresh = '$version/auth/refresh';
+  // --- Health & Canary ---
+  static const String health = '$version/health';
 
-  // --- Media & S3 ---
-  static const String mediaPresign = '$version/media/presign-upload';
+  // --- Profile & Users ---
+  static const String me = '$version/me';
+  static String user(String id) => '$version/users/$id';
 
-  // --- Buy & Sell ---
-  static const String buySellListings = '$version/buy-sell/listings';
-  static String buySellListing(String id) => '$version/buy-sell/listings/$id';
-  static String buySellStatus(String id) => '$version/buy-sell/listings/$id/status';
+  // --- File Uploads (S3 Presigned URLs) ---
+  static const String uploads = '$version/uploads';
 
-  // --- Lost & Found ---
-  static const String lostFoundReports = '$version/lost-found/reports';
-  static String lostFoundReport(String id) => '$version/lost-found/reports/$id';
-  static String lostFoundResolve(String id) => '$version/lost-found/reports/$id/resolve';
+  // --- Categories ---
+  static const String buySellCategories = '$version/buy-sell/categories';
+  static const String lostFoundCategories = '$version/lost-found/categories';
+
+  // --- Buy & Sell (FR-4, FR-5, FR-6, FR-10) ---
+  static const String listings = '$version/listings';
+  static String listing(String id) => '$version/listings/$id';
+  static String listingStatus(String id) => '$version/listings/$id/status';
+  static String listingPhotos(String id) => '$version/listings/$id/photos';
+
+  // --- Lost & Found (FR-7, FR-8, FR-9, FR-10) ---
+  // Lost Reports
+  static const String lostReports = '$version/lost-reports';
+  static String lostReport(String id) => '$version/lost-reports/$id';
+  static String lostReportStatus(String id) => '$version/lost-reports/$id/status';
+  static String lostReportPhotos(String id) => '$version/lost-reports/$id/photos';
+
+  // Found Reports
+  static const String foundReports = '$version/found-reports';
+  static String foundReport(String id) => '$version/found-reports/$id';
+  static String foundReportStatus(String id) => '$version/found-reports/$id/status';
+  static String foundReportPhotos(String id) => '$version/found-reports/$id/photos';
+
+  // --- Moderators & Roles ---
+  static const String moderators = '$version/moderators';
+  static String moderator(String id) => '$version/moderators/$id';
+
+  // --- Reports & Content Moderation ---
+  static const String reports = '$version/reports';
+  static const String myReports = '$version/me/reports';
+  static String resolveReport(String id) => '$version/reports/$id/resolve';
+
+  // --- Notifications & Devices ---
+  static const String notifications = '$version/me/notifications';
+  static String notificationRead(String id) => '$version/me/notifications/$id/read';
+  static const String notificationsReadAll = '$version/me/notifications/read-all';
+  static const String devices = '$version/me/devices';
+
+  // --- Academic Help ---
+  static const String departments = '$version/departments';
+  static String department(String id) => '$version/departments/$id';
+  static String departmentCourses(String deptId) => '$version/departments/$deptId/courses';
+  static String course(String id) => '$version/courses/$id';
+  static String courseMaterials(String courseId) => '$version/courses/$courseId/materials';
+  static String courseFeedback(String courseId) => '$version/courses/$courseId/feedback';
+
+  // --- Backwards-compatible aliases ---
+  static const String authMe = me;
+  static const String mediaPresign = uploads;
+  static const String buySellListings = listings;
+  static String buySellListing(String id) => listing(id);
+  static String buySellStatus(String id) => listingStatus(id);
+  static const String lostFoundReports = lostReports;
+  static String lostFoundReport(String id) => lostReport(id);
+  static String lostFoundResolve(String id) => lostReportStatus(id);
 }

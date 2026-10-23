@@ -1,56 +1,125 @@
+import '../../../../core/models/category_ref.dart';
+import '../../../../core/models/contact.dart';
+import '../../../../core/models/photo.dart';
+import '../../../../core/models/user_ref.dart';
 import '../domain/buy_sell_item.dart';
 
-/// Data Transfer Object for Buy & Sell listings matching FastAPI/Pydantic schemas.
+/// Data Transfer Object for Buy & Sell listings matching FastAPI schemas
+/// (`ListingSummary` and `ListingDetail`).
 class BuySellListingDto {
   final String id;
-  final String sellerId;
-  final String sellerEmail;
   final String title;
-  final String description;
-  final double costPrice;
-  final double sellingPrice;
-  final String category;
-  final String location;
-  final List<String> photoUrls;
+  final String? description;
+  final double price;
   final String status;
+  final String? location;
+  final CategoryRef category;
+  final UserRef seller;
+  final String? coverPhotoUrl;
+  final List<Photo> photos;
+  final Contact? sellerContact;
   final DateTime createdAt;
   final DateTime? updatedAt;
 
   const BuySellListingDto({
     required this.id,
-    required this.sellerId,
-    required this.sellerEmail,
     required this.title,
-    required this.description,
-    required this.costPrice,
-    required this.sellingPrice,
-    required this.category,
-    required this.location,
-    required this.photoUrls,
+    this.description,
+    required this.price,
     required this.status,
+    this.location,
+    required this.category,
+    required this.seller,
+    this.coverPhotoUrl,
+    this.photos = const [],
+    this.sellerContact,
     required this.createdAt,
     this.updatedAt,
   });
 
   factory BuySellListingDto.fromJson(Map<String, dynamic> json) {
+    // 1. Price parsing: handles Decimal string or num
+    double parsedPrice = 0.0;
+    if (json['price'] != null) {
+      parsedPrice = double.tryParse(json['price'].toString()) ?? 0.0;
+    } else if (json['selling_price'] != null) {
+      parsedPrice = double.tryParse(json['selling_price'].toString()) ?? 0.0;
+    }
+
+    // 2. Category parsing: handles structured CategoryRef or legacy ID/String
+    CategoryRef parsedCategory;
+    if (json['category'] is Map<String, dynamic>) {
+      parsedCategory = CategoryRef.fromJson(json['category'] as Map<String, dynamic>);
+    } else {
+      final catId = json['category_id'] is int
+          ? json['category_id'] as int
+          : int.tryParse(json['category_id']?.toString() ?? '1') ?? 1;
+      final catName = json['category']?.toString() ?? 'Other';
+      parsedCategory = CategoryRef(id: catId, name: catName);
+    }
+
+    // 3. Seller parsing: handles structured UserRef or legacy seller_id/email
+    UserRef parsedSeller;
+    if (json['seller'] is Map<String, dynamic>) {
+      parsedSeller = UserRef.fromJson(json['seller'] as Map<String, dynamic>);
+    } else {
+      final sId = json['seller_id']?.toString() ?? '';
+      final sName = json['seller_name']?.toString() ??
+          json['seller_email']?.toString() ??
+          'Seller';
+      parsedSeller = UserRef(id: sId, name: sName);
+    }
+
+    // 4. Contact parsing: null for guests
+    Contact? parsedContact;
+    if (json['seller_contact'] is Map<String, dynamic>) {
+      parsedContact = Contact.fromJson(json['seller_contact'] as Map<String, dynamic>);
+    } else if (json['seller_email'] != null) {
+      parsedContact = Contact(
+        email: json['seller_email'].toString(),
+        phone: json['seller_phone']?.toString(),
+      );
+    }
+
+    // 5. Photos parsing
+    List<Photo> parsedPhotos = [];
+    if (json['photos'] is List) {
+      parsedPhotos = (json['photos'] as List<dynamic>)
+          .map((p) => Photo.fromJson(p as Map<String, dynamic>))
+          .toList();
+    } else if (json['photo_urls'] is List || json['image_urls'] is List) {
+      final rawUrls = (json['photo_urls'] as List<dynamic>?) ??
+          (json['image_urls'] as List<dynamic>?) ??
+          [];
+      parsedPhotos = rawUrls
+          .asMap()
+          .entries
+          .map(
+            (e) => Photo(
+              s3Key: 'mock_${e.key}',
+              url: e.value.toString(),
+              sortOrder: e.key,
+            ),
+          )
+          .toList();
+    }
+
+    // 6. Cover photo url
+    final coverUrl = json['cover_photo_url']?.toString() ??
+        (parsedPhotos.isNotEmpty ? parsedPhotos.first.url : null);
+
     return BuySellListingDto(
       id: json['id']?.toString() ?? '',
-      sellerId: json['seller_id']?.toString() ?? '',
-      sellerEmail: json['seller_email']?.toString() ?? json['email']?.toString() ?? '',
       title: json['title']?.toString() ?? '',
-      description: json['description']?.toString() ?? '',
-      costPrice: (json['cost_price'] as num?)?.toDouble() ?? 0.0,
-      sellingPrice: (json['selling_price'] as num?)?.toDouble() ?? 0.0,
-      category: json['category']?.toString() ?? json['category_id']?.toString() ?? 'Other',
-      location: json['location']?.toString() ?? '',
-      photoUrls: (json['photo_urls'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          (json['image_urls'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [],
+      description: json['description']?.toString(),
+      price: parsedPrice,
       status: json['status']?.toString() ?? 'available',
+      location: json['location']?.toString(),
+      category: parsedCategory,
+      seller: parsedSeller,
+      coverPhotoUrl: coverUrl,
+      photos: parsedPhotos,
+      sellerContact: parsedContact,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
           : (json['timestamp'] != null
@@ -62,71 +131,85 @@ class BuySellListingDto {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'seller_id': sellerId,
-      'seller_email': sellerEmail,
-      'title': title,
-      'description': description,
-      'cost_price': costPrice,
-      'selling_price': sellingPrice,
-      'category': category,
-      'location': location,
-      'photo_urls': photoUrls,
-      'status': status,
-      'created_at': createdAt.toIso8601String(),
-      if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
-    };
-  }
-
   /// Converts DTO to Domain Entity
   ListingItem toDomain() {
-    ListingStatus domainStatus = ListingStatus.available;
-    switch (status.toLowerCase()) {
-      case 'reserved':
-        domainStatus = ListingStatus.reserved;
-        break;
-      case 'sold':
-        domainStatus = ListingStatus.sold;
-        break;
-      default:
-        domainStatus = ListingStatus.available;
-    }
-
     return ListingItem(
       id: id,
-      sellerId: sellerId,
-      sellerEmail: sellerEmail,
       title: title,
-      description: description,
-      costPrice: costPrice,
-      sellingPrice: sellingPrice,
-      category: category,
-      location: location,
-      imageUrls: photoUrls,
-      status: domainStatus,
+      description: description ?? '',
+      price: price,
+      status: ListingStatus.fromString(status),
+      location: location ?? '',
+      categoryRef: category,
+      seller: seller,
+      coverPhotoUrl: coverPhotoUrl,
+      photos: photos,
+      sellerContact: sellerContact,
       createdAt: createdAt,
       updatedAt: updatedAt,
     );
   }
 
-  /// Creates DTO from Domain Entity
+  /// Converts Domain Entity to DTO
   factory BuySellListingDto.fromDomain(ListingItem item) {
     return BuySellListingDto(
       id: item.id,
-      sellerId: item.sellerId,
-      sellerEmail: item.sellerEmail,
       title: item.title,
       description: item.description,
-      costPrice: item.costPrice,
-      sellingPrice: item.sellingPrice,
-      category: item.category,
-      location: item.location,
-      photoUrls: item.imageUrls,
+      price: item.price,
       status: item.status.name,
+      location: item.location,
+      category: item.categoryRef,
+      seller: item.seller,
+      coverPhotoUrl: item.coverPhotoUrl,
+      photos: item.photos,
+      sellerContact: item.sellerContact,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
     );
+  }
+
+  /// Serializes to `ListingCreate` payload for `POST /api/v1/listings`.
+  Map<String, dynamic> toCreateJson({List<String> photoKeys = const []}) {
+    return {
+      'title': title,
+      'description': description?.isNotEmpty == true ? description : null,
+      'price': price,
+      'category_id': category.id,
+      'location': location?.isNotEmpty == true ? location : null,
+      'photo_keys': photoKeys.isNotEmpty
+          ? photoKeys
+          : photos.map((p) => p.s3Key).where((k) => k.isNotEmpty).toList(),
+    };
+  }
+
+  /// Serializes to `ListingUpdate` payload for `PATCH /api/v1/listings/{id}`.
+  Map<String, dynamic> toUpdateJson() {
+    return {
+      'title': title,
+      'description': description,
+      'price': price,
+      'category_id': category.id,
+      'location': location,
+    };
+  }
+
+  /// Full JSON representation (for mock caching or testing).
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'price': price,
+      'status': status,
+      'location': location,
+      'category': category.toJson(),
+      'seller': seller.toJson(),
+      'cover_photo_url': coverPhotoUrl,
+      'photos': photos.map((p) => p.toJson()).toList(),
+      if (sellerContact != null) 'seller_contact': sellerContact!.toJson(),
+      'created_at': createdAt.toIso8601String(),
+      if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
+    };
   }
 }

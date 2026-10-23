@@ -1,31 +1,72 @@
-import 'package:flutter/material.dart';
-import '../../../core/enums/sort_option.dart';
+import 'package:flutter/material.dart' show DateTimeRange;
+import '../../../../core/enums/sort_option.dart';
+import '../../../../core/models/category_ref.dart';
+import '../../../../core/models/page.dart';
 import '../domain/lost_found_item.dart';
-import 'mock_lost_found_repository.dart';
 
-export 'mock_lost_found_repository.dart';
 export 'api_lost_found_repository.dart';
+export 'mock_lost_found_repository.dart';
 
-/// Contract for Lost & Found data operations.
+/// Contract for Lost & Found data operations matching FastAPI endpoints.
 abstract class ILostFoundRepository {
+  /// Fetches reports with client/server filtering.
   Future<List<LostFoundItem>> fetchReports({
     PostType? type,
     String query = '',
     String category = 'All',
+    int? categoryId,
     DateTimeRange? dateRange,
     SortOption sortOption = SortOption.newest,
+    List<ReportStatus>? statusList,
+    String? reporterId,
     int page = 1,
     int limit = 50,
+    int offset = 0,
   });
 
-  Future<LostFoundItem?> getReportById(String id);
+  /// Standard paginated query returning `PaginatedResponse<LostFoundItem>` for `/lost-reports` or `/found-reports`.
+  Future<PaginatedResponse<LostFoundItem>> fetchReportsPage({
+    required PostType type,
+    String query = '',
+    int? categoryId,
+    List<ReportStatus>? statusList,
+    String? reporterId,
+    int limit = 20,
+    int offset = 0,
+  });
 
-  Future<LostFoundItem> submitReport(LostFoundItem report);
+  /// Retrieves a specific report by id and type.
+  Future<LostFoundItem?> getReportById(String id, {PostType type = PostType.lost});
 
-  Future<void> resolveReport(String id);
+  /// Files a new lost or found report (FR-7, FR-8).
+  /// On creating a report, returns the saved report and any [possibleMatches] found (FR-9).
+  Future<LostFoundItem> submitReport(
+    LostFoundItem report, {
+    List<String> photoKeys = const [],
+  });
 
-  Future<void> deleteReport(String id);
+  /// Edits report fields (reporter only).
+  Future<LostFoundItem> updateReport(
+    String id, {
+    required PostType type,
+    String? description,
+    int? categoryId,
+    DateTime? occurredAt,
+    String? location,
+  });
+
+  /// Updates status to open, matched, or closed (reporter only).
+  Future<void> updateStatus(String id, PostType type, ReportStatus status);
+
+  /// Replaces photos with new ordered S3 keys.
+  Future<void> replacePhotos(String id, PostType type, List<String> photoKeys);
+
+  /// Removes report (reporter, Lost & Found moderator, or admin, FR-10).
+  Future<void> deleteReport(String id, PostType type, {String? reason});
+
+  /// Lists all Lost & Found categories from `GET /api/v1/lost-found/categories`.
+  Future<List<CategoryRef>> fetchCategories();
+
+  /// Adds a category or retrieves existing one (`POST /api/v1/lost-found/categories`).
+  Future<CategoryRef> createCategory(String name);
 }
-
-/// Backward compatibility alias for existing code
-typedef ClientSideLostFoundRepository = MockLostFoundRepository;

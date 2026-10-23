@@ -6,82 +6,202 @@ enum UserRole {
   admin,
 }
 
-/// Represents the authenticated IISc user.
-///
-/// Only the user's IISc email is collected and stored.
+/// Represents an active moderator assignment for a specific module or scope (FR-3).
+class ModeratorGrant {
+  final String id;
+  final String module; // 'buy_sell', 'lost_found', 'academic_help', 'placement_hub'
+  final String scopeType; // 'all', 'department', 'course'
+  final String? departmentId;
+  final String? courseId;
+  final DateTime grantedAt;
+
+  const ModeratorGrant({
+    required this.id,
+    required this.module,
+    required this.scopeType,
+    this.departmentId,
+    this.courseId,
+    required this.grantedAt,
+  });
+
+  factory ModeratorGrant.fromJson(Map<String, dynamic> json) {
+    return ModeratorGrant(
+      id: json['id']?.toString() ?? '',
+      module: json['module']?.toString() ?? '',
+      scopeType: json['scope_type']?.toString() ?? 'all',
+      departmentId: json['department_id']?.toString(),
+      courseId: json['course_id']?.toString(),
+      grantedAt: json['granted_at'] != null
+          ? DateTime.tryParse(json['granted_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'module': module,
+      'scope_type': scopeType,
+      'department_id': departmentId,
+      'course_id': courseId,
+      'granted_at': grantedAt.toIso8601String(),
+    };
+  }
+}
+
+/// Represents the authenticated IISc user matching FastAPI `MyProfile`.
 class User {
   final String id;
   final String email;
-  final List<UserRole> roles;
+  final String name;
+  final String? phone;
+  final String? departmentId;
+  final String? programme;
+  final int? graduationYear;
+  final bool isAdmin;
+  final List<ModeratorGrant> moderatorGrants;
   final DateTime createdAt;
+  final DateTime? updatedAt;
 
   const User({
     required this.id,
     required this.email,
-    this.roles = const [UserRole.signedIn],
+    this.name = '',
+    this.phone,
+    this.departmentId,
+    this.programme,
+    this.graduationYear,
+    this.isAdmin = false,
+    this.moderatorGrants = const [],
     required this.createdAt,
+    this.updatedAt,
   });
 
-  bool get isGuest => roles.contains(UserRole.guest) || roles.isEmpty;
-  bool get isSignedIn => roles.contains(UserRole.signedIn);
-  bool get isModerator => roles.contains(UserRole.moderator);
-  bool get isAdmin => roles.contains(UserRole.admin);
+  /// Guest instance
+  static final guest = User(
+    id: '',
+    email: '',
+    createdAt: DateTime.fromMillisecondsSinceEpoch(0),
+  );
 
-  /// Convenient display name derived solely from the email username part (e.g. "kmukund" from "kmukund@iisc.ac.in")
+  bool get isGuest => id.isEmpty || email.isEmpty;
+  bool get isSignedIn => !isGuest;
+  bool get isModerator => moderatorGrants.isNotEmpty || isAdmin;
+
+  /// Scoped permission checks (FR-2, FR-3)
+  bool canModerateModule(String module) =>
+      isAdmin || moderatorGrants.any((g) => g.module == module);
+
+  bool get canModerateBuySell => canModerateModule('buy_sell');
+  bool get canModerateLostFound => canModerateModule('lost_found');
+
+  bool canModerateDepartment(String deptId) =>
+      isAdmin ||
+      moderatorGrants.any(
+        (g) => g.module == 'academic_help' && g.departmentId == deptId,
+      );
+
+  bool canModerateCourse(String courseId, [String? deptId]) =>
+      isAdmin ||
+      moderatorGrants.any(
+        (g) =>
+            g.module == 'academic_help' &&
+            (g.courseId == courseId ||
+                (deptId != null && g.departmentId == deptId)),
+      );
+
+  /// Backwards-compatible list of generic roles
+  List<UserRole> get roles {
+    if (isGuest) return [UserRole.guest];
+    final list = [UserRole.signedIn];
+    if (isAdmin) list.add(UserRole.admin);
+    if (isModerator) list.add(UserRole.moderator);
+    return list;
+  }
+
+  /// Convenient display name derived from name or email username
   String get displayName {
+    if (name.isNotEmpty) return name;
     if (email.contains('@')) {
       return email.split('@').first;
     }
-    return email;
+    return email.isNotEmpty ? email : 'Guest';
   }
 
-  bool isOwnerOf(String resourceOwnerId) => id == resourceOwnerId;
+  bool isOwnerOf(String resourceOwnerId) => id.isNotEmpty && id == resourceOwnerId;
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
       'email': email,
-      'roles': roles.map((r) => r.name).toList(),
+      'name': name,
+      'phone': phone,
+      'department_id': departmentId,
+      'programme': programme,
+      'graduation_year': graduationYear,
+      'is_admin': isAdmin,
+      'moderator_grants': moderatorGrants.map((g) => g.toJson()).toList(),
       'created_at': createdAt.toIso8601String(),
+      if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
     };
   }
 
   factory User.fromJson(Map<String, dynamic> json) {
-    final rolesRaw = (json['roles'] as List<dynamic>?) ?? ['signedIn'];
-    final parsedRoles = rolesRaw.map((r) {
-      switch (r.toString()) {
-        case 'admin':
-          return UserRole.admin;
-        case 'moderator':
-          return UserRole.moderator;
-        case 'guest':
-          return UserRole.guest;
-        default:
-          return UserRole.signedIn;
-      }
-    }).toList();
+    final grantsRaw = (json['moderator_grants'] as List<dynamic>?) ?? [];
+    final grants = grantsRaw
+        .map((g) => ModeratorGrant.fromJson(g as Map<String, dynamic>))
+        .toList();
+
+    // Check if roles array is present for backwards compatibility
+    final bool isAdminFlag = json['is_admin'] == true ||
+        (json['roles'] as List<dynamic>?)?.contains('admin') == true;
 
     return User(
       id: json['id']?.toString() ?? '',
       email: json['email']?.toString() ?? '',
-      roles: parsedRoles,
+      name: json['name']?.toString() ?? '',
+      phone: json['phone']?.toString(),
+      departmentId: json['department_id']?.toString(),
+      programme: json['programme']?.toString(),
+      graduationYear: json['graduation_year'] is int
+          ? json['graduation_year'] as int
+          : int.tryParse(json['graduation_year']?.toString() ?? ''),
+      isAdmin: isAdminFlag,
+      moderatorGrants: grants,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
           : DateTime.now(),
+      updatedAt: json['updated_at'] != null
+          ? DateTime.tryParse(json['updated_at'].toString())
+          : null,
     );
   }
 
   User copyWith({
     String? id,
     String? email,
-    List<UserRole>? roles,
+    String? name,
+    String? phone,
+    String? departmentId,
+    String? programme,
+    int? graduationYear,
+    bool? isAdmin,
+    List<ModeratorGrant>? moderatorGrants,
     DateTime? createdAt,
+    DateTime? updatedAt,
   }) {
     return User(
       id: id ?? this.id,
       email: email ?? this.email,
-      roles: roles ?? this.roles,
+      name: name ?? this.name,
+      phone: phone ?? this.phone,
+      departmentId: departmentId ?? this.departmentId,
+      programme: programme ?? this.programme,
+      graduationYear: graduationYear ?? this.graduationYear,
+      isAdmin: isAdmin ?? this.isAdmin,
+      moderatorGrants: moderatorGrants ?? this.moderatorGrants,
       createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 }

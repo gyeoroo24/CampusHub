@@ -8,9 +8,15 @@ class ApiClient {
   final Dio dio;
   final ITokenStorage tokenStorage;
 
+  /// Optional development user email for local FastAPI dev auth (`X-Dev-User`)
+  final String? devUserEmail;
+  final String? devUserName;
+
   ApiClient({
     Dio? dioClient,
     ITokenStorage? storage,
+    this.devUserEmail,
+    this.devUserName,
   })  : dio = dioClient ??
             Dio(
               BaseOptions(
@@ -31,9 +37,19 @@ class ApiClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          final token = await tokenStorage.getAccessToken();
-          if (token != null && token.isNotEmpty) {
-            options.headers['Authorization'] = 'Bearer $token';
+          // Do not attach backend auth headers if uploading directly to external S3 / storage URLs
+          final isExternal = options.path.startsWith('http://') || options.path.startsWith('https://');
+          if (!isExternal || options.path.startsWith(AppConfig.apiBaseUrl)) {
+            final token = await tokenStorage.getAccessToken();
+            if (token != null && token.isNotEmpty) {
+              options.headers['Authorization'] = 'Bearer $token';
+            } else if (devUserEmail != null && devUserEmail!.isNotEmpty) {
+              // Local testing headers supported by CampusHub backend
+              options.headers['X-Dev-User'] = devUserEmail;
+              if (devUserName != null && devUserName!.isNotEmpty) {
+                options.headers['X-Dev-Name'] = devUserName;
+              }
+            }
           }
           return handler.next(options);
         },
@@ -79,6 +95,30 @@ class ApiClient {
   }) async {
     try {
       return await dio.post<T>(path, data: data, queryParameters: queryParameters, options: options);
+    } on DioException catch (e) {
+      if (e.error is ApiException) {
+        throw e.error as ApiException;
+      }
+      throw ApiException.fromDioException(e);
+    }
+  }
+
+  /// Convenience PUT request (used for photo list replacement and direct S3 uploads)
+  Future<Response<T>> put<T>(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+    ProgressCallback? onSendProgress,
+  }) async {
+    try {
+      return await dio.put<T>(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+        options: options,
+        onSendProgress: onSendProgress,
+      );
     } on DioException catch (e) {
       if (e.error is ApiException) {
         throw e.error as ApiException;
