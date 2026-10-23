@@ -3,245 +3,249 @@ import '../../../../core/utils/date_time_formatter.dart';
 import '../../domain/lost_found_item.dart';
 import 'lost_found_detail_dialog.dart';
 
-class LostFoundCard extends StatelessWidget {
+class LostFoundCard extends StatefulWidget {
   final LostFoundItem item;
+  final ValueChanged<ReportStatus>? onStatusChange;
 
-  const LostFoundCard({super.key, required this.item});
+  const LostFoundCard({
+    super.key,
+    required this.item,
+    this.onStatusChange,
+  });
+
+  @override
+  State<LostFoundCard> createState() => _LostFoundCardState();
+}
+
+class _LostFoundCardState extends State<LostFoundCard> {
+  bool _isHovered = false;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final item = widget.item;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isLost = item.kind == PostType.lost;
-    final badgeColor = isLost ? const Color(0xFFE11D48) : const Color(0xFF0D9488);
 
-    Color statusColor;
+    Color badgeColor;
     String statusLabel;
-    switch (item.status) {
-      case ReportStatus.open:
-        statusColor = isLost ? const Color(0xFFE11D48) : const Color(0xFF0D9488);
-        statusLabel = isLost ? 'LOST' : 'FOUND';
-        break;
-      case ReportStatus.matched:
-        statusColor = Colors.amber.shade800;
-        statusLabel = 'MATCHED';
-        break;
-      case ReportStatus.closed:
-        statusColor = Colors.grey.shade600;
-        statusLabel = 'RESOLVED';
-        break;
+
+    if (item.status == ReportStatus.matched) {
+      badgeColor = Colors.purple.shade700;
+      statusLabel = 'MATCHED';
+    } else if (item.status == ReportStatus.closed) {
+      badgeColor = Colors.grey.shade600;
+      statusLabel = 'CLOSED';
+    } else {
+      badgeColor = isLost ? Colors.pinkAccent.shade700 : Colors.teal.shade700;
+      statusLabel = isLost ? 'LOST' : 'FOUND';
     }
 
-    return Card(
-      elevation: 1,
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-          width: 1,
-        ),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () {
-          showDialog(
-            context: context,
-            builder: (ctx) => LostFoundDetailDialog(item: item),
-          );
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Square/Near-Square Photo with Status Badges
-            AspectRatio(
-              aspectRatio: 1.15,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.network(
-                    item.imageUrl,
-                    fit: BoxFit.cover,
-                    gaplessPlayback: true,
-                    cacheWidth: 600,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                      child: Center(
-                        child: Icon(
-                          isLost ? Icons.search_off : Icons.check_circle_outline,
-                          size: 36,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Gradient overlay at top for badge legibility
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    height: 48,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.black.withValues(alpha: 0.5),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Status Badge (LOST / FOUND / MATCHED / RESOLVED)
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: statusColor,
-                        borderRadius: BorderRadius.circular(6),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.2),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Text(
-                        statusLabel,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.6,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Timestamp Pill
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.65),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.access_time_rounded, size: 11, color: Colors.white),
-                          const SizedBox(width: 4),
-                          Text(
-                            DateTimeFormatter.timeAgo(item.occurredAt),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Details Area
-            Padding(
-              padding: const EdgeInsets.all(10.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.category.name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 5),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          item.category.name,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.onPrimaryContainer,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Icon(Icons.location_on_outlined, size: 13, color: Colors.grey[600]),
-                            const SizedBox(width: 2),
-                            Expanded(
-                              child: Text(
-                                item.location.isNotEmpty ? item.location : 'Campus',
-                                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    item.description,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? Colors.grey[300] : Colors.grey[700],
-                      height: 1.25,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(Icons.person_outline_rounded, size: 12, color: badgeColor),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          item.reporterContact != null
-                              ? '${item.reporter.name} • ${item.reporterContact!.email}'
-                              : '${item.reporter.name} • Sign in to contact',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: item.reporterContact != null ? badgeColor : Colors.grey.shade500,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        transform: Matrix4.translationValues(0, _isHovered ? -3 : 0, 0),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _isHovered
+                ? badgeColor.withValues(alpha: 0.6)
+                : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+            width: _isHovered ? 1.5 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isDark
+                  ? Colors.black.withValues(alpha: _isHovered ? 0.35 : 0.15)
+                  : Colors.black.withValues(alpha: _isHovered ? 0.08 : 0.03),
+              blurRadius: _isHovered ? 12 : 6,
+              offset: Offset(0, _isHovered ? 5 : 2),
             ),
           ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            showDialog(
+              context: context,
+              builder: (ctx) => LostFoundDetailDialog(item: item),
+            );
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Photo with Hero animation and Badges
+              AspectRatio(
+                aspectRatio: 1.25,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Hero(
+                      tag: 'report_hero_${item.id}',
+                      child: Image.network(
+                        item.imageUrl,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                          child: Center(
+                            child: Icon(
+                              isLost ? Icons.search_off : Icons.check_circle_outline,
+                              size: 36,
+                              color: Colors.grey.shade400,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Top gradient overlay for badge contrast
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.center,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.4),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Status Badge
+                    Positioned(
+                      top: 10,
+                      left: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: badgeColor,
+                          borderRadius: BorderRadius.circular(6),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.25),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          statusLabel,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Incident time pill on top right
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                        ),
+                        child: Text(
+                          DateTimeFormatter.timeAgo(item.occurredAt),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Item details
+              Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Category Tag
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        item.category.name,
+                        style: TextStyle(
+                          color: badgeColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      item.displayTitle,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(Icons.location_on_outlined, size: 12, color: Colors.grey.shade500),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(
+                            item.location.isNotEmpty ? item.location : 'Campus',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark ? Colors.grey[400] : Colors.grey[600],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          item.reporterContact != null
+                              ? '${item.reporter.name} • Verified'
+                              : 'Reporter: ${item.reporter.name}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                        Icon(
+                          item.reporterContact != null ? Icons.lock_open_rounded : Icons.lock_outline_rounded,
+                          size: 12,
+                          color: Colors.grey.shade500,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

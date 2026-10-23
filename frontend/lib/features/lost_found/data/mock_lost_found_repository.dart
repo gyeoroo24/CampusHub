@@ -20,149 +20,278 @@ class MockLostFoundRepository implements ILostFoundRepository {
   ];
 
   late final List<LostFoundItem> _mockReports = [
-    // --- 1 image, landscape ---
+    // 1 (Lost)
     LostFoundItem(
       id: '1',
       kind: PostType.lost,
-      description:
-          'Lost somewhere between Physics Canteen and Main Library. '
-          'Name on card: Mukund K., Roll No: 24CSE0042. '
-          'Blue fabric lanyard with IISc logo clip. Please contact ASAP.',
+      description: 'Lost IISc Student ID Card with red CSA lanyard. Name: Mukund K., Roll No: 24CSE0042. Lost near Physics canteen or Main Library.',
       category: const CategoryRef(id: 1, name: 'ID Cards'),
       occurredAt: DateTime.now().subtract(const Duration(hours: 3)),
       location: 'Physics Department / Library Lawn',
-      coverPhotoUrl: 'https://picsum.photos/seed/idcard/600/400',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1578852612716-854e51480097?w=700&auto=format&fit=crop&q=80',
       photos: const [
-        Photo(s3Key: 'mock_lf_1', url: 'https://picsum.photos/seed/idcard/600/400', sortOrder: 0),
+        Photo(s3Key: 'mock_lf_1', url: 'https://images.unsplash.com/photo-1578852612716-854e51480097?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
       ],
       status: ReportStatus.open,
       reporter: const UserRef(id: 'user_mukund', name: 'Mukund K.'),
       reporterContact: const Contact(email: 'mukundk@iisc.ac.in', phone: '+919876543210'),
       createdAt: DateTime.now().subtract(const Duration(hours: 3)),
     ),
-    // --- 3 images: landscape, portrait, square ---
+    // 2 (Lost)
     LostFoundItem(
       id: '2',
       kind: PostType.lost,
-      description:
-          'Black carrying case with headphone and auxiliary cable inside. '
-          'Left on table near window in the reading room. Serial no. on label inside case. '
-          'Model: WH-1000XM4, Colour: Midnight Black. Very urgent — they are expensive.',
+      description: 'Black Sony WH-1000XM4 Noise Cancelling Headphones in case. Left on table near window in the 2nd floor reading room.',
       category: const CategoryRef(id: 2, name: 'Electronics'),
       occurredAt: DateTime.now().subtract(const Duration(days: 1)),
       location: 'Main Library 2nd Floor Reading Room',
-      coverPhotoUrl: 'https://picsum.photos/seed/headphones1/700/450',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=700&auto=format&fit=crop&q=80',
       photos: const [
-        Photo(s3Key: 'mock_lf_2a', url: 'https://picsum.photos/seed/headphones1/700/450', sortOrder: 0),
-        Photo(s3Key: 'mock_lf_2b', url: 'https://picsum.photos/seed/headphones2/400/550', sortOrder: 1),
-        Photo(s3Key: 'mock_lf_2c', url: 'https://picsum.photos/seed/headphones3/500/500', sortOrder: 2),
+        Photo(s3Key: 'mock_lf_2', url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
       ],
       status: ReportStatus.open,
       reporter: const UserRef(id: 'user_sufyan', name: 'Sufyan Azam'),
       reporterContact: const Contact(email: 'sufyana@iisc.ac.in'),
       createdAt: DateTime.now().subtract(const Duration(days: 1)),
     ),
-    // --- 2 images, both square ---
+    // 3 (Found)
     LostFoundItem(
       id: '3',
       kind: PostType.found,
-      description:
-          'Found black charging case (no earbuds inside) sitting on canteen bench. '
-          'Handed over to security guard post #2. Please bring ID proof when claiming.',
+      description: 'Black AirPods Pro charging case (empty inside) found sitting on wooden bench near Nescafe kiosk. Deposited with kiosk manager.',
       category: const CategoryRef(id: 2, name: 'Electronics'),
-      occurredAt: DateTime.now().subtract(const Duration(hours: 5)),
-      location: 'Central Canteen Complex',
-      coverPhotoUrl: 'https://picsum.photos/seed/earbuds1/500/500',
+      occurredAt: DateTime.now().subtract(const Duration(days: 1, hours: 2)),
+      location: 'Nescafe Kiosk Outdoor Bench',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1588423771073-b8903fbb85b5?w=700&auto=format&fit=crop&q=80',
       photos: const [
-        Photo(s3Key: 'mock_lf_3a', url: 'https://picsum.photos/seed/earbuds1/500/500', sortOrder: 0),
-        Photo(s3Key: 'mock_lf_3b', url: 'https://picsum.photos/seed/earbuds2/500/500', sortOrder: 1),
+        Photo(s3Key: 'mock_lf_3', url: 'https://images.unsplash.com/photo-1588423771073-b8903fbb85b5?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
       ],
       status: ReportStatus.open,
-      reporter: const UserRef(id: 'user_dinky', name: 'Dinky Lakhani'),
-      reporterContact: const Contact(email: 'dinkyl@iisc.ac.in'),
-      createdAt: DateTime.now().subtract(const Duration(hours: 5)),
+      reporter: const UserRef(id: 'user_ananya', name: 'Ananya Roy'),
+      reporterContact: const Contact(email: 'ananyar@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 2)),
     ),
-    // --- 1 image, portrait ---
+    // 4 (Found)
     LostFoundItem(
       id: '4',
       kind: PostType.found,
-      description:
-          'Found brown bifold wallet containing driver\'s licence, IISc mess card, '
-          'and some cash. No credit cards found. Kept safely in CSA department office. '
-          'Contact CSA office (Room 104) with proof of identity.',
-      category: const CategoryRef(id: 3, name: 'Personal Belongings'),
-      occurredAt: DateTime.now().subtract(const Duration(days: 2)),
-      location: 'CSA Department Foyer',
-      coverPhotoUrl: 'https://picsum.photos/seed/wallet/400/600',
+      description: 'Single brass Godrej door key with blue plastic ring marker. Found on the pathway heading toward Gymkhana ground.',
+      category: const CategoryRef(id: 4, name: 'Keys'),
+      occurredAt: DateTime.now().subtract(const Duration(hours: 18)),
+      location: 'Pathway near Gymkhana Ground',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1582139329536-e7284fece509?w=700&auto=format&fit=crop&q=80',
       photos: const [
-        Photo(s3Key: 'mock_lf_4', url: 'https://picsum.photos/seed/wallet/400/600', sortOrder: 0),
+        Photo(s3Key: 'mock_lf_4', url: 'https://images.unsplash.com/photo-1582139329536-e7284fece509?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
       ],
       status: ReportStatus.open,
-      reporter: const UserRef(id: 'user_adithya', name: 'Adithya Chippa'),
-      reporterContact: const Contact(email: 'adithyac@iisc.ac.in'),
-      createdAt: DateTime.now().subtract(const Duration(days: 2)),
+      reporter: const UserRef(id: 'user_rahul', name: 'Rahul Verma'),
+      reporterContact: const Contact(email: 'rahulv@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(hours: 18)),
     ),
-    // --- 4 images ---
+    // 5 (Lost)
     LostFoundItem(
       id: '5',
       kind: PostType.lost,
-      description:
-          'Lost at the basketball court near SERC building. '
-          'Titan Edge series, blue dial, stainless steel strap. '
-          'Engraved "Always" on the case back. Sentimental value.',
+      description: 'Milton 750ml Stainless Steel thermosteel flask, matte black with "I Love IISc" sticker on side. Left behind in LH-1.',
       category: const CategoryRef(id: 3, name: 'Personal Belongings'),
-      occurredAt: DateTime.now().subtract(const Duration(days: 1, hours: 6)),
-      location: 'SERC Basketball Court',
-      coverPhotoUrl: 'https://picsum.photos/seed/watch1/800/350',
+      occurredAt: DateTime.now().subtract(const Duration(hours: 6)),
+      location: 'Old Lecture Hall Complex Room 1',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=700&auto=format&fit=crop&q=80',
       photos: const [
-        Photo(s3Key: 'mock_lf_5a', url: 'https://picsum.photos/seed/watch1/800/350', sortOrder: 0),
-        Photo(s3Key: 'mock_lf_5b', url: 'https://picsum.photos/seed/watch2/400/600', sortOrder: 1),
-        Photo(s3Key: 'mock_lf_5c', url: 'https://picsum.photos/seed/watch3/600/400', sortOrder: 2),
-        Photo(s3Key: 'mock_lf_5d', url: 'https://picsum.photos/seed/watch4/500/500', sortOrder: 3),
+        Photo(s3Key: 'mock_lf_5', url: 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
       ],
       status: ReportStatus.open,
-      reporter: const UserRef(id: 'user_ramesh', name: 'Ramesh K.'),
-      reporterContact: const Contact(email: 'rameshk@iisc.ac.in'),
-      createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 6)),
+      reporter: const UserRef(id: 'user_sneha', name: 'Sneha Iyer'),
+      reporterContact: const Contact(email: 'snehai@iisc.ac.in', phone: '+919876543215'),
+      createdAt: DateTime.now().subtract(const Duration(hours: 6)),
     ),
-    // --- no images ---
+    // 6 (Found)
     LostFoundItem(
       id: '6',
-      kind: PostType.lost,
-      description:
-          'Rimless frameless rectangular glasses in a black hard case. '
-          'Power: L -2.5 R -2.0. Left at the Gymkhana chess club table.',
-      category: const CategoryRef(id: 3, name: 'Personal Belongings'),
-      occurredAt: DateTime.now().subtract(const Duration(days: 3)),
-      location: 'Gymkhana Building — Chess Club Area',
-      coverPhotoUrl: null,
-      photos: const [],
-      status: ReportStatus.open,
-      reporter: const UserRef(id: 'user_pooja', name: 'Pooja S.'),
-      reporterContact: const Contact(email: 'poojas@iisc.ac.in'),
-      createdAt: DateTime.now().subtract(const Duration(days: 3)),
-    ),
-    // --- 2 images ---
-    LostFoundItem(
-      id: '7',
       kind: PostType.found,
-      description:
-          'Red and black daypack found near Tata Institute. '
-          'Contains a water bottle and a rain cover. '
-          'Submitted to Gymkhana reception desk.',
-      category: const CategoryRef(id: 4, name: 'Bags'),
-      occurredAt: DateTime.now().subtract(const Duration(days: 1, hours: 12)),
-      location: 'Tata Institute of Fundamental Research Gate Area',
-      coverPhotoUrl: 'https://picsum.photos/seed/bag1/800/400',
+      description: 'Casio fx-991EX Scientific Calculator with name sticker "Priya N." on back. Found in Department of Mathematics seminar room.',
+      category: const CategoryRef(id: 2, name: 'Electronics'),
+      occurredAt: DateTime.now().subtract(const Duration(hours: 14)),
+      location: 'Dept of Mathematics Seminar Room',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1611125832047-1d7ad1e8e48f?w=700&auto=format&fit=crop&q=80',
       photos: const [
-        Photo(s3Key: 'mock_lf_7a', url: 'https://picsum.photos/seed/bag1/800/400', sortOrder: 0),
-        Photo(s3Key: 'mock_lf_7b', url: 'https://picsum.photos/seed/bag2/600/400', sortOrder: 1),
+        Photo(s3Key: 'mock_lf_6', url: 'https://images.unsplash.com/photo-1611125832047-1d7ad1e8e48f?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
       ],
       status: ReportStatus.open,
-      reporter: const UserRef(id: 'user_gymkhana', name: 'Gymkhana Staff'),
-      reporterContact: const Contact(email: 'gymkhana@iisc.ac.in'),
-      createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 12)),
+      reporter: const UserRef(id: 'user_vikram', name: 'Vikram Singh'),
+      reporterContact: const Contact(email: 'vikrams@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(hours: 14)),
     ),
+    // 7 (Lost)
+    LostFoundItem(
+      id: '7',
+      kind: PostType.lost,
+      description: 'Bunch of 4 keys including Godrej room key, cycle lock key, and a red Swiss army knife attached. Lost around Sarvam block.',
+      category: const CategoryRef(id: 4, name: 'Keys'),
+      occurredAt: DateTime.now().subtract(const Duration(days: 2)),
+      location: 'Sarvam Hostel Walkway',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1582139329536-e7284fece509?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_lf_7', url: 'https://images.unsplash.com/photo-1582139329536-e7284fece509?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ReportStatus.open,
+      reporter: const UserRef(id: 'user_karan', name: 'Karan Mehra'),
+      reporterContact: const Contact(email: 'karanm@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(days: 2)),
+    ),
+    // 8 (Found)
+    LostFoundItem(
+      id: '8',
+      kind: PostType.found,
+      description: 'IISc Student ID Card found near Biology Canteen. Name on card: Rohan Sharma (Biological Sciences Dept). Handed over to security guard.',
+      category: const CategoryRef(id: 1, name: 'ID Cards'),
+      occurredAt: DateTime.now().subtract(const Duration(hours: 8)),
+      location: 'Biological Sciences Canteen',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1578852612716-854e51480097?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_lf_8', url: 'https://images.unsplash.com/photo-1578852612716-854e51480097?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ReportStatus.open,
+      reporter: const UserRef(id: 'user_tanvi', name: 'Tanvi Deshmukh'),
+      reporterContact: const Contact(email: 'tanvid@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(hours: 8)),
+    ),
+    // 9 (Lost)
+    LostFoundItem(
+      id: '9',
+      kind: PostType.lost,
+      description: 'Ray-Ban Wayfarer reading glasses in black matte case. Left on study carrel in library first floor.',
+      category: const CategoryRef(id: 3, name: 'Personal Belongings'),
+      occurredAt: DateTime.now().subtract(const Duration(days: 2, hours: 5)),
+      location: 'Main Library 1st Floor Study Carrels',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_lf_9', url: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ReportStatus.open,
+      reporter: const UserRef(id: 'user_aditya', name: 'Aditya Gupta'),
+      reporterContact: const Contact(email: 'adityag@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(days: 2, hours: 5)),
+    ),
+    // 10 (Found)
+    LostFoundItem(
+      id: '10',
+      kind: PostType.found,
+      description: 'Lenovo 65W USB-C Laptop Charger left plugged into power socket in CDS computer lab room 102. Safe with lab assistant.',
+      category: const CategoryRef(id: 2, name: 'Electronics'),
+      occurredAt: DateTime.now().subtract(const Duration(days: 1, hours: 6)),
+      location: 'CDS Dept Computer Lab 102',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_lf_10', url: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ReportStatus.open,
+      reporter: const UserRef(id: 'user_rohit', name: 'Rohit Kulkarni'),
+      reporterContact: const Contact(email: 'rohitk@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 6)),
+    ),
+    // 11 (Lost)
+    LostFoundItem(
+      id: '11',
+      kind: PostType.lost,
+      description: 'Blue A4 Folder containing signed hostel clearance form and original fee receipts. Urgent requirement for degree submission.',
+      category: const CategoryRef(id: 5, name: 'Documents'),
+      occurredAt: DateTime.now().subtract(const Duration(days: 3)),
+      location: 'Central Administration Building Unit',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1586075010923-2dd4570fb338?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_lf_11', url: 'https://images.unsplash.com/photo-1586075010923-2dd4570fb338?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ReportStatus.open,
+      reporter: const UserRef(id: 'user_megha', name: 'Megha Rao'),
+      reporterContact: const Contact(email: 'meghar@iisc.ac.in', phone: '+919876543225'),
+      createdAt: DateTime.now().subtract(const Duration(days: 3)),
+    ),
+    // 12 (Found)
+    LostFoundItem(
+      id: '12',
+      kind: PostType.found,
+      description: 'Black Fastrack Analog Wristwatch with silver dial found near Gymkhana badminton court. In working condition.',
+      category: const CategoryRef(id: 3, name: 'Personal Belongings'),
+      occurredAt: DateTime.now().subtract(const Duration(days: 2, hours: 8)),
+      location: 'Gymkhana Badminton Court Side Bench',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1524805444758-089113d48a6d?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_lf_12', url: 'https://images.unsplash.com/photo-1524805444758-089113d48a6d?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ReportStatus.open,
+      reporter: const UserRef(id: 'user_siddharth', name: 'Siddharth Jain'),
+      reporterContact: const Contact(email: 'siddharthj@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(days: 2, hours: 8)),
+    ),
+    // 13 (Lost)
+    LostFoundItem(
+      id: '13',
+      kind: PostType.lost,
+      description: 'SanDisk 128GB Dual Drive USB Type-C Flash Drive (Silver metal). Has my MTech dissertation latex files and datasets.',
+      category: const CategoryRef(id: 2, name: 'Electronics'),
+      occurredAt: DateTime.now().subtract(const Duration(days: 3, hours: 4)),
+      location: 'Aerospace Dept Seminar Hall',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1624823183493-5f80fa63e1eb?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_lf_13', url: 'https://images.unsplash.com/photo-1624823183493-5f80fa63e1eb?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ReportStatus.open,
+      reporter: const UserRef(id: 'user_harsh', name: 'Harsh Vardhan'),
+      reporterContact: const Contact(email: 'harshv@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(days: 3, hours: 4)),
+    ),
+    // 14 (Found)
+    LostFoundItem(
+      id: '14',
+      kind: PostType.found,
+      description: 'Blue umbrella with curved wooden handle left near Main Library entrance umbrella rack after yesterday evening rain.',
+      category: const CategoryRef(id: 3, name: 'Personal Belongings'),
+      occurredAt: DateTime.now().subtract(const Duration(days: 1, hours: 10)),
+      location: 'Main Library Entrance Umbrella Stand',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1534329539061-64caeb388c42?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_lf_14', url: 'https://images.unsplash.com/photo-1534329539061-64caeb388c42?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ReportStatus.open,
+      reporter: const UserRef(id: 'user_divya', name: 'Divya Sen'),
+      reporterContact: const Contact(email: 'divyas@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 10)),
+    ),
+    // 15 (Lost)
+    LostFoundItem(
+      id: '15',
+      kind: PostType.lost,
+      description: 'Gym locker padlock key with small green plastic tag "L-42". Dropped near Gymkhana gym weights section.',
+      category: const CategoryRef(id: 4, name: 'Keys'),
+      occurredAt: DateTime.now().subtract(const Duration(hours: 10)),
+      location: 'Gymkhana Fitness Center',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1582139329536-e7284fece509?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_lf_15', url: 'https://images.unsplash.com/photo-1582139329536-e7284fece509?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ReportStatus.open,
+      reporter: const UserRef(id: 'user_deepak', name: 'Deepak Mishra'),
+      reporterContact: const Contact(email: 'deepakm@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(hours: 10)),
+    ),
+    // 16 (Found)
+    LostFoundItem(
+      id: '16',
+      kind: PostType.found,
+      description: 'Spiral-bound notebook titled "Deep Learning Lecture Notes 2026" found in CSA 254 classroom. Has detailed notes.',
+      category: const CategoryRef(id: 5, name: 'Documents'),
+      occurredAt: DateTime.now().subtract(const Duration(days: 2, hours: 1)),
+      location: 'CSA Department Classroom 254',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_lf_16', url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ReportStatus.open,
+      reporter: const UserRef(id: 'user_tarun', name: 'Tarun Reddy'),
+      reporterContact: const Contact(email: 'tarunr@iisc.ac.in'),
+      createdAt: DateTime.now().subtract(const Duration(days: 2, hours: 1)),
+    )
   ];
 
   @override
@@ -175,6 +304,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
     int limit = 20,
     int offset = 0,
   }) async {
+    await Future.delayed(const Duration(milliseconds: 320));
     final filtered = _mockReports.where((item) {
       final matchesType = item.kind == type;
       final q = query.toLowerCase().trim();
@@ -222,6 +352,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
     int limit = 50,
     int offset = 0,
   }) async {
+    await Future.delayed(const Duration(milliseconds: 320));
     var list = _mockReports.where((item) {
       final matchesType = type == null || item.kind == type;
       final q = query.toLowerCase().trim();

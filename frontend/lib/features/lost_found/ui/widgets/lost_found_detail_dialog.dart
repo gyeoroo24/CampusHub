@@ -48,6 +48,7 @@ class LostFoundDetailDialog extends ConsumerWidget {
                     child: PhotoCarousel(
                       imageUrls: item.photoUrls,
                       size: carouselSize,
+                      heroTag: 'report_hero_${item.id}',
                     ),
                   ),
                   // Close button
@@ -112,24 +113,29 @@ class LostFoundDetailDialog extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            item.category.name,
-                            style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
-                          ),
+                    // Category Badge Pill
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: themeColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: themeColor.withValues(alpha: 0.3)),
+                      ),
+                      child: Text(
+                        item.category.name,
+                        style: TextStyle(
+                          color: themeColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
                         ),
-                        const SizedBox(width: 8),
-                        Chip(
-                          label: Text(
-                            item.category.name,
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-                          ),
-                          backgroundColor: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
-                        ),
-                      ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Main Headline / Title
+                    Text(
+                      item.displayTitle,
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, height: 1.3),
                     ),
                     const SizedBox(height: 12),
                     Row(

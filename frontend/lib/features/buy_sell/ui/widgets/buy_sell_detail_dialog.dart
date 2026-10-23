@@ -59,6 +59,7 @@ class BuySellDetailDialog extends ConsumerWidget {
                     child: PhotoCarousel(
                       imageUrls: item.photoUrls,
                       size: carouselSize,
+                      heroTag: 'listing_hero_${item.id}',
                     ),
                   ),
                   // Close button

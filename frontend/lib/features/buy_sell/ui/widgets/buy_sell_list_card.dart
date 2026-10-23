@@ -3,7 +3,7 @@ import '../../../../core/utils/date_time_formatter.dart';
 import '../../domain/buy_sell_item.dart';
 import 'buy_sell_detail_dialog.dart';
 
-class BuySellListCard extends StatelessWidget {
+class BuySellListCard extends StatefulWidget {
   final ListingItem item;
   final ValueChanged<ListingStatus>? onStatusChange;
 
@@ -14,186 +14,217 @@ class BuySellListCard extends StatelessWidget {
   });
 
   @override
+  State<BuySellListCard> createState() => _BuySellListCardState();
+}
+
+class _BuySellListCardState extends State<BuySellListCard> {
+  bool _isHovered = false;
+
+  @override
   Widget build(BuildContext context) {
+    final item = widget.item;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isSold = item.status == ListingStatus.sold;
 
-    Color cardBg;
-    Color borderColor;
     Color statusColor;
     String statusLabel;
 
     switch (item.status) {
       case ListingStatus.available:
-        cardBg = isDark ? const Color(0xFF062E1B) : const Color(0xFFF0FDF4); // Light Green
-        borderColor = isDark ? const Color(0xFF065F46) : const Color(0xFFA7F3D0);
         statusColor = const Color(0xFF059669);
         statusLabel = 'AVAILABLE';
         break;
       case ListingStatus.reserved:
-        cardBg = isDark ? const Color(0xFF2E2406) : const Color(0xFFFEFCE8); // Off-Yellow
-        borderColor = isDark ? Colors.amber.shade800 : Colors.amber.shade300;
         statusColor = Colors.amber.shade800;
         statusLabel = 'RESERVED';
         break;
       case ListingStatus.sold:
-        cardBg = isDark ? const Color(0xFF18181B) : const Color(0xFFF4F4F5);
-        borderColor = isDark ? const Color(0xFF3F3F46) : const Color(0xFFD4D4D8);
         statusColor = isDark ? const Color(0xFFA1A1AA) : const Color(0xFF71717A);
-        statusLabel = 'SOLD OUT';
+        statusLabel = 'SOLD';
         break;
     }
 
-    return Card(
-      color: cardBg,
-      elevation: isSold ? 0 : 1,
-      margin: const EdgeInsets.only(bottom: 12),
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: borderColor, width: 1.2),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          showDialog(
-            context: context,
-            builder: (ctx) => BuySellDetailDialog(
-              item: item,
-              onStatusChange: onStatusChange,
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _isHovered
+                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.6)
+                : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+            width: _isHovered ? 1.5 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isDark
+                  ? Colors.black.withValues(alpha: _isHovered ? 0.35 : 0.15)
+                  : Colors.black.withValues(alpha: _isHovered ? 0.08 : 0.03),
+              blurRadius: _isHovered ? 12 : 6,
+              offset: Offset(0, _isHovered ? 4 : 2),
             ),
-          );
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Opacity(
-                  opacity: isSold ? 0.6 : 1.0,
-                  child: Image.network(
-                    item.imageUrl,
-                    width: 120,
-                    height: 100,
-                    fit: BoxFit.cover,
-                    gaplessPlayback: true,
-                    cacheWidth: 300,
-                    errorBuilder: (_, __, ___) => Container(
-                      width: 120,
-                      height: 100,
-                      color: isDark ? const Color(0xFF27272A) : Colors.grey[300],
-                      child: const Icon(Icons.shopping_bag_outlined, size: 30),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            showDialog(
+              context: context,
+              builder: (ctx) => BuySellDetailDialog(
+                item: item,
+                onStatusChange: widget.onStatusChange,
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Thumbnail with Hero animation
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Hero(
+                    tag: 'listing_hero_${item.id}',
+                    child: Opacity(
+                      opacity: isSold ? 0.6 : 1.0,
+                      child: Image.network(
+                        item.imageUrl,
+                        width: 120,
+                        height: 100,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                        errorBuilder: (_, __, ___) => Container(
+                          width: 120,
+                          height: 100,
+                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                          child: Icon(Icons.shopping_bag_outlined, size: 30, color: Colors.grey.shade400),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            item.title,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              color: isSold ? Colors.grey : null,
-                              decoration: isSold ? TextDecoration.lineThrough : null,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: statusColor.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: statusColor, width: 1),
-                          ),
-                          child: Text(
-                            statusLabel,
-                            style: TextStyle(
-                              color: statusColor,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
+                const SizedBox(width: 16),
+
+                // Content details
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              item.title,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: isSold ? Colors.grey : null,
+                                decoration: isSold ? TextDecoration.lineThrough : null,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Text(
-                          '₹${item.price.toStringAsFixed(0)}',
-                          style: TextStyle(
-                            color: isSold ? Colors.grey : Colors.indigo.shade600,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 17,
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: statusColor, width: 1),
+                            ),
+                            child: Text(
+                              statusLabel,
+                              style: TextStyle(
+                                color: statusColor,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Chip(
-                          label: Text(
-                            item.category.name,
-                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
-                          ),
-                          padding: EdgeInsets.zero,
-                          visualDensity: VisualDensity.compact,
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      item.description,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isSold
-                            ? Colors.grey
-                            : (isDark ? Colors.grey[300] : Colors.grey[700]),
+                        ],
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Seller: ${item.seller.name} • ${item.location.isNotEmpty ? item.location : 'Campus'}',
-                            style: const TextStyle(fontSize: 11, color: Colors.grey),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                      const SizedBox(height: 6),
+                      Text(
+                        item.description,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.grey[400] : Colors.grey[600],
+                          height: 1.3,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                '₹${item.price.toStringAsFixed(0)}',
+                                style: TextStyle(
+                                  color: isSold ? Colors.grey : Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  item.category.name,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.access_time_rounded, size: 12, color: Colors.grey[500]),
-                            const SizedBox(width: 4),
-                            Text(
-                              DateTimeFormatter.timeAgo(item.createdAt),
-                              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
+                          Row(
+                            children: [
+                              Icon(Icons.location_on_outlined, size: 12, color: Colors.grey.shade500),
+                              const SizedBox(width: 3),
+                              Text(
+                                item.location.isNotEmpty ? item.location : 'IISc',
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                              ),
+                              const SizedBox(width: 8),
+                              Text('•', style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
+                              const SizedBox(width: 8),
+                              Text(
+                                item.seller.name,
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                              ),
+                              const SizedBox(width: 8),
+                              Text('•', style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
+                              const SizedBox(width: 8),
+                              Text(
+                                DateTimeFormatter.timeAgo(item.createdAt),
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

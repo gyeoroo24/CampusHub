@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../router/app_router.dart';
@@ -20,9 +21,12 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
   bool _isFocused = false;
+  Timer? _debounceTimer;
+  bool _isDebouncing = false;
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _searchController.dispose();
     _removeOverlay();
     super.dispose();
@@ -34,13 +38,14 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
   }
 
   void _clearSearch() {
+    _debounceTimer?.cancel();
     _searchController.clear();
     _removeOverlay();
+    setState(() => _isDebouncing = false);
     ref.read(buySellFilterProvider.notifier).state =
         ref.read(buySellFilterProvider).copyWith(query: '');
     ref.read(lostFoundFilterProvider.notifier).state =
         ref.read(lostFoundFilterProvider).copyWith(query: '');
-    setState(() {});
   }
 
   void _showOverlay() {
@@ -203,8 +208,8 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
           size: 20,
           color: type == 'Lost' ? Colors.red : Colors.teal,
         ),
-        title: Text('[$type] ${item.category.name}', style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text('${item.location} • $dateStr\n${item.description}', maxLines: 2, overflow: TextOverflow.ellipsis),
+        title: Text('[$type] ${item.displayTitle}', style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text('${item.category.name} • ${item.location} • $dateStr', maxLines: 1, overflow: TextOverflow.ellipsis),
         isThreeLine: true,
         onTap: () {
           _removeOverlay();
@@ -241,33 +246,72 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
             decoration: InputDecoration(
               hintText: 'Super Search across all modules...',
               hintStyle: const TextStyle(fontSize: 13),
-              prefixIcon: const Icon(Icons.search, size: 20),
-              suffixIcon: _searchController.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear, size: 18),
-                      onPressed: _clearSearch,
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              suffixIcon: _isDebouncing
+                  ? const Padding(
+                      padding: EdgeInsets.all(11.0),
+                      child: SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
                     )
-                  : null,
+                  : (_searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear_rounded, size: 18),
+                          onPressed: _clearSearch,
+                        )
+                      : null),
               filled: true,
               fillColor: Theme.of(context).brightness == Brightness.dark
                   ? const Color(0xFF1E293B)
                   : const Color(0xFFF1F5F9),
-              contentPadding: const EdgeInsets.symmetric(vertical: 0),
+              contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(20),
-                borderSide: BorderSide.none,
+                borderRadius: BorderRadius.circular(24),
+                borderSide: BorderSide(
+                  color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(24),
+                borderSide: BorderSide(
+                  color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(24),
+                borderSide: BorderSide(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 1.5,
+                ),
               ),
             ),
             onChanged: (val) {
               if (_overlayEntry == null) {
                 _showOverlay();
-              } else {
-                _overlayEntry!.markNeedsBuild();
               }
-              ref.read(buySellFilterProvider.notifier).state =
-                  ref.read(buySellFilterProvider).copyWith(query: val);
-              ref.read(lostFoundFilterProvider.notifier).state =
-                  ref.read(lostFoundFilterProvider).copyWith(query: val);
+              _debounceTimer?.cancel();
+              if (val.trim().isEmpty) {
+                setState(() => _isDebouncing = false);
+                ref.read(buySellFilterProvider.notifier).state =
+                    ref.read(buySellFilterProvider).copyWith(query: '');
+                ref.read(lostFoundFilterProvider.notifier).state =
+                    ref.read(lostFoundFilterProvider).copyWith(query: '');
+                _overlayEntry?.markNeedsBuild();
+              } else {
+                setState(() => _isDebouncing = true);
+                _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+                  if (mounted) {
+                    setState(() => _isDebouncing = false);
+                    ref.read(buySellFilterProvider.notifier).state =
+                        ref.read(buySellFilterProvider).copyWith(query: val.trim());
+                    ref.read(lostFoundFilterProvider.notifier).state =
+                        ref.read(lostFoundFilterProvider).copyWith(query: val.trim());
+                    _overlayEntry?.markNeedsBuild();
+                  }
+                });
+              }
             },
           ),
         ),

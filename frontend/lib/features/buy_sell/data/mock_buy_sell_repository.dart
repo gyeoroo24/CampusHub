@@ -19,147 +19,414 @@ class MockBuySellRepository implements IBuySellRepository {
   ];
 
   late final List<ListingItem> _mockData = [
-    // --- 1 image, landscape 4:3 ---
+    // 1
     ListingItem(
       id: '1',
       seller: const UserRef(id: 'user_aarav', name: 'Aarav Sharma'),
       sellerContact: const Contact(email: 'aaravs@iisc.ac.in', phone: '+919876543211'),
       title: 'IISc Chemistry Lab Coat (Size M)',
-      description:
-          '100% Cotton, clean condition with no chemical stains or tears. '
-          'Ideal for first-year lab work. Washed and ironed. Fits 5\'7"–5\'10".',
+      description: '100% Cotton, clean condition with no chemical stains or tears. Ideal for first-year lab work. Washed and ironed. Fits 5\'7"-5\'10".',
       price: 350.0,
       category: const CategoryRef(id: 5, name: 'Lab Equipment'),
       location: 'Sarvam Hostel Block B',
-      coverPhotoUrl: 'https://picsum.photos/seed/labcoat/600/450',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1584820927498-cfe5211fd8bf?w=700&auto=format&fit=crop&q=80',
       photos: const [
-        Photo(s3Key: 'mock_coat_1', url: 'https://picsum.photos/seed/labcoat/600/450', sortOrder: 0),
+        Photo(s3Key: 'mock_coat_1', url: 'https://images.unsplash.com/photo-1584820927498-cfe5211fd8bf?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
       ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(hours: 3)),
     ),
-    // --- 3 images: portrait, landscape, square ---
+    // 2
     ListingItem(
       id: '2',
       seller: const UserRef(id: 'user_priya', name: 'Priya Nair'),
       sellerContact: const Contact(email: 'priyan@iisc.ac.in', phone: '+919876543212'),
       title: 'Ergonomic Mesh Study Chair',
-      description:
-          'Breathable mesh backrest with adjustable lumbar support and height '
-          'pneumatic lever. Armrests intact. Minor scuff on base. '
-          'Bought 6 months ago for 4500. Moving out of hostel.',
+      description: 'Breathable mesh backrest with adjustable lumbar support and height pneumatic lever. Armrests intact. Minor scuff on base. Moving out of hostel.',
       price: 1800.0,
       category: const CategoryRef(id: 4, name: 'Furniture'),
       location: 'R-Block Hostel Room 204',
-      coverPhotoUrl: 'https://picsum.photos/seed/chair1/400/600',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1580481077194-c71c4c95f137?w=700&auto=format&fit=crop&q=80',
       photos: const [
-        Photo(s3Key: 'mock_chair_1', url: 'https://picsum.photos/seed/chair1/400/600', sortOrder: 0),
-        Photo(s3Key: 'mock_chair_2', url: 'https://picsum.photos/seed/chair2/700/400', sortOrder: 1),
-        Photo(s3Key: 'mock_chair_3', url: 'https://picsum.photos/seed/chair3/500/500', sortOrder: 2),
+        Photo(s3Key: 'mock_chair_1', url: 'https://images.unsplash.com/photo-1580481077194-c71c4c95f137?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
       ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(days: 1)),
     ),
-    // --- 2 images: both landscape ---
+    // 3
     ListingItem(
       id: '3',
       seller: const UserRef(id: 'user_rahul', name: 'Rahul Verma'),
       sellerContact: const Contact(email: 'rahulv@iisc.ac.in'),
-      title: 'Engineering Mathematics by Erwin Kreyszig',
-      description:
-          '10th Edition Hardcover. Contains neatly highlighted notes and previous '
-          'year problem solutions in pencil (erasable). All pages intact, spine tight.',
+      title: 'Engineering Mathematics by Erwin Kreyszig (10th Ed)',
+      description: '10th Edition Hardcover. Contains neatly highlighted notes and previous year problem solutions in pencil (erasable). Spine tight.',
       price: 600.0,
       category: const CategoryRef(id: 1, name: 'Books'),
       location: 'Main Library Lawn',
-      coverPhotoUrl: 'https://picsum.photos/seed/book1/600/400',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=700&auto=format&fit=crop&q=80',
       photos: const [
-        Photo(s3Key: 'mock_book_1', url: 'https://picsum.photos/seed/book1/600/400', sortOrder: 0),
-        Photo(s3Key: 'mock_book_2', url: 'https://picsum.photos/seed/book2/600/400', sortOrder: 1),
+        Photo(s3Key: 'mock_book_1', url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
       ],
       status: ListingStatus.reserved,
       createdAt: DateTime.now().subtract(const Duration(days: 2)),
     ),
-    // --- 1 image, square ---
+    // 4
     ListingItem(
       id: '4',
       seller: const UserRef(id: 'user_ananya', name: 'Ananya Roy'),
       sellerContact: const Contact(email: 'ananyar@iisc.ac.in'),
       title: 'Philips 1.5L Electric Kettle',
-      description:
-          'Stainless steel body with dry-boil auto cut-off protection. '
-          'Fast boiling — perfect for hostel tea and instant noodles. '
-          'Cord length 0.75m. Sold as-is, works perfectly.',
+      description: 'Stainless steel body with auto cut-off protection. Fast boiling — perfect for hostel tea and instant noodles. Clean and works perfectly.',
       price: 750.0,
       category: const CategoryRef(id: 3, name: 'Electronics'),
       location: 'E-Block Hostel Room 112',
-      coverPhotoUrl: 'https://picsum.photos/seed/kettle/500/500',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=700&auto=format&fit=crop&q=80',
       photos: const [
-        Photo(s3Key: 'mock_kettle_1', url: 'https://picsum.photos/seed/kettle/500/500', sortOrder: 0),
+        Photo(s3Key: 'mock_kettle_1', url: 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
       ],
       status: ListingStatus.sold,
       createdAt: DateTime.now().subtract(const Duration(days: 4)),
     ),
-    // --- 4 images ---
+    // 5
     ListingItem(
       id: '5',
       seller: const UserRef(id: 'user_vikram', name: 'Vikram Singh'),
       sellerContact: const Contact(email: 'vikrams@iisc.ac.in'),
       title: 'Hero Sprint 21-Speed Mountain Bicycle',
-      description:
-          'Dual disc brakes, front suspension fork, comes with dual LED lights '
-          'and a sturdy combination lock. Tyres at 85% tread. Recently serviced '
-          'and oiled. Ideal for campus commute and weekend rides.',
-      price: 5800.0,
+      description: 'Dual disc brakes, front suspension fork, comes with dual LED lights and sturdy combination lock. Tyres at 85% tread. Serviced last month.',
+      price: 4800.0,
       category: const CategoryRef(id: 2, name: 'Cycles'),
       location: 'Physics Department Cycle Stand',
-      coverPhotoUrl: 'https://picsum.photos/seed/cycle1/800/350',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?w=700&auto=format&fit=crop&q=80',
       photos: const [
-        Photo(s3Key: 'mock_cycle_1', url: 'https://picsum.photos/seed/cycle1/800/350', sortOrder: 0),
-        Photo(s3Key: 'mock_cycle_2', url: 'https://picsum.photos/seed/cycle2/400/600', sortOrder: 1),
-        Photo(s3Key: 'mock_cycle_3', url: 'https://picsum.photos/seed/cycle3/500/500', sortOrder: 2),
-        Photo(s3Key: 'mock_cycle_4', url: 'https://picsum.photos/seed/cycle4/600/400', sortOrder: 3),
+        Photo(s3Key: 'mock_cycle_1', url: 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
       ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(hours: 12)),
     ),
-    // --- 2 images ---
+    // 6
     ListingItem(
       id: '6',
       seller: const UserRef(id: 'user_sneha', name: 'Sneha Iyer'),
       sellerContact: const Contact(email: 'snehai@iisc.ac.in'),
-      title: 'Casio FX-991EX Scientific Calculator',
-      description:
-          'Full working condition. 552 functions, spreadsheet mode, QR code '
-          'display. Original pouch and manual included. Perfect for JEE/exam use.',
-      price: 700.0,
+      title: 'Casio FX-991EX Classwiz Scientific Calculator',
+      description: 'High-resolution display, 552 functions, QR code generator and spreadsheet mode. Original protective slide cover included. Mint condition.',
+      price: 850.0,
       category: const CategoryRef(id: 3, name: 'Electronics'),
       location: 'CSA Department Foyer',
-      coverPhotoUrl: 'https://picsum.photos/seed/calc1/350/600',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1611125832047-1d7ad1e8e48f?w=700&auto=format&fit=crop&q=80',
       photos: const [
-        Photo(s3Key: 'mock_calc_1', url: 'https://picsum.photos/seed/calc1/350/600', sortOrder: 0),
-        Photo(s3Key: 'mock_calc_2', url: 'https://picsum.photos/seed/calc2/350/600', sortOrder: 1),
+        Photo(s3Key: 'mock_calc_1', url: 'https://images.unsplash.com/photo-1611125832047-1d7ad1e8e48f?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
       ],
       status: ListingStatus.available,
-      createdAt: DateTime.now().subtract(const Duration(hours: 30)),
+      createdAt: DateTime.now().subtract(const Duration(hours: 18)),
     ),
-    // --- no images ---
+    // 7
     ListingItem(
       id: '7',
       seller: const UserRef(id: 'user_karan', name: 'Karan Mehra'),
       sellerContact: const Contact(email: 'karanm@iisc.ac.in'),
-      title: 'Ikea Flisat Children\'s Table (repurposed study table)',
-      description:
-          'Lightweight flat-pack table repurposed as a bedside/study table. '
-          'Height 44cm. White. Some pen marks underneath. Easy to disassemble.',
+      title: 'Solid Wood Bedside / Study Table',
+      description: 'Lightweight table repurposed as bedside study unit. Height 45cm. Natural varnish finish, very sturdy. Easy to shift between hostel rooms.',
       price: 800.0,
       category: const CategoryRef(id: 4, name: 'Furniture'),
-      location: 'New Biological Sciences Hostel',
-      coverPhotoUrl: null,
-      photos: const [],
+      location: 'Aryabhata Hostel Block A',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1533090161767-e6ffed986c88?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_table_1', url: 'https://images.unsplash.com/photo-1533090161767-e6ffed986c88?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(days: 3)),
     ),
+    // 8
+    ListingItem(
+      id: '8',
+      seller: const UserRef(id: 'user_tanvi', name: 'Tanvi Deshmukh'),
+      sellerContact: const Contact(email: 'tanvid@iisc.ac.in', phone: '+919876543220'),
+      title: 'Introduction to Algorithms (CLRS 4th Edition)',
+      description: 'The standard textbook for algorithms. Paperback, barely used, no markings or stains. Ideal for CSA / CDS coursework and placements.',
+      price: 1100.0,
+      category: const CategoryRef(id: 1, name: 'Books'),
+      location: 'Main Library Canteen',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1532012164546-f432f2e3edd4?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_clrs_1', url: 'https://images.unsplash.com/photo-1532012164546-f432f2e3edd4?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ListingStatus.available,
+      createdAt: DateTime.now().subtract(const Duration(hours: 5)),
+    ),
+    // 9
+    ListingItem(
+      id: '9',
+      seller: const UserRef(id: 'user_aditya', name: 'Aditya Gupta'),
+      sellerContact: const Contact(email: 'adityag@iisc.ac.in', phone: '+919876543221'),
+      title: 'Dell 24" Full HD IPS Monitor (75Hz, HDMI/VGA)',
+      description: 'Zero dead pixels, anti-glare screen with ultrathin bezels. Perfect secondary monitor for research coding, papers, and dual-window setup.',
+      price: 5400.0,
+      category: const CategoryRef(id: 3, name: 'Electronics'),
+      location: 'CDS Dept Research Lab 3',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_mon_1', url: 'https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ListingStatus.available,
+      createdAt: DateTime.now().subtract(const Duration(hours: 8)),
+    ),
+    // 10
+    ListingItem(
+      id: '10',
+      seller: const UserRef(id: 'user_rohit', name: 'Rohit Kulkarni'),
+      sellerContact: const Contact(email: 'rohitk@iisc.ac.in'),
+      title: 'Btwin Riverside 120 Hybrid Bicycle',
+      description: 'Single-chainring 8-speed Microshift transmission. Lightweight steel frame. New brake pads installed 2 weeks ago at campus cycle workshop.',
+      price: 4200.0,
+      category: const CategoryRef(id: 2, name: 'Cycles'),
+      location: 'Gymkhana Bicycle Shed',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1507035895480-2b3156c31fc8?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_btwin_1', url: 'https://images.unsplash.com/photo-1507035895480-2b3156c31fc8?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ListingStatus.available,
+      createdAt: DateTime.now().subtract(const Duration(hours: 22)),
+    ),
+    // 11
+    ListingItem(
+      id: '11',
+      seller: const UserRef(id: 'user_megha', name: 'Megha Rao'),
+      sellerContact: const Contact(email: 'meghar@iisc.ac.in'),
+      title: 'Logitech K380 Multi-Device Bluetooth Keyboard',
+      description: 'Compact wireless keyboard, pairs with up to 3 devices (laptop, tablet, phone). Quiet low-profile keys. Fresh AAA batteries included.',
+      price: 1400.0,
+      category: const CategoryRef(id: 3, name: 'Electronics'),
+      location: 'Nescafe Coffee Lawn',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_kb_1', url: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ListingStatus.available,
+      createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 4)),
+    ),
+    // 12
+    ListingItem(
+      id: '12',
+      seller: const UserRef(id: 'user_siddharth', name: 'Siddharth Jain'),
+      sellerContact: const Contact(email: 'siddharthj@iisc.ac.in'),
+      title: 'Digital Oscilloscope Probe & Test Leads Kit',
+      description: '100MHz 10X/1X switchable oscilloscope probes with BNC connectors, ground clips, and IC test hooks. Tested on Tektronix scopes in ECE labs.',
+      price: 650.0,
+      category: const CategoryRef(id: 5, name: 'Lab Equipment'),
+      location: 'ECE Department Ground Floor',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_probe_1', url: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ListingStatus.available,
+      createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 8)),
+    ),
+    // 13
+    ListingItem(
+      id: '13',
+      seller: const UserRef(id: 'user_divya', name: 'Divya Sen'),
+      sellerContact: const Contact(email: 'divyas@iisc.ac.in'),
+      title: 'Yonex Nanoray 10F Badminton Racket with Cover',
+      description: 'Full graphite shaft with isometric head frame. Strung at 22 lbs with BG65 string. Used for one semester at Gymkhana badminton courts.',
+      price: 1200.0,
+      category: const CategoryRef(id: 6, name: 'Others'),
+      location: 'Gymkhana Sports Complex',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_racket_1', url: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ListingStatus.available,
+      createdAt: DateTime.now().subtract(const Duration(days: 2, hours: 3)),
+    ),
+    // 14
+    ListingItem(
+      id: '14',
+      seller: const UserRef(id: 'user_harsh', name: 'Harsh Vardhan'),
+      sellerContact: const Contact(email: 'harshv@iisc.ac.in'),
+      title: 'Bajaj 24L Personal Room Air Cooler',
+      description: 'Honeycomb cooling pads with 3-speed blower and castor wheels. Works great during Bangalore summer in hostel rooms. Clean water tank.',
+      price: 2500.0,
+      category: const CategoryRef(id: 4, name: 'Furniture'),
+      location: 'Sarvam Hostel Block D',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1585338107529-13afc5f02586?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_cooler_1', url: 'https://images.unsplash.com/photo-1585338107529-13afc5f02586?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ListingStatus.available,
+      createdAt: DateTime.now().subtract(const Duration(days: 2, hours: 10)),
+    ),
+    // 15
+    ListingItem(
+      id: '15',
+      seller: const UserRef(id: 'user_deepak', name: 'Deepak Mishra'),
+      sellerContact: const Contact(email: 'deepakm@iisc.ac.in'),
+      title: 'Computer Systems: A Programmer\'s Perspective (CS:APP 3rd Ed)',
+      description: 'Hardcover textbook by Bryant & O\'Hallaron. Excellent coverage of computer architecture, linking, virtual memory and concurrency.',
+      price: 850.0,
+      category: const CategoryRef(id: 1, name: 'Books'),
+      location: 'CSA Department Coffee Corner',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_csapp_1', url: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ListingStatus.available,
+      createdAt: DateTime.now().subtract(const Duration(days: 3, hours: 1)),
+    ),
+    // 16
+    ListingItem(
+      id: '16',
+      seller: const UserRef(id: 'user_anmol', name: 'Anmol Sethi'),
+      sellerContact: const Contact(email: 'anmols@iisc.ac.in'),
+      title: 'Anker PowerCore 20,000mAh Portable Charger (20W USB-C)',
+      description: 'High capacity battery pack with PowerIQ 3.0 fast charging. Charges iPhone 14 about 4.5 times. Sleek matte black finish, scratch-free.',
+      price: 1350.0,
+      category: const CategoryRef(id: 3, name: 'Electronics'),
+      location: 'Faculty Club Gate',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1609592424368-24cf23055375?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_pb_1', url: 'https://images.unsplash.com/photo-1609592424368-24cf23055375?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ListingStatus.available,
+      createdAt: DateTime.now().subtract(const Duration(days: 3, hours: 6)),
+    ),
+    // 17
+    ListingItem(
+      id: '17',
+      seller: const UserRef(id: 'user_neha', name: 'Neha Joshi'),
+      sellerContact: const Contact(email: 'nehaj@iisc.ac.in'),
+      title: 'Hercules Street Cat Pro Cycle with Front Basket',
+      description: 'Single-gear campus cycle, low maintenance, sturdy rear carrier and front wire basket. Very comfortable padded saddle.',
+      price: 1950.0,
+      category: const CategoryRef(id: 2, name: 'Cycles'),
+      location: 'K-Block Girls Hostel',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_cat_1', url: 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ListingStatus.available,
+      createdAt: DateTime.now().subtract(const Duration(days: 4, hours: 2)),
+    ),
+    // 18
+    ListingItem(
+      id: '18',
+      seller: const UserRef(id: 'user_saurabh', name: 'Saurabh Pant'),
+      sellerContact: const Contact(email: 'saurabhp@iisc.ac.in'),
+      title: 'Foldable Metal Study Table & Laptop Stand',
+      description: 'Compact foldable desk (80cm x 50cm) with powder-coated steel legs. Folds completely flat to slide under bed when not in use.',
+      price: 950.0,
+      category: const CategoryRef(id: 4, name: 'Furniture'),
+      location: 'R-Block Hostel',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_foldtable_1', url: 'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ListingStatus.available,
+      createdAt: DateTime.now().subtract(const Duration(days: 4, hours: 9)),
+    ),
+    // 19
+    ListingItem(
+      id: '19',
+      seller: const UserRef(id: 'user_rishi', name: 'Rishi Kapoor'),
+      sellerContact: const Contact(email: 'rishik@iisc.ac.in'),
+      title: 'Raspberry Pi 4 Model B (4GB RAM) + Case & 32GB Card',
+      description: 'Includes official transparent acrylic case with silent cooling fan, Micro-HDMI to HDMI cable, and pre-flashed Raspberry Pi OS card.',
+      price: 3800.0,
+      category: const CategoryRef(id: 3, name: 'Electronics'),
+      location: 'DESE Department Room 210',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1555774698-0b77e0d5fac6?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_pi_1', url: 'https://images.unsplash.com/photo-1555774698-0b77e0d5fac6?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ListingStatus.available,
+      createdAt: DateTime.now().subtract(const Duration(days: 5, hours: 4)),
+    ),
+    // 20
+    ListingItem(
+      id: '20',
+      seller: const UserRef(id: 'user_kavita', name: 'Kavita Das'),
+      sellerContact: const Contact(email: 'kavitad@iisc.ac.in'),
+      title: 'Pattern Recognition and Machine Learning (Bishop)',
+      description: 'Hardcover international edition. Comprehensive foundation in Bayesian machine learning and graphical models. Clean pages.',
+      price: 1250.0,
+      category: const CategoryRef(id: 1, name: 'Books'),
+      location: 'Main Library 2nd Floor',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_bishop_1', url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ListingStatus.available,
+      createdAt: DateTime.now().subtract(const Duration(days: 5, hours: 12)),
+    ),
+    // 21
+    ListingItem(
+      id: '21',
+      seller: const UserRef(id: 'user_tarun', name: 'Tarun Reddy'),
+      sellerContact: const Contact(email: 'tarunr@iisc.ac.in'),
+      title: 'Soldering Iron Kit (60W Temp Controlled) with Stand & Solder',
+      description: 'Temperature adjustable from 200°C to 450°C. Comes with 5 interchangeable tips, desoldering pump, tweezers, and solder wire spool.',
+      price: 550.0,
+      category: const CategoryRef(id: 5, name: 'Lab Equipment'),
+      location: 'Robotics Lab Mechanical Engg',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_solder_1', url: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ListingStatus.available,
+      createdAt: DateTime.now().subtract(const Duration(days: 6)),
+    ),
+    // 22
+    ListingItem(
+      id: '22',
+      seller: const UserRef(id: 'user_ishita', name: 'Ishita Banerjee'),
+      sellerContact: const Contact(email: 'ishitab@iisc.ac.in'),
+      title: 'Wildcraft 35L Water-Resistant Laptop Backpack',
+      description: 'Padded laptop compartment (fits up to 15.6"), rain cover included in bottom zipper, ergonomic shoulder straps with chest clip.',
+      price: 850.0,
+      category: const CategoryRef(id: 6, name: 'Others'),
+      location: 'Sarvam Hostel Mess',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_bag_1', url: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ListingStatus.available,
+      createdAt: DateTime.now().subtract(const Duration(days: 6, hours: 8)),
+    ),
+    // 23
+    ListingItem(
+      id: '23',
+      seller: const UserRef(id: 'user_pranav', name: 'Pranav Saxena'),
+      sellerContact: const Contact(email: 'pranavs@iisc.ac.in'),
+      title: 'Seagate One Touch 2TB External USB 3.0 Hard Drive',
+      description: 'Tested with CrystalDiskInfo (100% health, zero bad sectors). Password protection and AES-256 hardware encryption supported.',
+      price: 3200.0,
+      category: const CategoryRef(id: 3, name: 'Electronics'),
+      location: 'CSA Dept Student Lounge',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1597872200969-2b65d56bd16b?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_hdd_1', url: 'https://images.unsplash.com/photo-1597872200969-2b65d56bd16b?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ListingStatus.available,
+      createdAt: DateTime.now().subtract(const Duration(days: 7)),
+    ),
+    // 24
+    ListingItem(
+      id: '24',
+      seller: const UserRef(id: 'user_alka', name: 'Alka Swaminathan'),
+      sellerContact: const Contact(email: 'alkas@iisc.ac.in'),
+      title: 'Sleepwell 4-Inch Coir & Foam Single Bed Mattress',
+      description: 'Standard hostel bed dimensions (72" x 36"). Dual firmness sides (firm coir on one side, soft foam on reverse). Very clean.',
+      price: 1300.0,
+      category: const CategoryRef(id: 4, name: 'Furniture'),
+      location: 'New Girls Hostel Block C',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=700&auto=format&fit=crop&q=80',
+      photos: const [
+        Photo(s3Key: 'mock_mattress_1', url: 'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+      ],
+      status: ListingStatus.available,
+      createdAt: DateTime.now().subtract(const Duration(days: 7, hours: 14)),
+    )
   ];
 
   @override
@@ -173,6 +440,7 @@ class MockBuySellRepository implements IBuySellRepository {
     int limit = 20,
     int offset = 0,
   }) async {
+    await Future.delayed(const Duration(milliseconds: 320));
     final filtered = _mockData.where((item) {
       final matchesQuery = query.isEmpty ||
           item.title.toLowerCase().contains(query.toLowerCase()) ||
@@ -226,6 +494,7 @@ class MockBuySellRepository implements IBuySellRepository {
     int limit = 50,
     int offset = 0,
   }) async {
+    await Future.delayed(const Duration(milliseconds: 320));
     var items = _mockData.where((item) {
       final matchesQuery = query.isEmpty ||
           item.title.toLowerCase().contains(query.toLowerCase()) ||

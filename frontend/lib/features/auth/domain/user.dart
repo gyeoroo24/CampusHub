@@ -3,7 +3,22 @@ enum UserRole {
   guest,
   signedIn,
   moderator,
-  admin,
+  admin;
+
+  String get label {
+    switch (this) {
+      case UserRole.guest:
+        return 'Guest';
+      case UserRole.signedIn:
+        return 'Student';
+      case UserRole.moderator:
+        return 'Moderator';
+      case UserRole.admin:
+        return 'Admin';
+    }
+  }
+
+  String get name => toString().split('.').last;
 }
 
 /// Represents an active moderator assignment for a specific module or scope (FR-3).
@@ -126,6 +141,21 @@ class User {
       return email.split('@').first;
     }
     return email.isNotEmpty ? email : 'Guest';
+  }
+
+  /// Single or double uppercase initials for avatars
+  String get initials {
+    if (name.isNotEmpty) {
+      final parts = name.trim().split(RegExp(r'\s+'));
+      if (parts.length > 1 && parts.last.isNotEmpty) {
+        return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+      }
+      return name[0].toUpperCase();
+    }
+    if (email.isNotEmpty) {
+      return email[0].toUpperCase();
+    }
+    return '?';
   }
 
   bool isOwnerOf(String resourceOwnerId) => id.isNotEmpty && id == resourceOwnerId;

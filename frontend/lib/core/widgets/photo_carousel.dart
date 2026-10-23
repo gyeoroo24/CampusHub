@@ -6,11 +6,13 @@ import 'package:flutter/material.dart';
 class PhotoCarousel extends StatefulWidget {
   final List<String> imageUrls;
   final double size;
+  final String? heroTag;
 
   const PhotoCarousel({
     super.key,
     required this.imageUrls,
     this.size = 300,
+    this.heroTag,
   });
 
   @override
@@ -71,18 +73,27 @@ class _PhotoCarouselState extends State<PhotoCarousel> {
             itemCount: count,
             onPageChanged: (i) => setState(() => _currentPage = i),
             itemBuilder: (context, i) {
+              Widget img = Image.network(
+                widget.imageUrls[i],
+                fit: BoxFit.contain,
+                gaplessPlayback: true,
+                errorBuilder: (_, __, ___) => Icon(
+                  Icons.broken_image_outlined,
+                  size: 48,
+                  color: Colors.grey[400],
+                ),
+              );
+
+              if (i == 0 && widget.heroTag != null) {
+                img = Hero(
+                  tag: widget.heroTag!,
+                  child: img,
+                );
+              }
+
               return Container(
                 color: bgColor,
-                child: Image.network(
-                  widget.imageUrls[i],
-                  fit: BoxFit.contain,
-                  gaplessPlayback: true,
-                  errorBuilder: (_, __, ___) => Icon(
-                    Icons.broken_image_outlined,
-                    size: 48,
-                    color: Colors.grey[400],
-                  ),
-                ),
+                child: img,
               );
             },
           ),

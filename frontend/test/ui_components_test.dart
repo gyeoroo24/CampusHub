@@ -5,11 +5,14 @@ import 'package:campus_hub/core/models/category_ref.dart';
 import 'package:campus_hub/core/models/contact.dart';
 import 'package:campus_hub/core/models/photo.dart';
 import 'package:campus_hub/core/models/user_ref.dart';
+import 'package:campus_hub/core/widgets/skeleton_loader.dart';
 import 'package:campus_hub/features/auth/domain/user.dart';
 import 'package:campus_hub/features/auth/providers/auth_providers.dart';
 import 'package:campus_hub/features/buy_sell/domain/buy_sell_item.dart';
+import 'package:campus_hub/features/buy_sell/providers/buy_sell_providers.dart';
 import 'package:campus_hub/features/buy_sell/ui/widgets/buy_sell_detail_dialog.dart';
 import 'package:campus_hub/features/lost_found/domain/lost_found_item.dart';
+import 'package:campus_hub/features/lost_found/providers/lost_found_providers.dart';
 import 'package:campus_hub/features/lost_found/ui/widgets/lost_found_detail_dialog.dart';
 
 void main() {
@@ -122,7 +125,86 @@ void main() {
 
     expect(find.text('LOST REPORT'), findsOneWidget);
     expect(find.text('ID Cards'), findsWidgets);
-    expect(find.text('Blue IISc Student ID Card with red lanyard'), findsOneWidget);
+    expect(find.text('Blue IISc Student ID Card with red lanyard'), findsWidgets);
     expect(find.text('Reporter Contact Details Protected'), findsOneWidget);
+  });
+
+  testWidgets('SkeletonGrid renders shimmer loading placeholder cards', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SkeletonGrid(itemCount: 4),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(ShimmerLoadingCard), findsNWidgets(4));
+  });
+
+  testWidgets('SkeletonList renders list shimmer loading placeholder cards', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SkeletonList(itemCount: 3),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(ShimmerLoadingCard), findsNWidgets(3));
+  });
+
+  test('BuySellPaginationNotifier loads initial page and supports loadMore()', () async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    // Initial state has isLoadingInitial == true
+    expect(container.read(buySellPaginationProvider).isLoadingInitial, isTrue);
+
+    // Wait for initial load
+    await Future<void>.delayed(const Duration(milliseconds: 450));
+
+    final state1 = container.read(buySellPaginationProvider);
+    expect(state1.isLoadingInitial, isFalse);
+    expect(state1.items.length, 8);
+    expect(state1.hasMore, isTrue);
+
+    // Trigger loadMore
+    final notifier = container.read(buySellPaginationProvider.notifier);
+    final loadMoreFuture = notifier.loadMore();
+    expect(container.read(buySellPaginationProvider).isLoadingMore, isTrue);
+
+    await loadMoreFuture;
+    final state2 = container.read(buySellPaginationProvider);
+    expect(state2.isLoadingMore, isFalse);
+    expect(state2.items.length, 16);
+  });
+
+  test('LostFoundPaginationNotifier loads initial reports and supports loadMore()', () async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    // Initial state has isLoadingInitial == true
+    expect(container.read(lostReportsPaginationProvider).isLoadingInitial, isTrue);
+
+    // Wait for initial load
+    await Future<void>.delayed(const Duration(milliseconds: 450));
+
+    final state1 = container.read(lostReportsPaginationProvider);
+    expect(state1.isLoadingInitial, isFalse);
+    expect(state1.items.length, 6);
+    expect(state1.hasMore, isTrue);
+
+    // Trigger loadMore
+    final notifier = container.read(lostReportsPaginationProvider.notifier);
+    final loadMoreFuture = notifier.loadMore();
+    expect(container.read(lostReportsPaginationProvider).isLoadingMore, isTrue);
+
+    await loadMoreFuture;
+    final state2 = container.read(lostReportsPaginationProvider);
+    expect(state2.isLoadingMore, isFalse);
+    expect(state2.items.length, 8); // 6 initial + 2 remaining mock reports = 8
+    expect(state2.hasMore, isFalse);
   });
 }

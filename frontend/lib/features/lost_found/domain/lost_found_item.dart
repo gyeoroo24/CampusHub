@@ -70,6 +70,22 @@ class LostFoundItem {
           ? [coverPhotoUrl!]
           : const []);
 
+  /// Returns a clean headline or title representing the report for tiles, dialogs, and search.
+  /// Derives the primary subject/headline from the first sentence or first line of the description.
+  String get displayTitle {
+    final trimmed = description.trim();
+    if (trimmed.isEmpty) {
+      return '${kind == PostType.lost ? "Lost" : "Found"} ${category.name}';
+    }
+    final firstLine = trimmed.split('\n').first.trim();
+    final match = RegExp(r'^([^.!?\n]+[.!?]?)').firstMatch(firstLine);
+    final candidate = match?.group(1)?.trim() ?? firstLine;
+    if (candidate.length > 75) {
+      return '${candidate.substring(0, 72)}...';
+    }
+    return candidate;
+  }
+
   LostFoundItem copyWith({
     String? id,
     PostType? kind,

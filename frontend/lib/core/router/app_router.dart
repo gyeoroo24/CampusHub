@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/super_search_bar.dart';
+import '../../features/auth/domain/user.dart';
 import '../../features/auth/providers/auth_providers.dart';
 import '../../features/auth/ui/auth_dialog.dart';
 import '../../features/buy_sell/ui/buy_sell_feed_screen.dart';
@@ -37,12 +38,12 @@ final GoRouter appRouter = GoRouter(
 const _tabDestinations = [
   (
     icon: Icons.shopping_bag_outlined,
-    selectedIcon: Icons.shopping_bag,
+    selectedIcon: Icons.shopping_bag_rounded,
     label: 'Buy & Sell',
   ),
   (
     icon: Icons.find_in_page_outlined,
-    selectedIcon: Icons.find_in_page,
+    selectedIcon: Icons.find_in_page_rounded,
     label: 'Lost & Found',
   ),
 ];
@@ -65,7 +66,7 @@ class ThemeToggleButton extends ConsumerWidget {
 
     return IconButton(
       tooltip: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
-      icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+      icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, size: 20),
       onPressed: () {
         ref.read(themeModeProvider.notifier).state =
             isDark ? ThemeMode.light : ThemeMode.dark;
@@ -86,7 +87,6 @@ class AppShellLayout extends ConsumerStatefulWidget {
 
 class _AppShellLayoutState extends ConsumerState<AppShellLayout>
     with SingleTickerProviderStateMixin {
-  // Animation controller for vertical slide between tabs
   late final AnimationController _animController;
   late Animation<Offset> _slideAnimation;
 
@@ -95,7 +95,7 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 450),
+      duration: const Duration(milliseconds: 350),
     );
     _slideAnimation = Tween<Offset>(
       begin: Offset.zero,
@@ -113,15 +113,12 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
     final currentIndex = ref.read(tabIndexProvider);
     if (newIndex == currentIndex) return;
 
-    // Going from index 0→1 means slide UP (new screen comes from below)
-    // Going from index 1→0 means slide DOWN (new screen comes from above)
     final bool goingDown = newIndex < currentIndex;
 
-    // Reset and start: new screen enters from below/above
     _slideAnimation = Tween<Offset>(
-      begin: goingDown ? const Offset(0, -1) : const Offset(0, 1),
+      begin: goingDown ? const Offset(0, -0.08) : const Offset(0, 0.08),
       end: Offset.zero,
-    ).chain(CurveTween(curve: Curves.easeInOutCubic)).animate(_animController);
+    ).chain(CurveTween(curve: Curves.easeOutCubic)).animate(_animController);
 
     ref.read(tabIndexProvider.notifier).state = newIndex;
     _animController.forward(from: 0);
@@ -133,8 +130,9 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
     final isDesktop = MediaQuery.of(context).size.width > 750;
     final currentUser = ref.watch(currentUserProvider);
     final isGuest = currentUser == null || currentUser.isGuest;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-    // Build the animated content area
     Widget content = SlideTransition(
       position: _slideAnimation,
       child: RepaintBoundary(
@@ -144,143 +142,169 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
 
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 16,
+        titleSpacing: isDesktop ? 20 : 16,
+        elevation: 0,
+        backgroundColor: theme.cardColor,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+            height: 1,
+          ),
+        ),
         title: Row(
           children: [
-            const Icon(Icons.school_rounded, color: Colors.indigo, size: 26),
-            const SizedBox(width: 8),
+            // Campus Logo
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)],
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.school_rounded, color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 10),
             const Text(
               'CampusHub',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 19, letterSpacing: -0.5),
             ),
-            if (isDesktop)
-              const Text(
-                ' | IISc',
-                style: TextStyle(fontSize: 15, color: Colors.grey, fontWeight: FontWeight.w400),
+            if (isDesktop) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'IISc Bangalore',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
+                ),
               ),
-            const SizedBox(width: 16),
-            if (isDesktop)
+              const SizedBox(width: 20),
               Expanded(
                 child: Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 480),
+                    constraints: const BoxConstraints(maxWidth: 520),
                     child: const SuperSearchBar(),
                   ),
                 ),
               ),
+            ],
           ],
         ),
         actions: [
           const ThemeToggleButton(),
-          const SizedBox(width: 4),
+          const SizedBox(width: 8),
+
+          // User Profile / Sign In Pill
           if (isDesktop)
-            ActionChip(
-              avatar: Icon(isGuest ? Icons.person_outline : Icons.person, size: 16),
-              label: Text(isGuest ? 'Sign In' : currentUser.email),
-              backgroundColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.5),
-              onPressed: () {
+            InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () {
                 if (isGuest) {
                   AuthDialog.ensureSignedIn(context, ref);
                 } else {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Account'),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Logged in as:', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-                          const SizedBox(height: 4),
-                          Text(currentUser.email, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
-                          Text('Roles: ${currentUser.roles.map((r) => r.name).join(", ")}', style: const TextStyle(fontSize: 12)),
-                        ],
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('Close'),
-                        ),
-                        FilledButton.tonal(
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            ref.read(authRepositoryProvider).signOut();
-                          },
-                          child: const Text('Sign Out'),
-                        ),
-                      ],
-                    ),
-                  );
+                  _showAccountDialog(context, currentUser);
                 }
               },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isGuest
+                      ? theme.colorScheme.primaryContainer.withValues(alpha: 0.6)
+                      : (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundColor: theme.colorScheme.primary,
+                      child: Text(
+                        isGuest ? '?' : currentUser.name.isNotEmpty ? currentUser.name[0].toUpperCase() : 'U',
+                        style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      isGuest ? 'Sign In' : (currentUser.name.isNotEmpty ? currentUser.name : currentUser.email.split('@').first),
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    if (!isGuest) ...[
+                      const SizedBox(width: 4),
+                      Icon(Icons.verified_rounded, size: 13, color: Colors.teal.shade700),
+                    ],
+                  ],
+                ),
+              ),
             )
           else
             IconButton(
               tooltip: isGuest ? 'Sign In' : currentUser.email,
               icon: CircleAvatar(
                 radius: 14,
-                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                backgroundColor: theme.colorScheme.primaryContainer,
                 child: Icon(
-                  isGuest ? Icons.person_outline : Icons.person,
+                  isGuest ? Icons.person_outline_rounded : Icons.person_rounded,
                   size: 16,
-                  color: Theme.of(context).colorScheme.primary,
+                  color: theme.colorScheme.primary,
                 ),
               ),
               onPressed: () {
                 if (isGuest) {
                   AuthDialog.ensureSignedIn(context, ref);
                 } else {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Account'),
-                      content: Text('Logged in as:\n${currentUser.email}'),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-                        FilledButton.tonal(
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            ref.read(authRepositoryProvider).signOut();
-                          },
-                          child: const Text('Sign Out'),
-                        ),
-                      ],
-                    ),
-                  );
+                  _showAccountDialog(context, currentUser);
                 }
               },
             ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 16),
         ],
       ),
       body: Column(
         children: [
+          // Mobile Super Search Bar
           if (!isDesktop)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: SuperSearchBar(),
+            Container(
+              color: theme.cardColor,
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: const SuperSearchBar(),
             ),
+
           Expanded(
             child: Row(
               children: [
+                // Desktop Navigation Rail with Modern Pill Highlights
                 if (isDesktop)
                   NavigationRail(
                     selectedIndex: tabIndex,
                     onDestinationSelected: _switchTab,
                     labelType: NavigationRailLabelType.all,
                     useIndicator: true,
-                    indicatorColor: Theme.of(context).colorScheme.primaryContainer,
+                    indicatorColor: theme.colorScheme.primaryContainer,
+                    minWidth: 78,
                     destinations: [
                       for (final dest in _tabDestinations)
                         NavigationRailDestination(
                           icon: Icon(dest.icon),
-                          selectedIcon: Icon(dest.selectedIcon),
-                          label: Text(dest.label),
+                          selectedIcon: Icon(dest.selectedIcon, color: theme.colorScheme.primary),
+                          label: Text(dest.label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11)),
                         ),
                     ],
                   ),
-                if (isDesktop) const VerticalDivider(thickness: 1, width: 1),
+                if (isDesktop)
+                  VerticalDivider(
+                    thickness: 1,
+                    width: 1,
+                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                  ),
                 Expanded(
                   child: ClipRect(child: content),
                 ),
@@ -294,14 +318,147 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
           : BottomNavigationBar(
               currentIndex: tabIndex,
               onTap: _switchTab,
+              selectedItemColor: theme.colorScheme.primary,
               items: [
                 for (final dest in _tabDestinations)
                   BottomNavigationBarItem(
                     icon: Icon(dest.icon),
+                    activeIcon: Icon(dest.selectedIcon),
                     label: dest.label,
                   ),
               ],
             ),
+    );
+  }
+
+  void _showAccountDialog(BuildContext context, User currentUser) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final roleNames = currentUser.roles.map((r) => r.label).toList();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+        contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+              child: Text(
+                currentUser.initials,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    currentUser.displayName,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  Text(
+                    'IISc Campus Member',
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Divider(height: 24),
+            Row(
+              children: [
+                Icon(Icons.email_outlined, size: 16, color: Colors.grey.shade600),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    currentUser.email,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ),
+                Icon(Icons.verified, size: 16, color: Colors.teal.shade600),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text('Permissions & Roles:', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: roleNames.map((role) {
+                final isSpecial = role == 'Admin' || role == 'Moderator';
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isSpecial
+                        ? (isDark ? const Color(0xFF1E3A8A) : const Color(0xFFDBEAFE))
+                        : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isSpecial
+                          ? (isDark ? const Color(0xFF3B82F6) : const Color(0xFF93C5FD))
+                          : (isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                    ),
+                  ),
+                  child: Text(
+                    role,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isSpecial ? (isDark ? const Color(0xFF93C5FD) : const Color(0xFF1D4ED8)) : null,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            if (currentUser.moderatorGrants.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text('Active Moderation Scopes:', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+              const SizedBox(height: 6),
+              for (final grant in currentUser.moderatorGrants)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4.0),
+                  child: Row(
+                    children: [
+                      Icon(Icons.shield_outlined, size: 14, color: Colors.blue.shade600),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${grant.module} (${grant.scopeType})',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+          FilledButton.tonal(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(authRepositoryProvider).signOut();
+            },
+            child: const Text('Sign Out'),
+          ),
+        ],
+      ),
     );
   }
 }
