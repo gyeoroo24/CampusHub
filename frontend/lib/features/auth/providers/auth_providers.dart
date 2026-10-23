@@ -1,0 +1,43 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/api/api_client.dart';
+import '../../../core/constants/app_config.dart';
+import '../../../core/storage/token_storage.dart';
+import '../data/auth_repository.dart';
+import '../domain/user.dart';
+
+final tokenStorageProvider = Provider<ITokenStorage>((ref) {
+  return SharedPrefsTokenStorage();
+});
+
+final apiClientProvider = Provider<ApiClient>((ref) {
+  final tokenStorage = ref.watch(tokenStorageProvider);
+  return ApiClient(storage: tokenStorage);
+});
+
+final authRepositoryProvider = Provider<IAuthRepository>((ref) {
+  final tokenStorage = ref.watch(tokenStorageProvider);
+  if (AppConfig.useMockData) {
+    return MockAuthRepository(storage: tokenStorage);
+  }
+  return ApiAuthRepository(
+    apiClient: ref.watch(apiClientProvider),
+    tokenStorage: tokenStorage,
+  );
+});
+
+/// Stream of the current authenticated user (null means Guest).
+final authStateProvider = StreamProvider<User?>((ref) {
+  final repo = ref.watch(authRepositoryProvider);
+  return repo.authStateChanges;
+});
+
+/// Synchronous-like access to current user (can be null if Guest).
+final currentUserProvider = Provider<User?>((ref) {
+  return ref.watch(authStateProvider).value;
+});
+
+/// Whether the current session is an unauthenticated Guest.
+final isGuestUserProvider = Provider<bool>((ref) {
+  final user = ref.watch(currentUserProvider);
+  return user == null || user.isGuest;
+});
