@@ -45,7 +45,7 @@ class LostFoundReportDto {
         json['type']?.toString() ??
         'lost';
 
-    // 2. Category parsing: handles structured CategoryRef or legacy ID/String
+    // 2. Category parsing
     CategoryRef parsedCategory;
     if (json['category'] is Map<String, dynamic>) {
       parsedCategory = CategoryRef.fromJson(json['category'] as Map<String, dynamic>);
@@ -57,7 +57,7 @@ class LostFoundReportDto {
       parsedCategory = CategoryRef(id: catId, name: catName);
     }
 
-    // 3. Reporter parsing: handles structured UserRef or legacy reporter_id/reporter_contact
+    // 3. Reporter parsing
     UserRef parsedReporter;
     if (json['reporter'] is Map<String, dynamic>) {
       parsedReporter = UserRef.fromJson(json['reporter'] as Map<String, dynamic>);
@@ -109,7 +109,7 @@ class LostFoundReportDto {
     final coverUrl = json['cover_photo_url']?.toString() ??
         (parsedPhotos.isNotEmpty ? parsedPhotos.first.url : null);
 
-    // 6. OccurredAt parsing (occurred_at or legacy event_time / lost_found_time)
+    // 6. OccurredAt parsing (occurred_at or legacy lost_found_time)
     DateTime parsedOccurredAt = DateTime.now();
     if (json['occurred_at'] != null) {
       parsedOccurredAt = DateTime.tryParse(json['occurred_at'].toString()) ?? DateTime.now();
@@ -144,9 +144,7 @@ class LostFoundReportDto {
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
           : (json['date_reported'] != null
               ? DateTime.tryParse(json['date_reported'].toString()) ?? DateTime.now()
-              : (json['timestamp'] != null
-                  ? DateTime.tryParse(json['timestamp'].toString()) ?? DateTime.now()
-                  : DateTime.now())),
+              : DateTime.now()),
       updatedAt: json['updated_at'] != null
           ? DateTime.tryParse(json['updated_at'].toString())
           : null,
@@ -154,40 +152,38 @@ class LostFoundReportDto {
     );
   }
 
-  /// Converts DTO to Domain Entity
   LostFoundItem toDomain() {
     return LostFoundItem(
       id: id,
       kind: kind.toLowerCase() == 'found' ? PostType.found : PostType.lost,
       description: description,
-      categoryRef: category,
+      category: category,
       occurredAt: occurredAt,
       location: location ?? '',
       status: ReportStatus.fromString(status),
       reporter: reporter,
       coverPhotoUrl: coverPhotoUrl,
       photos: photos,
-      contact: reporterContact,
+      reporterContact: reporterContact,
       createdAt: createdAt,
       updatedAt: updatedAt,
       possibleMatches: possibleMatches?.map((m) => m.toDomain()).toList(),
     );
   }
 
-  /// Converts Domain Entity to DTO
   factory LostFoundReportDto.fromDomain(LostFoundItem item) {
     return LostFoundReportDto(
       id: item.id,
       kind: item.kind.name,
       description: item.description,
-      category: item.categoryRef,
+      category: item.category,
       occurredAt: item.occurredAt,
       location: item.location,
       status: item.status.name,
       reporter: item.reporter,
       coverPhotoUrl: item.coverPhotoUrl,
       photos: item.photos,
-      reporterContact: item.contact,
+      reporterContact: item.reporterContact,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
       possibleMatches: item.possibleMatches
@@ -196,7 +192,6 @@ class LostFoundReportDto {
     );
   }
 
-  /// Serializes to `ReportCreate` payload for `POST /lost-reports` or `POST /found-reports`.
   Map<String, dynamic> toCreateJson({List<String> photoKeys = const []}) {
     return {
       'description': description,
@@ -209,7 +204,6 @@ class LostFoundReportDto {
     };
   }
 
-  /// Serializes to `ReportUpdate` payload for `PATCH /.../{id}`.
   Map<String, dynamic> toUpdateJson() {
     return {
       'description': description,
@@ -219,7 +213,6 @@ class LostFoundReportDto {
     };
   }
 
-  /// Full JSON representation (for mock caching or testing).
   Map<String, dynamic> toJson() {
     return {
       'id': id,

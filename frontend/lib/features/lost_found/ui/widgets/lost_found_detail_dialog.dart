@@ -1,27 +1,41 @@
 import 'package:flutter/material.dart';
-import '../../domain/lost_found_item.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/utils/date_time_formatter.dart';
 import '../../../../core/widgets/photo_carousel.dart';
+import '../../../auth/providers/auth_providers.dart';
+import '../../../auth/ui/auth_dialog.dart';
+import '../../domain/lost_found_item.dart';
+import '../../providers/lost_found_providers.dart';
 
-class LostFoundDetailDialog extends StatelessWidget {
+class LostFoundDetailDialog extends ConsumerWidget {
   final LostFoundItem item;
+  final ValueChanged<ReportStatus>? onStatusChange;
 
-  const LostFoundDetailDialog({super.key, required this.item});
+  const LostFoundDetailDialog({
+    super.key,
+    required this.item,
+    this.onStatusChange,
+  });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final isLost = item.type == PostType.lost;
-    final themeColor = isLost ? Colors.pinkAccent.shade700 : Colors.teal.shade700;
+    final isLost = item.kind == PostType.lost;
+    final themeColor = isLost ? const Color(0xFFE11D48) : const Color(0xFF0D9488);
     final screenHeight = MediaQuery.of(context).size.height;
-    // Square carousel size — caps at 500, fills dialog on small screens (identical to BnS)
-    final carouselSize = (screenHeight * 0.4).clamp(0.0, 500.0);
+    final carouselSize = (screenHeight * 0.38).clamp(220.0, 480.0);
+    final currentUser = ref.watch(currentUserProvider);
+    final isOwner = currentUser != null && currentUser.isOwnerOf(item.reporter.id);
+    final canModerate = currentUser != null && (currentUser.canModerateLostFound || currentUser.isAdmin);
 
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 560, maxHeight: screenHeight * 0.8),
+        constraints: BoxConstraints(maxWidth: 580, maxHeight: screenHeight * 0.85),
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -32,7 +46,7 @@ class LostFoundDetailDialog extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: PhotoCarousel(
-                      imageUrls: item.imageUrls,
+                      imageUrls: item.photoUrls,
                       size: carouselSize,
                     ),
                   ),
@@ -59,10 +73,31 @@ class LostFoundDetailDialog extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        isLost ? 'LOST ITEM' : 'FOUND ITEM',
+                        isLost ? 'LOST REPORT' : 'FOUND REPORT',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Current Status Badge
+                  Positioned(
+                    bottom: 12,
+                    right: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        item.status.name.toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -82,13 +117,16 @@ class LostFoundDetailDialog extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            item.title,
-                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            item.category.name,
+                            style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Chip(
-                          label: Text(item.category, style: const TextStyle(fontSize: 11)),
+                          label: Text(
+                            item.category.name,
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
                           backgroundColor: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
                         ),
                       ],
@@ -100,7 +138,7 @@ class LostFoundDetailDialog extends StatelessWidget {
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            item.location,
+                            item.location.isNotEmpty ? item.location : 'Campus Location Not Specified',
                             style: TextStyle(
                               fontSize: 13,
                               color: Colors.grey[600],
@@ -113,11 +151,11 @@ class LostFoundDetailDialog extends StatelessWidget {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Icon(Icons.access_time, size: 18, color: Colors.grey[600]),
+                        Icon(Icons.access_time_rounded, size: 18, color: Colors.grey[600]),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            item.eventTime,
+                            'Occurred: ${DateTimeFormatter.fullDateTime(item.occurredAt)} (${DateTimeFormatter.timeAgo(item.occurredAt)})',
                             style: TextStyle(
                               fontSize: 13,
                               color: Colors.grey[600],
@@ -128,10 +166,10 @@ class LostFoundDetailDialog extends StatelessWidget {
                       ],
                     ),
                     const Divider(height: 28),
-                    const Text('Description', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                    const Text('Detailed Description', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     Text(
-                      item.description,
+                      item.description.isNotEmpty ? item.description : 'No distinguishing description provided.',
                       style: TextStyle(
                         fontSize: 14,
                         height: 1.5,
@@ -139,65 +177,242 @@ class LostFoundDetailDialog extends StatelessWidget {
                       ),
                     ),
                     const Divider(height: 28),
-                    // Reporter info card (matching BnS seller info card)
+
+                    // ── Owner Controls (Change Status: Open / Matched / Closed) ─
+                    if (isOwner) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: theme.colorScheme.outlineVariant),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Report Status Controls',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              children: ReportStatus.values.map((status) {
+                                final isSelected = item.status == status;
+                                return ChoiceChip(
+                                  label: Text(status.name.toUpperCase()),
+                                  selected: isSelected,
+                                  onSelected: (selected) {
+                                    if (selected) {
+                                      if (onStatusChange != null) {
+                                        onStatusChange!(status);
+                                      } else {
+                                        ref.read(lostFoundRepositoryProvider).updateStatus(
+                                              item.id,
+                                              item.kind,
+                                              status,
+                                            );
+                                        ref.invalidate(lostReportsProvider);
+                                        ref.invalidate(foundReportsProvider);
+                                      }
+                                      Navigator.pop(context);
+                                    }
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // ── Reporter Contact Section (Privacy Protection) ──────────
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
                         color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                        ),
                       ),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            backgroundColor: themeColor,
-                            child: Text(
-                              item.reporterContact.isNotEmpty
-                                  ? item.reporterContact[0].toUpperCase()
-                                  : '?',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
+                      child: item.reporterContact != null
+                          ? Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor: themeColor,
+                                  child: Text(
+                                    item.reporter.name.isNotEmpty
+                                        ? item.reporter.name[0].toUpperCase()
+                                        : 'R',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        item.reporter.name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Text(
+                                        item.reporterContact!.email,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      if (item.reporterContact!.phone != null)
+                                        Text(
+                                          item.reporterContact!.phone!,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: themeColor,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  onPressed: () {
+                                    Clipboard.setData(ClipboardData(text: item.reporterContact!.email));
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Copied email: ${item.reporterContact!.email}'),
+                                      ),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.copy_rounded, size: 14),
+                                  label: const Text('Contact'),
+                                ),
+                              ],
+                            )
+                          : Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.lock_outline_rounded, size: 18, color: Colors.amber.shade800),
+                                    const SizedBox(width: 8),
+                                    const Expanded(
+                                      child: Text(
+                                        'Reporter Contact Details Protected',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
                                 Text(
-                                  item.reporterContact,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
+                                  'Reported by: ${item.reporter.name} • Contact details are only visible to authenticated IISc members.',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                ),
+                                const SizedBox(height: 10),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    onPressed: () async {
+                                      final signedIn = await AuthDialog.ensureSignedIn(
+                                        context,
+                                        ref,
+                                        title: 'Sign In to View Contact Info',
+                                        message: 'Sign in with your @iisc.ac.in account to view contact info.',
+                                      );
+                                      if (signedIn && context.mounted) {
+                                        Navigator.pop(context);
+                                        ref.invalidate(lostReportsProvider);
+                                        ref.invalidate(foundReportsProvider);
+                                      }
+                                    },
+                                    icon: const Icon(Icons.login_rounded, size: 16),
+                                    label: const Text('Sign in with IISc Email to Reveal Contact'),
                                   ),
-                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ],
                             ),
-                          ),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: themeColor,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Contact info: ${item.reporterContact}')),
-                              );
-                            },
-                            icon: const Icon(Icons.email_outlined, size: 16),
-                            label: const Text('Contact'),
-                          ),
-                        ],
-                      ),
                     ),
+
+                    // ── Moderator Removal (FR-10) ──────────────────────────────
+                    if (canModerate) ...[
+                      const SizedBox(height: 16),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
+                          onPressed: () => _confirmModeratorDelete(context, ref),
+                          icon: const Icon(Icons.delete_sweep_outlined, size: 16),
+                          label: const Text('Moderator: Remove Report'),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _confirmModeratorDelete(BuildContext context, WidgetRef ref) {
+    final reasonController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Report (Moderation)'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'As a moderator, you can remove this report. Please provide a reason for the moderation log:',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                labelText: 'Reason for removal',
+                hintText: 'e.g. Inappropriate content, resolved offline, or duplicate',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+              await ref.read(lostFoundRepositoryProvider).deleteReport(
+                    item.id,
+                    item.kind,
+                    reason: reasonController.text.trim(),
+                  );
+              ref.invalidate(lostReportsProvider);
+              ref.invalidate(foundReportsProvider);
+            },
+            child: const Text('Confirm Remove'),
+          ),
+        ],
       ),
     );
   }

@@ -37,7 +37,6 @@ class BuySellGridCard extends StatelessWidget {
         statusLabel = 'RESERVED';
         break;
       case ListingStatus.sold:
-        // Neutral greys (no blue tint)
         cardBg = isDark ? const Color(0xFF18181B) : const Color(0xFFF4F4F5);
         borderColor = isDark ? const Color(0xFF3F3F46) : const Color(0xFFD4D4D8);
         statusColor = isDark ? const Color(0xFFA1A1AA) : const Color(0xFF71717A);
@@ -69,6 +68,7 @@ class BuySellGridCard extends StatelessWidget {
           children: [
             Expanded(
               child: Stack(
+                fit: StackFit.expand,
                 children: [
                   Opacity(
                     opacity: isSold ? 0.6 : 1.0,
@@ -80,8 +80,14 @@ class BuySellGridCard extends StatelessWidget {
                       gaplessPlayback: true,
                       cacheWidth: 600,
                       errorBuilder: (_, __, ___) => Container(
-                        color: Colors.grey[200],
-                        child: const Center(child: Icon(Icons.image, size: 40)),
+                        color: isDark ? const Color(0xFF27272A) : const Color(0xFFE4E4E7),
+                        child: Center(
+                          child: Icon(
+                            Icons.shopping_bag_outlined,
+                            size: 40,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -93,6 +99,13 @@ class BuySellGridCard extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: statusColor,
                         borderRadius: BorderRadius.circular(6),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       child: Text(
                         statusLabel,
@@ -100,6 +113,7 @@ class BuySellGridCard extends StatelessWidget {
                           color: Colors.white,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
                         ),
                       ),
                     ),
@@ -127,49 +141,45 @@ class BuySellGridCard extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Expanded(
-                        child: Wrap(
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 6,
-                          children: [
-                            Text(
-                              '₹${item.sellingPrice.toStringAsFixed(0)}',
-                              style: TextStyle(
-                                color: isSold ? Colors.grey : Colors.indigo,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
-                              ),
-                            ),
-                            Text(
-                              'Cost Price: ₹${item.costPrice.toStringAsFixed(0)}',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                decoration: TextDecoration.lineThrough,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
+                      Text(
+                        '₹${item.price.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          color: isSold ? Colors.grey : Colors.indigo.shade600,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
                         ),
                       ),
                       const SizedBox(width: 4),
                       Chip(
-                          label: Text(item.category, style: const TextStyle(fontSize: 10)),
-                          padding: EdgeInsets.zero,
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        label: Text(
+                          item.category.name,
+                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+                        ),
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    item.location,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isSold
-                          ? Colors.grey
-                          : (isDark ? Colors.grey[300] : Colors.grey[700]),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Icon(Icons.location_on_outlined, size: 12, color: Colors.grey.shade600),
+                      const SizedBox(width: 2),
+                      Expanded(
+                        child: Text(
+                          item.location.isNotEmpty ? item.location : 'Campus',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isSold
+                                ? Colors.grey
+                                : (isDark ? Colors.grey[300] : Colors.grey[700]),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   Row(
@@ -177,7 +187,7 @@ class BuySellGridCard extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          'By ${item.sellerEmail}',
+                          'Seller: ${item.seller.name}',
                           style: const TextStyle(fontSize: 11, color: Colors.grey),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,

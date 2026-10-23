@@ -107,10 +107,12 @@ class LostFoundColumn extends ConsumerWidget {
                       postType: postType,
                       userEmail: user?.email,
                       userId: user?.id,
+                      userName: user?.name,
                       onSubmit: (report) async {
-                        await ref.read(lostFoundRepositoryProvider).submitReport(report);
+                        final created = await ref.read(lostFoundRepositoryProvider).submitReport(report);
                         ref.invalidate(lostReportsProvider);
                         ref.invalidate(foundReportsProvider);
+                        return created;
                       },
                     ),
                   );

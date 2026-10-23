@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_config.dart';
 import '../../../core/enums/sort_option.dart';
+import '../../../core/models/category_ref.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../data/lost_found_repository.dart';
 import '../domain/lost_found_item.dart';
@@ -73,4 +74,9 @@ final foundReportsProvider = FutureProvider<List<LostFoundItem>>((ref) async {
     dateRange: filter.dateRange,
     sortOption: filter.sortOption,
   );
+});
+
+final lostFoundCategoriesProvider = FutureProvider<List<CategoryRef>>((ref) async {
+  final repo = ref.watch(lostFoundRepositoryProvider);
+  return repo.fetchCategories();
 });

@@ -37,7 +37,6 @@ class BuySellListCard extends StatelessWidget {
         statusLabel = 'RESERVED';
         break;
       case ListingStatus.sold:
-        // Neutral greys (no blue tint)
         cardBg = isDark ? const Color(0xFF18181B) : const Color(0xFFF4F4F5);
         borderColor = isDark ? const Color(0xFF3F3F46) : const Color(0xFFD4D4D8);
         statusColor = isDark ? const Color(0xFFA1A1AA) : const Color(0xFF71717A);
@@ -84,8 +83,8 @@ class BuySellListCard extends StatelessWidget {
                     errorBuilder: (_, __, ___) => Container(
                       width: 120,
                       height: 100,
-                      color: Colors.grey[300],
-                      child: const Icon(Icons.image, size: 30),
+                      color: isDark ? const Color(0xFF27272A) : Colors.grey[300],
+                      child: const Icon(Icons.shopping_bag_outlined, size: 30),
                     ),
                   ),
                 ),
@@ -120,7 +119,12 @@ class BuySellListCard extends StatelessWidget {
                           ),
                           child: Text(
                             statusLabel,
-                            style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              color: statusColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
                           ),
                         ),
                       ],
@@ -129,26 +133,21 @@ class BuySellListCard extends StatelessWidget {
                     Row(
                       children: [
                         Text(
-                          '₹${item.sellingPrice.toStringAsFixed(0)}',
+                          '₹${item.price.toStringAsFixed(0)}',
                           style: TextStyle(
-                            color: isSold ? Colors.grey : Colors.indigo,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Cost Price: ₹${item.costPrice.toStringAsFixed(0)}',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            decoration: TextDecoration.lineThrough,
-                            fontSize: 12,
+                            color: isSold ? Colors.grey : Colors.indigo.shade600,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 17,
                           ),
                         ),
                         const SizedBox(width: 12),
                         Chip(
-                          label: Text(item.category, style: const TextStyle(fontSize: 10)),
+                          label: Text(
+                            item.category.name,
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+                          ),
                           padding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
                           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                       ],
@@ -171,7 +170,7 @@ class BuySellListCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            'Seller: ${item.sellerEmail} • ${item.location}',
+                            'Seller: ${item.seller.name} • ${item.location.isNotEmpty ? item.location : 'Campus'}',
                             style: const TextStyle(fontSize: 11, color: Colors.grey),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,

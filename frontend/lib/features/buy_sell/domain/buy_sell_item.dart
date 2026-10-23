@@ -20,7 +20,7 @@ enum ListingStatus {
   }
 }
 
-/// Unified domain entity representing a Buy & Sell listing (FR-4, FR-5).
+/// Domain entity representing a Buy & Sell listing (FR-4, FR-5, FR-6).
 class ListingItem {
   final String id;
   final String title;
@@ -28,7 +28,7 @@ class ListingItem {
   final double price;
   final ListingStatus status;
   final String location;
-  final CategoryRef categoryRef;
+  final CategoryRef category;
   final UserRef seller;
   final String? coverPhotoUrl;
   final List<Photo> photos;
@@ -36,68 +36,32 @@ class ListingItem {
   final DateTime createdAt;
   final DateTime? updatedAt;
 
-  ListingItem({
+  const ListingItem({
     required this.id,
     required this.title,
     this.description = '',
-    double? price,
-    double? sellingPrice,
-    double? costPrice,
+    required this.price,
     this.status = ListingStatus.available,
     this.location = '',
-    CategoryRef? categoryRef,
-    String? category,
-    UserRef? seller,
-    String? sellerId,
-    String? sellerName,
-    String? sellerEmail,
+    required this.category,
+    required this.seller,
     this.coverPhotoUrl,
-    List<Photo>? photos,
-    List<String>? imageUrls,
-    Contact? sellerContact,
+    this.photos = const [],
+    this.sellerContact,
     required this.createdAt,
     this.updatedAt,
-  })  : price = price ?? sellingPrice ?? costPrice ?? 0.0,
-        categoryRef = categoryRef ??
-            CategoryRef(id: 1, name: category ?? 'Other'),
-        seller = seller ??
-            UserRef(
-              id: sellerId ?? '',
-              name: sellerName ?? sellerEmail ?? 'Seller',
-            ),
-        sellerContact = sellerContact ??
-            (sellerEmail != null ? Contact(email: sellerEmail) : null),
-        photos = photos ??
-            (imageUrls != null
-                ? imageUrls
-                    .asMap()
-                    .entries
-                    .map(
-                      (e) => Photo(
-                        s3Key: '',
-                        url: e.value,
-                        sortOrder: e.key,
-                      ),
-                    )
-                    .toList()
-                : const []);
+  });
 
-  // --- Backwards-compatible accessors for existing UI widgets ---
-  String get category => categoryRef.name;
-  double get sellingPrice => price;
-  double get costPrice => price;
-  String get sellerId => seller.id;
-  String get sellerName => seller.name;
-  String get sellerEmail => sellerContact?.email ?? seller.name;
+  /// Primary cover image URL or first photo.
+  String get imageUrl =>
+      coverPhotoUrl ?? (photos.isNotEmpty ? photos.first.url : '');
 
-  List<String> get imageUrls => photos.isNotEmpty
+  /// List of all photo URLs.
+  List<String> get photoUrls => photos.isNotEmpty
       ? photos.map((p) => p.url).toList()
       : (coverPhotoUrl != null && coverPhotoUrl!.isNotEmpty
           ? [coverPhotoUrl!]
           : const []);
-
-  String get imageUrl =>
-      coverPhotoUrl ?? (photos.isNotEmpty ? photos.first.url : '');
 
   ListingItem copyWith({
     String? id,
@@ -106,7 +70,7 @@ class ListingItem {
     double? price,
     ListingStatus? status,
     String? location,
-    CategoryRef? categoryRef,
+    CategoryRef? category,
     UserRef? seller,
     String? coverPhotoUrl,
     List<Photo>? photos,
@@ -121,7 +85,7 @@ class ListingItem {
       price: price ?? this.price,
       status: status ?? this.status,
       location: location ?? this.location,
-      categoryRef: categoryRef ?? this.categoryRef,
+      category: category ?? this.category,
       seller: seller ?? this.seller,
       coverPhotoUrl: coverPhotoUrl ?? this.coverPhotoUrl,
       photos: photos ?? this.photos,

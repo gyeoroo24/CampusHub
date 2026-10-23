@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../router/app_router.dart';
+import '../../features/buy_sell/domain/buy_sell_item.dart';
 import '../../features/buy_sell/providers/buy_sell_providers.dart';
 import '../../features/buy_sell/ui/widgets/buy_sell_detail_dialog.dart';
+import '../../features/lost_found/domain/lost_found_item.dart';
 import '../../features/lost_found/providers/lost_found_providers.dart';
 import '../../features/lost_found/ui/widgets/lost_found_detail_dialog.dart';
 
@@ -82,25 +84,27 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
                   final lostAsync = ref.watch(lostReportsProvider);
                   final foundAsync = ref.watch(foundReportsProvider);
 
-                  final buySellMatches = buySellAsync.maybeWhen(
+                  final List<ListingItem> buySellMatches = buySellAsync.maybeWhen<List<ListingItem>>(
                     data: (items) => items.where((i) =>
                         i.title.toLowerCase().contains(query) ||
                         i.description.toLowerCase().contains(query)).toList(),
-                    orElse: () => [],
+                    orElse: () => const <ListingItem>[],
                   );
 
-                  final lostMatches = lostAsync.maybeWhen(
+                  final List<LostFoundItem> lostMatches = lostAsync.maybeWhen<List<LostFoundItem>>(
                     data: (items) => items.where((i) =>
-                        i.title.toLowerCase().contains(query) ||
-                        i.description.toLowerCase().contains(query)).toList(),
-                    orElse: () => [],
+                        i.category.name.toLowerCase().contains(query) ||
+                        i.description.toLowerCase().contains(query) ||
+                        i.location.toLowerCase().contains(query)).toList(),
+                    orElse: () => const <LostFoundItem>[],
                   );
 
-                  final foundMatches = foundAsync.maybeWhen(
+                  final List<LostFoundItem> foundMatches = foundAsync.maybeWhen<List<LostFoundItem>>(
                     data: (items) => items.where((i) =>
-                        i.title.toLowerCase().contains(query) ||
-                        i.description.toLowerCase().contains(query)).toList(),
-                    orElse: () => [],
+                        i.category.name.toLowerCase().contains(query) ||
+                        i.description.toLowerCase().contains(query) ||
+                        i.location.toLowerCase().contains(query)).toList(),
+                    orElse: () => const <LostFoundItem>[],
                   );
 
                   final isBuySellActive = activeTab == 0;
@@ -154,7 +158,7 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
     );
   }
 
-  List<Widget> _buildBuySellItems(BuildContext context, WidgetRef ref, List items) {
+  List<Widget> _buildBuySellItems(BuildContext context, WidgetRef ref, List<ListingItem> items) {
     if (items.isEmpty) {
       return [
         const Padding(
@@ -168,7 +172,7 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
         dense: true,
         leading: const Icon(Icons.shopping_bag_outlined, size: 20),
         title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text('₹${item.sellingPrice.toStringAsFixed(0)} • ${item.location}'),
+        subtitle: Text('₹${item.price.toStringAsFixed(0)} • ${item.location}'),
         onTap: () {
           _removeOverlay();
           // Switch to Buy & Sell tab without adding to browser history
@@ -188,9 +192,10 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
     }).toList();
   }
 
-  List<Widget> _buildLostFoundItems(BuildContext context, WidgetRef ref, List items, String type) {
+  List<Widget> _buildLostFoundItems(BuildContext context, WidgetRef ref, List<LostFoundItem> items, String type) {
     if (items.isEmpty) return [];
     return items.map((item) {
+      final dateStr = '${item.occurredAt.day}/${item.occurredAt.month}/${item.occurredAt.year}';
       return ListTile(
         dense: true,
         leading: Icon(
@@ -198,8 +203,9 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
           size: 20,
           color: type == 'Lost' ? Colors.red : Colors.teal,
         ),
-        title: Text('[$type] ${item.title}', style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text('${item.location} • ${item.eventTime}'),
+        title: Text('[$type] ${item.category.name}', style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text('${item.location} • $dateStr\n${item.description}', maxLines: 2, overflow: TextOverflow.ellipsis),
+        isThreeLine: true,
         onTap: () {
           _removeOverlay();
           // Switch to Lost & Found tab without adding to browser history

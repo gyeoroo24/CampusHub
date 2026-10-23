@@ -28,7 +28,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
           'Lost somewhere between Physics Canteen and Main Library. '
           'Name on card: Mukund K., Roll No: 24CSE0042. '
           'Blue fabric lanyard with IISc logo clip. Please contact ASAP.',
-      categoryRef: const CategoryRef(id: 1, name: 'ID Cards'),
+      category: const CategoryRef(id: 1, name: 'ID Cards'),
       occurredAt: DateTime.now().subtract(const Duration(hours: 3)),
       location: 'Physics Department / Library Lawn',
       coverPhotoUrl: 'https://picsum.photos/seed/idcard/600/400',
@@ -37,7 +37,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
       ],
       status: ReportStatus.open,
       reporter: const UserRef(id: 'user_mukund', name: 'Mukund K.'),
-      contact: const Contact(email: 'mukundk@iisc.ac.in', phone: '+919876543210'),
+      reporterContact: const Contact(email: 'mukundk@iisc.ac.in', phone: '+919876543210'),
       createdAt: DateTime.now().subtract(const Duration(hours: 3)),
     ),
     // --- 3 images: landscape, portrait, square ---
@@ -48,7 +48,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
           'Black carrying case with headphone and auxiliary cable inside. '
           'Left on table near window in the reading room. Serial no. on label inside case. '
           'Model: WH-1000XM4, Colour: Midnight Black. Very urgent — they are expensive.',
-      categoryRef: const CategoryRef(id: 2, name: 'Electronics'),
+      category: const CategoryRef(id: 2, name: 'Electronics'),
       occurredAt: DateTime.now().subtract(const Duration(days: 1)),
       location: 'Main Library 2nd Floor Reading Room',
       coverPhotoUrl: 'https://picsum.photos/seed/headphones1/700/450',
@@ -59,7 +59,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
       ],
       status: ReportStatus.open,
       reporter: const UserRef(id: 'user_sufyan', name: 'Sufyan Azam'),
-      contact: const Contact(email: 'sufyana@iisc.ac.in'),
+      reporterContact: const Contact(email: 'sufyana@iisc.ac.in'),
       createdAt: DateTime.now().subtract(const Duration(days: 1)),
     ),
     // --- 2 images, both square ---
@@ -69,7 +69,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
       description:
           'Found black charging case (no earbuds inside) sitting on canteen bench. '
           'Handed over to security guard post #2. Please bring ID proof when claiming.',
-      categoryRef: const CategoryRef(id: 2, name: 'Electronics'),
+      category: const CategoryRef(id: 2, name: 'Electronics'),
       occurredAt: DateTime.now().subtract(const Duration(hours: 5)),
       location: 'Central Canteen Complex',
       coverPhotoUrl: 'https://picsum.photos/seed/earbuds1/500/500',
@@ -79,7 +79,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
       ],
       status: ReportStatus.open,
       reporter: const UserRef(id: 'user_dinky', name: 'Dinky Lakhani'),
-      contact: const Contact(email: 'dinkyl@iisc.ac.in'),
+      reporterContact: const Contact(email: 'dinkyl@iisc.ac.in'),
       createdAt: DateTime.now().subtract(const Duration(hours: 5)),
     ),
     // --- 1 image, portrait ---
@@ -90,7 +90,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
           'Found brown bifold wallet containing driver\'s licence, IISc mess card, '
           'and some cash. No credit cards found. Kept safely in CSA department office. '
           'Contact CSA office (Room 104) with proof of identity.',
-      categoryRef: const CategoryRef(id: 3, name: 'Personal Belongings'),
+      category: const CategoryRef(id: 3, name: 'Personal Belongings'),
       occurredAt: DateTime.now().subtract(const Duration(days: 2)),
       location: 'CSA Department Foyer',
       coverPhotoUrl: 'https://picsum.photos/seed/wallet/400/600',
@@ -99,7 +99,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
       ],
       status: ReportStatus.open,
       reporter: const UserRef(id: 'user_adithya', name: 'Adithya Chippa'),
-      contact: const Contact(email: 'adithyac@iisc.ac.in'),
+      reporterContact: const Contact(email: 'adithyac@iisc.ac.in'),
       createdAt: DateTime.now().subtract(const Duration(days: 2)),
     ),
     // --- 4 images ---
@@ -110,7 +110,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
           'Lost at the basketball court near SERC building. '
           'Titan Edge series, blue dial, stainless steel strap. '
           'Engraved "Always" on the case back. Sentimental value.',
-      categoryRef: const CategoryRef(id: 3, name: 'Personal Belongings'),
+      category: const CategoryRef(id: 3, name: 'Personal Belongings'),
       occurredAt: DateTime.now().subtract(const Duration(days: 1, hours: 6)),
       location: 'SERC Basketball Court',
       coverPhotoUrl: 'https://picsum.photos/seed/watch1/800/350',
@@ -122,7 +122,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
       ],
       status: ReportStatus.open,
       reporter: const UserRef(id: 'user_ramesh', name: 'Ramesh K.'),
-      contact: const Contact(email: 'rameshk@iisc.ac.in'),
+      reporterContact: const Contact(email: 'rameshk@iisc.ac.in'),
       createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 6)),
     ),
     // --- no images ---
@@ -132,14 +132,14 @@ class MockLostFoundRepository implements ILostFoundRepository {
       description:
           'Rimless frameless rectangular glasses in a black hard case. '
           'Power: L -2.5 R -2.0. Left at the Gymkhana chess club table.',
-      categoryRef: const CategoryRef(id: 3, name: 'Personal Belongings'),
+      category: const CategoryRef(id: 3, name: 'Personal Belongings'),
       occurredAt: DateTime.now().subtract(const Duration(days: 3)),
       location: 'Gymkhana Building — Chess Club Area',
       coverPhotoUrl: null,
       photos: const [],
       status: ReportStatus.open,
       reporter: const UserRef(id: 'user_pooja', name: 'Pooja S.'),
-      contact: const Contact(email: 'poojas@iisc.ac.in'),
+      reporterContact: const Contact(email: 'poojas@iisc.ac.in'),
       createdAt: DateTime.now().subtract(const Duration(days: 3)),
     ),
     // --- 2 images ---
@@ -150,7 +150,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
           'Red and black daypack found near Tata Institute. '
           'Contains a water bottle and a rain cover. '
           'Submitted to Gymkhana reception desk.',
-      categoryRef: const CategoryRef(id: 4, name: 'Bags'),
+      category: const CategoryRef(id: 4, name: 'Bags'),
       occurredAt: DateTime.now().subtract(const Duration(days: 1, hours: 12)),
       location: 'Tata Institute of Fundamental Research Gate Area',
       coverPhotoUrl: 'https://picsum.photos/seed/bag1/800/400',
@@ -160,7 +160,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
       ],
       status: ReportStatus.open,
       reporter: const UserRef(id: 'user_gymkhana', name: 'Gymkhana Staff'),
-      contact: const Contact(email: 'gymkhana@iisc.ac.in'),
+      reporterContact: const Contact(email: 'gymkhana@iisc.ac.in'),
       createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 12)),
     ),
   ];
@@ -181,8 +181,8 @@ class MockLostFoundRepository implements ILostFoundRepository {
       final matchesQuery = q.isEmpty ||
           item.description.toLowerCase().contains(q) ||
           item.location.toLowerCase().contains(q) ||
-          item.category.toLowerCase().contains(q);
-      final matchesCategory = categoryId == null || item.categoryRef.id == categoryId;
+          item.category.name.toLowerCase().contains(q);
+      final matchesCategory = categoryId == null || item.category.id == categoryId;
       final matchesStatus =
           statusList == null || statusList.isEmpty || statusList.contains(item.status);
       final matchesReporter = reporterId == null || reporterId.isEmpty || item.reporter.id == reporterId;
@@ -228,10 +228,10 @@ class MockLostFoundRepository implements ILostFoundRepository {
       final matchesQuery = q.isEmpty ||
           item.description.toLowerCase().contains(q) ||
           item.location.toLowerCase().contains(q) ||
-          item.category.toLowerCase().contains(q);
+          item.category.name.toLowerCase().contains(q);
       final matchesCategory = category == 'All' ||
-          item.category.toLowerCase() == category.toLowerCase() ||
-          (categoryId != null && item.categoryRef.id == categoryId);
+          item.category.name.toLowerCase() == category.toLowerCase() ||
+          (categoryId != null && item.category.id == categoryId);
       final matchesStatus =
           statusList == null || statusList.isEmpty || statusList.contains(item.status);
       final matchesReporter = reporterId == null || reporterId.isEmpty || item.reporter.id == reporterId;
@@ -278,7 +278,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
         .where(
           (r) =>
               r.kind == oppositeKind &&
-              r.categoryRef.id == report.categoryRef.id &&
+              r.category.id == report.category.id &&
               r.status == ReportStatus.open,
         )
         .toList();
@@ -303,7 +303,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
     final index = _mockReports.indexWhere((it) => it.id == id);
     if (index == -1) throw Exception('Report not found');
 
-    CategoryRef newCat = _mockReports[index].categoryRef;
+    CategoryRef newCat = _mockReports[index].category;
     if (categoryId != null) {
       newCat = _categories.firstWhere(
         (c) => c.id == categoryId,
@@ -313,7 +313,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
 
     final updated = _mockReports[index].copyWith(
       description: description,
-      categoryRef: newCat,
+      category: newCat,
       occurredAt: occurredAt,
       location: location,
       updatedAt: DateTime.now(),

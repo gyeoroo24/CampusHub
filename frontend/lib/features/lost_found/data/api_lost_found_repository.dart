@@ -132,7 +132,7 @@ class ApiLostFoundRepository implements ILostFoundRepository {
     // Client-side category string fallback if categoryId was null
     if (category != 'All' && categoryId == null) {
       results = results
-          .where((r) => r.category.toLowerCase() == category.toLowerCase())
+          .where((r) => r.category.name.toLowerCase() == category.toLowerCase())
           .toList();
     }
 

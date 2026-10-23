@@ -96,7 +96,7 @@ class ApiBuySellRepository implements IBuySellRepository {
 
     // Client-side category string fallback if category is text and categoryId was null
     if (category != 'All' && categoryId == null) {
-      items = items.where((it) => it.category.toLowerCase() == category.toLowerCase()).toList();
+      items = items.where((it) => it.category.name.toLowerCase() == category.toLowerCase()).toList();
     }
 
     return items;

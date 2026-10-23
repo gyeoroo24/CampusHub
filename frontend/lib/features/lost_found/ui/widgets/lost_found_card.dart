@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/utils/date_time_formatter.dart';
 import '../../domain/lost_found_item.dart';
 import 'lost_found_detail_dialog.dart';
 
@@ -11,8 +12,25 @@ class LostFoundCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final isLost = item.type == PostType.lost;
+    final isLost = item.kind == PostType.lost;
     final badgeColor = isLost ? const Color(0xFFE11D48) : const Color(0xFF0D9488);
+
+    Color statusColor;
+    String statusLabel;
+    switch (item.status) {
+      case ReportStatus.open:
+        statusColor = isLost ? const Color(0xFFE11D48) : const Color(0xFF0D9488);
+        statusLabel = isLost ? 'LOST' : 'FOUND';
+        break;
+      case ReportStatus.matched:
+        statusColor = Colors.amber.shade800;
+        statusLabel = 'MATCHED';
+        break;
+      case ReportStatus.closed:
+        statusColor = Colors.grey.shade600;
+        statusLabel = 'RESOLVED';
+        break;
+    }
 
     return Card(
       elevation: 1,
@@ -78,14 +96,14 @@ class LostFoundCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  // Status Badge (LOST / FOUND)
+                  // Status Badge (LOST / FOUND / MATCHED / RESOLVED)
                   Positioned(
                     top: 8,
                     left: 8,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: badgeColor,
+                        color: statusColor,
                         borderRadius: BorderRadius.circular(6),
                         boxShadow: [
                           BoxShadow(
@@ -96,7 +114,7 @@ class LostFoundCard extends StatelessWidget {
                         ],
                       ),
                       child: Text(
-                        isLost ? 'LOST' : 'FOUND',
+                        statusLabel,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 10,
@@ -122,7 +140,7 @@ class LostFoundCard extends StatelessWidget {
                           const Icon(Icons.access_time_rounded, size: 11, color: Colors.white),
                           const SizedBox(width: 4),
                           Text(
-                            item.eventTime,
+                            DateTimeFormatter.timeAgo(item.occurredAt),
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 10,
@@ -143,7 +161,7 @@ class LostFoundCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    item.title,
+                    item.category.name,
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
@@ -161,7 +179,7 @@ class LostFoundCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          item.category,
+                          item.category.name,
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
@@ -177,7 +195,7 @@ class LostFoundCard extends StatelessWidget {
                             const SizedBox(width: 2),
                             Expanded(
                               child: Text(
-                                item.location,
+                                item.location.isNotEmpty ? item.location : 'Campus',
                                 style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -202,14 +220,16 @@ class LostFoundCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Icon(Icons.alternate_email_rounded, size: 12, color: badgeColor),
+                      Icon(Icons.person_outline_rounded, size: 12, color: badgeColor),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          item.reporterContact,
+                          item.reporterContact != null
+                              ? '${item.reporter.name} • ${item.reporterContact!.email}'
+                              : '${item.reporter.name} • Sign in to contact',
                           style: TextStyle(
                             fontSize: 11,
-                            color: badgeColor,
+                            color: item.reporterContact != null ? badgeColor : Colors.grey.shade500,
                             fontWeight: FontWeight.w600,
                           ),
                           maxLines: 1,

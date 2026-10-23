@@ -115,14 +115,14 @@ void main() {
       final domain = dto.toDomain();
 
       expect(domain.id, equals('item_101'));
-      expect(domain.sellerId, equals('seller_007'));
-      expect(domain.sellerName, equals('Asha'));
-      expect(domain.sellerEmail, equals('seller@iisc.ac.in'));
-      expect(domain.sellingPrice, equals(500.0));
+      expect(domain.seller.id, equals('seller_007'));
+      expect(domain.seller.name, equals('Asha'));
+      expect(domain.sellerContact?.email, equals('seller@iisc.ac.in'));
+      expect(domain.price, equals(500.0));
       expect(domain.status, equals(ListingStatus.available));
-      expect(domain.category, equals('Cycles'));
-      expect(domain.categoryRef.id, equals(2));
-      expect(domain.imageUrls, contains('https://example.com/img1.jpg'));
+      expect(domain.category.name, equals('Cycles'));
+      expect(domain.category.id, equals(2));
+      expect(domain.photoUrls, contains('https://example.com/img1.jpg'));
     });
 
     test('MockBuySellRepository filters by query, price, date, and status', () async {
@@ -130,7 +130,7 @@ void main() {
 
       // Filter by category
       final cycles = await repo.fetchListings(category: 'Cycles');
-      expect(cycles.every((item) => item.category == 'Cycles'), isTrue);
+      expect(cycles.every((item) => item.category.name == 'Cycles'), isTrue);
 
       // Search query
       final queryResults = await repo.fetchListings(query: 'Calculator');
@@ -138,7 +138,7 @@ void main() {
 
       // Price filter
       final affordable = await repo.fetchListings(maxPrice: 500.0);
-      expect(affordable.every((item) => item.sellingPrice <= 500.0), isTrue);
+      expect(affordable.every((item) => item.price <= 500.0), isTrue);
 
       // Paginated page query
       final PaginatedResponse<ListingItem> paged = await repo.fetchListingsPage(limit: 3, offset: 0);
@@ -176,32 +176,32 @@ void main() {
 
       expect(domain.id, equals('report_202'));
       expect(domain.kind, equals(PostType.found));
-      expect(domain.reporterContact, equals('finder@iisc.ac.in'));
+      expect(domain.reporterContact?.email, equals('finder@iisc.ac.in'));
       expect(domain.status, equals(ReportStatus.open));
-      expect(domain.category, equals('Keys'));
-      expect(domain.categoryRef.id, equals(5));
+      expect(domain.category.name, equals('Keys'));
+      expect(domain.category.id, equals(5));
     });
 
     test('MockLostFoundRepository supports separate lost and found feeds', () async {
       final repo = MockLostFoundRepository();
 
       final lostReports = await repo.fetchReports(type: PostType.lost);
-      expect(lostReports.every((r) => r.type == PostType.lost), isTrue);
+      expect(lostReports.every((r) => r.kind == PostType.lost), isTrue);
 
       final foundReports = await repo.fetchReports(type: PostType.found);
-      expect(foundReports.every((r) => r.type == PostType.found), isTrue);
+      expect(foundReports.every((r) => r.kind == PostType.found), isTrue);
 
       // Submit new report
       final newReport = LostFoundItem(
         id: 'test_rep_1',
         kind: PostType.lost,
         description: 'Metal bottle left in lecture hall',
-        categoryRef: const CategoryRef(id: 3, name: 'Personal Belongings'),
+        category: const CategoryRef(id: 3, name: 'Personal Belongings'),
         occurredAt: DateTime.now(),
         location: 'LH-1',
         status: ReportStatus.open,
         reporter: const UserRef(id: 'usr_me', name: 'Mukund'),
-        contact: const Contact(email: 'test@iisc.ac.in'),
+        reporterContact: const Contact(email: 'test@iisc.ac.in'),
         createdAt: DateTime.now(),
       );
 

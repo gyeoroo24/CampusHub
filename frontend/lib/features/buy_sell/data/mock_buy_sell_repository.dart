@@ -29,7 +29,7 @@ class MockBuySellRepository implements IBuySellRepository {
           '100% Cotton, clean condition with no chemical stains or tears. '
           'Ideal for first-year lab work. Washed and ironed. Fits 5\'7"–5\'10".',
       price: 350.0,
-      categoryRef: const CategoryRef(id: 5, name: 'Lab Equipment'),
+      category: const CategoryRef(id: 5, name: 'Lab Equipment'),
       location: 'Sarvam Hostel Block B',
       coverPhotoUrl: 'https://picsum.photos/seed/labcoat/600/450',
       photos: const [
@@ -49,7 +49,7 @@ class MockBuySellRepository implements IBuySellRepository {
           'pneumatic lever. Armrests intact. Minor scuff on base. '
           'Bought 6 months ago for 4500. Moving out of hostel.',
       price: 1800.0,
-      categoryRef: const CategoryRef(id: 4, name: 'Furniture'),
+      category: const CategoryRef(id: 4, name: 'Furniture'),
       location: 'R-Block Hostel Room 204',
       coverPhotoUrl: 'https://picsum.photos/seed/chair1/400/600',
       photos: const [
@@ -70,7 +70,7 @@ class MockBuySellRepository implements IBuySellRepository {
           '10th Edition Hardcover. Contains neatly highlighted notes and previous '
           'year problem solutions in pencil (erasable). All pages intact, spine tight.',
       price: 600.0,
-      categoryRef: const CategoryRef(id: 1, name: 'Books'),
+      category: const CategoryRef(id: 1, name: 'Books'),
       location: 'Main Library Lawn',
       coverPhotoUrl: 'https://picsum.photos/seed/book1/600/400',
       photos: const [
@@ -91,7 +91,7 @@ class MockBuySellRepository implements IBuySellRepository {
           'Fast boiling — perfect for hostel tea and instant noodles. '
           'Cord length 0.75m. Sold as-is, works perfectly.',
       price: 750.0,
-      categoryRef: const CategoryRef(id: 3, name: 'Electronics'),
+      category: const CategoryRef(id: 3, name: 'Electronics'),
       location: 'E-Block Hostel Room 112',
       coverPhotoUrl: 'https://picsum.photos/seed/kettle/500/500',
       photos: const [
@@ -111,7 +111,7 @@ class MockBuySellRepository implements IBuySellRepository {
           'and a sturdy combination lock. Tyres at 85% tread. Recently serviced '
           'and oiled. Ideal for campus commute and weekend rides.',
       price: 5800.0,
-      categoryRef: const CategoryRef(id: 2, name: 'Cycles'),
+      category: const CategoryRef(id: 2, name: 'Cycles'),
       location: 'Physics Department Cycle Stand',
       coverPhotoUrl: 'https://picsum.photos/seed/cycle1/800/350',
       photos: const [
@@ -133,7 +133,7 @@ class MockBuySellRepository implements IBuySellRepository {
           'Full working condition. 552 functions, spreadsheet mode, QR code '
           'display. Original pouch and manual included. Perfect for JEE/exam use.',
       price: 700.0,
-      categoryRef: const CategoryRef(id: 3, name: 'Electronics'),
+      category: const CategoryRef(id: 3, name: 'Electronics'),
       location: 'CSA Department Foyer',
       coverPhotoUrl: 'https://picsum.photos/seed/calc1/350/600',
       photos: const [
@@ -153,7 +153,7 @@ class MockBuySellRepository implements IBuySellRepository {
           'Lightweight flat-pack table repurposed as a bedside/study table. '
           'Height 44cm. White. Some pen marks underneath. Easy to disassemble.',
       price: 800.0,
-      categoryRef: const CategoryRef(id: 4, name: 'Furniture'),
+      category: const CategoryRef(id: 4, name: 'Furniture'),
       location: 'New Biological Sciences Hostel',
       coverPhotoUrl: null,
       photos: const [],
@@ -178,7 +178,7 @@ class MockBuySellRepository implements IBuySellRepository {
           item.title.toLowerCase().contains(query.toLowerCase()) ||
           item.description.toLowerCase().contains(query.toLowerCase()) ||
           item.location.toLowerCase().contains(query.toLowerCase());
-      final matchesCategory = categoryId == null || item.categoryRef.id == categoryId;
+      final matchesCategory = categoryId == null || item.category.id == categoryId;
       final matchesStatus = statusList == null || statusList.isEmpty || statusList.contains(item.status);
       final matchesMinPrice = minPrice == null || item.price >= minPrice;
       final matchesMaxPrice = maxPrice == null || item.price <= maxPrice;
@@ -232,8 +232,8 @@ class MockBuySellRepository implements IBuySellRepository {
           item.description.toLowerCase().contains(query.toLowerCase()) ||
           item.location.toLowerCase().contains(query.toLowerCase());
       final matchesCategory = category == 'All' ||
-          item.category == category ||
-          (categoryId != null && item.categoryRef.id == categoryId);
+          item.category.name == category ||
+          (categoryId != null && item.category.id == categoryId);
       final matchesStatus = statusFilter == null || item.status == statusFilter;
       final matchesMinPrice = minPrice == null || item.price >= minPrice;
       final matchesMaxPrice = maxPrice == null || item.price <= maxPrice;
@@ -305,7 +305,7 @@ class MockBuySellRepository implements IBuySellRepository {
     final index = _mockData.indexWhere((it) => it.id == id);
     if (index == -1) throw Exception('Listing not found');
 
-    CategoryRef newCat = _mockData[index].categoryRef;
+    CategoryRef newCat = _mockData[index].category;
     if (categoryId != null) {
       newCat = _categories.firstWhere(
         (c) => c.id == categoryId,
@@ -317,7 +317,7 @@ class MockBuySellRepository implements IBuySellRepository {
       title: title,
       description: description,
       price: price,
-      categoryRef: newCat,
+      category: newCat,
       location: location,
       updatedAt: DateTime.now(),
     );

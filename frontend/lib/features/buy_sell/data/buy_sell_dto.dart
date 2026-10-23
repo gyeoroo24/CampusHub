@@ -38,7 +38,7 @@ class BuySellListingDto {
   });
 
   factory BuySellListingDto.fromJson(Map<String, dynamic> json) {
-    // 1. Price parsing: handles Decimal string or num
+    // 1. Price parsing: handles Decimal string or number
     double parsedPrice = 0.0;
     if (json['price'] != null) {
       parsedPrice = double.tryParse(json['price'].toString()) ?? 0.0;
@@ -46,7 +46,7 @@ class BuySellListingDto {
       parsedPrice = double.tryParse(json['selling_price'].toString()) ?? 0.0;
     }
 
-    // 2. Category parsing: handles structured CategoryRef or legacy ID/String
+    // 2. Category parsing: structured CategoryRef or ID/String
     CategoryRef parsedCategory;
     if (json['category'] is Map<String, dynamic>) {
       parsedCategory = CategoryRef.fromJson(json['category'] as Map<String, dynamic>);
@@ -58,7 +58,7 @@ class BuySellListingDto {
       parsedCategory = CategoryRef(id: catId, name: catName);
     }
 
-    // 3. Seller parsing: handles structured UserRef or legacy seller_id/email
+    // 3. Seller parsing: structured UserRef
     UserRef parsedSeller;
     if (json['seller'] is Map<String, dynamic>) {
       parsedSeller = UserRef.fromJson(json['seller'] as Map<String, dynamic>);
@@ -104,7 +104,6 @@ class BuySellListingDto {
           .toList();
     }
 
-    // 6. Cover photo url
     final coverUrl = json['cover_photo_url']?.toString() ??
         (parsedPhotos.isNotEmpty ? parsedPhotos.first.url : null);
 
@@ -122,16 +121,13 @@ class BuySellListingDto {
       sellerContact: parsedContact,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : (json['timestamp'] != null
-              ? DateTime.tryParse(json['timestamp'].toString()) ?? DateTime.now()
-              : DateTime.now()),
+          : DateTime.now(),
       updatedAt: json['updated_at'] != null
           ? DateTime.tryParse(json['updated_at'].toString())
           : null,
     );
   }
 
-  /// Converts DTO to Domain Entity
   ListingItem toDomain() {
     return ListingItem(
       id: id,
@@ -140,7 +136,7 @@ class BuySellListingDto {
       price: price,
       status: ListingStatus.fromString(status),
       location: location ?? '',
-      categoryRef: category,
+      category: category,
       seller: seller,
       coverPhotoUrl: coverPhotoUrl,
       photos: photos,
@@ -150,7 +146,6 @@ class BuySellListingDto {
     );
   }
 
-  /// Converts Domain Entity to DTO
   factory BuySellListingDto.fromDomain(ListingItem item) {
     return BuySellListingDto(
       id: item.id,
@@ -159,7 +154,7 @@ class BuySellListingDto {
       price: item.price,
       status: item.status.name,
       location: item.location,
-      category: item.categoryRef,
+      category: item.category,
       seller: item.seller,
       coverPhotoUrl: item.coverPhotoUrl,
       photos: item.photos,
@@ -169,7 +164,6 @@ class BuySellListingDto {
     );
   }
 
-  /// Serializes to `ListingCreate` payload for `POST /api/v1/listings`.
   Map<String, dynamic> toCreateJson({List<String> photoKeys = const []}) {
     return {
       'title': title,
@@ -183,7 +177,6 @@ class BuySellListingDto {
     };
   }
 
-  /// Serializes to `ListingUpdate` payload for `PATCH /api/v1/listings/{id}`.
   Map<String, dynamic> toUpdateJson() {
     return {
       'title': title,
@@ -194,7 +187,6 @@ class BuySellListingDto {
     };
   }
 
-  /// Full JSON representation (for mock caching or testing).
   Map<String, dynamic> toJson() {
     return {
       'id': id,
