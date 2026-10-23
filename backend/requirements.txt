@@ -1,0 +1,8 @@
+# Runtime dependencies (installed into the Lambda / EC2 image)
+fastapi==0.115.6
+mangum==0.19.0
+asyncpg==0.30.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+PyJWT[crypto]==2.10.1
+boto3==1.37.38

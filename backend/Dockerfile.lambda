@@ -1,0 +1,11 @@
+# AWS Lambda container image (the PRD's main compute target).
+# Build:  docker build -f Dockerfile.lambda -t campushub-api-lambda .
+# Lambda handler: app.main.handler
+FROM public.ecr.aws/lambda/python:3.12
+
+COPY requirements.txt ${LAMBDA_TASK_ROOT}/
+RUN pip install --no-cache-dir -r ${LAMBDA_TASK_ROOT}/requirements.txt --target ${LAMBDA_TASK_ROOT}
+
+COPY app ${LAMBDA_TASK_ROOT}/app
+
+CMD ["app.main.handler"]
