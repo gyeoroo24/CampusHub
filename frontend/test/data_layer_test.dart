@@ -82,20 +82,30 @@ void main() {
       expect(restored?.email, equals('adithyac@iisc.ac.in'));
       expect(restored?.isActive, isTrue);
 
-      // Admin updateAccountStatus deactivates or changes privileges
+      // Admin updateAccountStatus deactivates or reactivates account
       final updatedStatus = await newRepo.updateAccountStatus(
         restored!.id,
         isActive: false,
-        isAdmin: true,
       );
       expect(updatedStatus.isActive, isFalse);
-      expect(updatedStatus.isAdmin, isTrue);
 
       // AccountStatus serialization
       final parsed = AccountStatus.fromJson(updatedStatus.toJson());
       expect(parsed.id, equals(updatedStatus.id));
       expect(parsed.isActive, isFalse);
-      expect(parsed.isAdmin, isTrue);
+
+      // Single admin transfer role
+      final adminRepo = MockAuthRepository(storage: InMemoryTokenStorage());
+      final adminUser = await adminRepo.getCurrentUser(); // default mock admin
+      expect(adminUser?.isAdmin, isTrue);
+
+      final transferred = await adminRepo.transferAdminRole('usr_new_admin');
+      expect(transferred.isAdmin, isTrue);
+      expect(transferred.id, equals('usr_new_admin'));
+
+      // Caller is demoted
+      final demotedAdmin = await adminRepo.getCurrentUser();
+      expect(demotedAdmin?.isAdmin, isFalse);
     });
 
     test('ServiceUnavailableException has status 503', () {

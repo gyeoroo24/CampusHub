@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:campus_hub/core/api/api_client.dart';
 import 'package:campus_hub/core/models/category_ref.dart';
@@ -10,6 +11,9 @@ import 'package:campus_hub/features/lost_found/data/lost_found_repository.dart';
 import 'package:campus_hub/features/lost_found/domain/lost_found_item.dart';
 
 void main() {
+  const liveUrl = String.fromEnvironment('LIVE_BACKEND_URL', defaultValue: 'http://10.217.103.203:8000');
+  const devKey = String.fromEnvironment('DEV_KEY', defaultValue: 'kSH3AyYRCzXn8Czy8xXCZbC9');
+
   group('Live FastAPI Backend Integration Tests', () {
     late InMemoryTokenStorage storage;
     late ApiClient apiClient;
@@ -19,7 +23,21 @@ void main() {
 
     setUp(() {
       storage = InMemoryTokenStorage();
-      apiClient = ApiClient(storage: storage);
+      apiClient = ApiClient(
+        dioClient: Dio(
+          BaseOptions(
+            baseUrl: liveUrl,
+            connectTimeout: const Duration(seconds: 5),
+            receiveTimeout: const Duration(seconds: 10),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          ),
+        ),
+        storage: storage,
+        devKey: devKey,
+      );
       authRepo = ApiAuthRepository(apiClient: apiClient, tokenStorage: storage);
       buySellRepo = ApiBuySellRepository(apiClient);
       lostFoundRepo = ApiLostFoundRepository(apiClient);

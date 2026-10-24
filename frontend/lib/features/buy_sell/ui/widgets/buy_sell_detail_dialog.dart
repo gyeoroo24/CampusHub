@@ -200,8 +200,8 @@ class BuySellDetailDialog extends ConsumerWidget {
 
                     const SizedBox(height: 20),
 
-                    // ── Owner Controls (Change Status) ─────────────────────────
-                    if (isOwner) ...[
+                    // ── Status Controls (Owner or Admin) ─────────────────────────
+                    if (isOwner || (currentUser?.isAdmin ?? false)) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -212,9 +212,9 @@ class BuySellDetailDialog extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Listing Owner Controls',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                            Text(
+                              isOwner ? 'Listing Owner Controls' : 'Admin Status Controls',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 8),
                             Wrap(
@@ -295,48 +295,71 @@ class BuySellDetailDialog extends ConsumerWidget {
                                 ),
                               ],
                             )
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
+                          : (currentUser != null && !currentUser.isGuest)
+                              ? Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Icon(Icons.lock_outline_rounded, size: 18, color: Colors.amber.shade800),
-                                    const SizedBox(width: 8),
-                                    const Expanded(
-                                      child: Text(
-                                        'Seller Contact Details Protected',
-                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    Row(
+                                      children: [
+                                        Icon(Icons.person_off_outlined, size: 18, color: Colors.amber.shade800),
+                                        const SizedBox(width: 8),
+                                        const Expanded(
+                                          child: Text(
+                                            'Seller Account Inactive',
+                                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Seller: ${item.seller.name} • This account is currently deactivated by campus administration. Contact information is unavailable.',
+                                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                    ),
+                                  ],
+                                )
+                              : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.lock_outline_rounded, size: 18, color: Colors.amber.shade800),
+                                        const SizedBox(width: 8),
+                                        const Expanded(
+                                          child: Text(
+                                            'Seller Contact Details Protected',
+                                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Seller: ${item.seller.name} • Contact information is visible to authenticated IISc students only.',
+                                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton.icon(
+                                        onPressed: () async {
+                                          final signedIn = await AuthDialog.ensureSignedIn(
+                                            context,
+                                            ref,
+                                            title: 'Sign In to View Contact Info',
+                                            message: 'Sign in with your @iisc.ac.in account to view seller details.',
+                                          );
+                                          if (signedIn && context.mounted) {
+                                            Navigator.pop(context);
+                                            ref.invalidate(buySellListingsProvider);
+                                          }
+                                        },
+                                        icon: const Icon(Icons.login_rounded, size: 16),
+                                        label: const Text('Sign in with IISc Email to Reveal Contact'),
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Seller: ${item.seller.name} • Contact information is visible to authenticated IISc students only.',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                                ),
-                                const SizedBox(height: 10),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: OutlinedButton.icon(
-                                    onPressed: () async {
-                                      final signedIn = await AuthDialog.ensureSignedIn(
-                                        context,
-                                        ref,
-                                        title: 'Sign In to View Contact Info',
-                                        message: 'Sign in with your @iisc.ac.in account to view seller details.',
-                                      );
-                                      if (signedIn && context.mounted) {
-                                        Navigator.pop(context);
-                                        ref.invalidate(buySellListingsProvider);
-                                      }
-                                    },
-                                    icon: const Icon(Icons.login_rounded, size: 16),
-                                    label: const Text('Sign in with IISc Email to Reveal Contact'),
-                                  ),
-                                ),
-                              ],
-                            ),
                     ),
 
                     // ── Moderator Removal (FR-10) ──────────────────────────────

@@ -32,6 +32,14 @@ void main() {
 
     expect(find.text('CampusHub'), findsWidgets);
     expect(find.text('Sell Item'), findsOneWidget);
+
+    // Verify refresh button exists on the left of theme toggle
+    final refreshBtn = find.byTooltip('Refresh all data from server');
+    expect(refreshBtn, findsOneWidget);
+    await tester.tap(refreshBtn);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(find.text('All feeds and user permissions refreshed from server.'), findsOneWidget);
   });
 
   testWidgets('CampusHub mobile responsiveness test (iPhone SE 375x667)', (WidgetTester tester) async {
@@ -64,10 +72,10 @@ void main() {
     addTearDown(() => tester.view.resetPhysicalSize());
 
     final testUser = User(
-      id: 'test_student',
-      email: 'student@iisc.ac.in',
+      id: 'test_admin',
+      email: 'admin@iisc.ac.in',
       name: 'Adithya C',
-      isAdmin: false,
+      isAdmin: true,
       moderatorGrants: [
         ModeratorGrant(
           id: 'grant_1',
@@ -96,18 +104,21 @@ void main() {
     await tester.tap(profileButton);
     await tester.pumpAndSettle();
 
-    // Verify account dialog is displayed with email and roles without any crash
-    expect(find.text('student@iisc.ac.in'), findsOneWidget);
+    // Verify account dialog is displayed with email, roles, and admin controls without any crash
+    expect(find.text('admin@iisc.ac.in'), findsOneWidget);
     expect(find.text('Permissions & Roles:'), findsOneWidget);
-    expect(find.text('Student'), findsOneWidget);
+    expect(find.text('Admin'), findsOneWidget);
     expect(find.text('Moderator'), findsOneWidget);
+    expect(find.text('Admin Management Controls'), findsOneWidget);
+    expect(find.text('Account Status'), findsOneWidget);
+    expect(find.text('Transfer Role'), findsOneWidget);
     expect(find.text('Sign Out'), findsOneWidget);
 
     // Close the dialog
     await tester.tap(find.text('Close'));
     await tester.pumpAndSettle();
 
-    expect(find.text('student@iisc.ac.in'), findsNothing);
+    expect(find.text('admin@iisc.ac.in'), findsNothing);
   });
 
   testWidgets('Trusted Campus Exchange banner only shows when manually logged in and dismisses on x tap', (WidgetTester tester) async {

@@ -187,7 +187,8 @@ class LostFoundDetailDialog extends ConsumerWidget {
                     const Divider(height: 28),
 
                     // ── Owner Controls (Change Status: Open / Matched / Closed) ─
-                    if (isOwner) ...[
+                    // ── Status Controls (Reporter or Admin) ─────────────────────────
+                    if (isOwner || (currentUser?.isAdmin ?? false)) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -198,9 +199,9 @@ class LostFoundDetailDialog extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Report Status Controls',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                            Text(
+                              isOwner ? 'Report Status Controls' : 'Admin Report Controls',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 8),
                             Wrap(
@@ -311,33 +312,56 @@ class LostFoundDetailDialog extends ConsumerWidget {
                                 ),
                               ],
                             )
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
+                          : (currentUser != null && !currentUser.isGuest)
+                              ? Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Icon(Icons.lock_outline_rounded, size: 18, color: Colors.amber.shade800),
-                                    const SizedBox(width: 8),
-                                    const Expanded(
-                                      child: Text(
-                                        'Reporter Contact Details Protected',
-                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                      ),
+                                    Row(
+                                      children: [
+                                        Icon(Icons.person_off_outlined, size: 18, color: Colors.amber.shade800),
+                                        const SizedBox(width: 8),
+                                        const Expanded(
+                                          child: Text(
+                                            'Reporter Account Inactive',
+                                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Reported by: ${item.reporter.name} • This account is currently deactivated by campus administration. Contact information is unavailable.',
+                                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                                     ),
                                   ],
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Reported by: ${item.reporter.name} • Contact details are only visible to authenticated IISc members.',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                                ),
-                                const SizedBox(height: 10),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: OutlinedButton.icon(
-                                    onPressed: () async {
-                                      final signedIn = await AuthDialog.ensureSignedIn(
-                                        context,
+                                )
+                              : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.lock_outline_rounded, size: 18, color: Colors.amber.shade800),
+                                        const SizedBox(width: 8),
+                                        const Expanded(
+                                          child: Text(
+                                            'Reporter Contact Details Protected',
+                                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Reported by: ${item.reporter.name} • Contact details are only visible to authenticated IISc members.',
+                                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton.icon(
+                                        onPressed: () async {
+                                          final signedIn = await AuthDialog.ensureSignedIn(
+                                            context,
                                         ref,
                                         title: 'Sign In to View Contact Info',
                                         message: 'Sign in with your @iisc.ac.in account to view contact info.',

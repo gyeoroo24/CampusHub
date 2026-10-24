@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/api/api_exception.dart';
 import '../providers/auth_providers.dart';
 
 /// Modal dialog prompting the user to sign in with their IISc email address and OTP.
@@ -81,7 +82,11 @@ class _AuthDialogState extends ConsumerState<AuthDialog> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString().replaceFirst('Exception: ', '');
+          if (e is ServiceUnavailableException) {
+            _errorMessage = 'Sign-in is temporarily unavailable (Cognito JWKS key sync). Please try again in a few moments.';
+          } else {
+            _errorMessage = e.toString().replaceFirst('Exception: ', '');
+          }
           _isLoading = false;
         });
       }
@@ -108,7 +113,11 @@ class _AuthDialogState extends ConsumerState<AuthDialog> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString().replaceFirst('Exception: ', '');
+          if (e is ServiceUnavailableException) {
+            _errorMessage = 'Sign-in is temporarily unavailable (Cognito JWKS key sync). Please try again in a few moments.';
+          } else {
+            _errorMessage = e.toString().replaceFirst('Exception: ', '');
+          }
           _isLoading = false;
         });
       }

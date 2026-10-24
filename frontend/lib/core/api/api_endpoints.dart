@@ -10,6 +10,7 @@ class ApiEndpoints {
   // --- Profile & Users ---
   static const String me = '$version/me';
   static String user(String id) => '$version/users/$id';
+  static String userMakeAdmin(String id) => '$version/users/$id/make-admin';
 
   // --- File Uploads (S3 Presigned URLs) ---
   static const String uploads = '$version/uploads';

@@ -1,11 +1,11 @@
 # CampusHub: Project Context, Architecture & Session Handoff Guide
 
-**Document Version:** 3.5  
+**Document Version:** 3.6  
 **Last Updated:** 24 October 2026  
 **Project:** CampusHub — Cloud Computing Course Project (DS252), MTech CSA, Indian Institute of Science (IISc), Bangalore.  
 **Repository Branch Context:**
 * `origin/frontend` (Current local branch: `frontend`): Flutter client codebase.
-* `origin/add-backend-and-docs`: Complete FastAPI backend, PostgreSQL schema (Revision 5 + Review Fixes commit `3a7aa05`), OpenAPI specs, and system diagrams.
+* `origin/add-backend-and-docs`: Complete FastAPI backend, PostgreSQL schema (Revision 5 + Review Fixes commit `bc8e7e7`), OpenAPI specs, and system diagrams.
 
 ---
 
@@ -183,11 +183,16 @@ CampusHub/frontend/lib/
       5. Deactivated Member Contact Privacy: Verified backend behavior masking contacts (`null`) for deactivated users; frontend models gracefully handle `null` contact info without crashes.
       6. Extended Admin Edit Permissions: Backend now authorizes admins to edit listings/reports and update listing status across modules.
   * Iteration 7.7 / Step 11 Live FastAPI Backend Integration & LAN Dev Auth:
-    * Switched `AppConfig.useMockData` default to `false`, pointing `AppConfig.apiBaseUrl` to the live backend server at `http://10.217.103.203:8000`.
+    * Verified live connectivity to teammate server at `http://10.217.103.203:8000`.
     * Implemented team LAN authentication: injected `X-Dev-Key` (`kSH3AyYRCzXn8Czy8xXCZbC9`) and session `X-Dev-User` / `X-Dev-Name` in `ApiClient` interceptors.
-    * Refined `ApiAuthRepository` session caching to synchronize user details from PostgreSQL `/api/v1/me`.
-    * Hardened unit and widget test suites (`widget_test.dart`, `ui_components_test.dart`) with isolated repository provider overrides so automated tests remain offline and fast.
     * Added comprehensive automated live integration test (`live_backend_integration_test.dart`) verifying categories, guest browsing, user auth, listing lifecycle (create, query, status update, delete), and lost/found feeds directly against the live backend server.
+  * Iteration 7.8 / Step 12 Single-Admin Handover, Global Refresh & Full UI Synchronization (Commit `bc8e7e7`):
+    * Switched `AppConfig.useMockData` default back to `true` (mock mode), with `apiBaseUrl` set to `http://localhost:8000`.
+    * Synchronized with backend single-admin architecture (`POST /api/v1/users/{id}/make-admin` and `PATCH /api/v1/users/{id}` with `is_active` only): implemented in `IAuthRepository`, `ApiAuthRepository`, and `MockAuthRepository`.
+    * Added animated `AppRefreshButton` on left of Theme toggle in `AppBar`, refetching `/me` and reloading all feeds and user authority.
+    * Added administrative controls inside user profile dialog (deactivate/activate account and transfer single admin role).
+    * Updated `BuySellDetailDialog` and `LostFoundDetailDialog` to display deactivated poster notices for inactive accounts, and enabled status change/moderation actions for administrators.
+    * Added friendly retry handling for transient AWS Cognito 503 errors in `AuthDialog`.
 * **Static Analysis:** `flutter analyze` runs with **0 errors, 0 warnings, 0 hints**.
 * **Automated Tests:** `flutter test` executes **30 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`, `live_backend_integration_test.dart`).
 

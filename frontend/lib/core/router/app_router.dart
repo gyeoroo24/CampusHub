@@ -6,7 +6,9 @@ import '../widgets/super_search_bar.dart';
 import '../../features/auth/domain/user.dart';
 import '../../features/auth/providers/auth_providers.dart';
 import '../../features/auth/ui/auth_dialog.dart';
+import '../../features/buy_sell/providers/buy_sell_providers.dart';
 import '../../features/buy_sell/ui/buy_sell_feed_screen.dart';
+import '../../features/lost_found/providers/lost_found_providers.dart';
 import '../../features/lost_found/ui/lost_found_feed_screen.dart';
 
 // ---------------------------------------------------------------------------
@@ -52,6 +54,102 @@ const _tabScreens = [
   BuySellFeedScreen(),
   LostFoundFeedScreen(),
 ];
+
+// ---------------------------------------------------------------------------
+// App Refresh Button — Refetches all data and permissions from server
+// ---------------------------------------------------------------------------
+class AppRefreshButton extends ConsumerStatefulWidget {
+  const AppRefreshButton({super.key});
+
+  @override
+  ConsumerState<AppRefreshButton> createState() => _AppRefreshButtonState();
+}
+
+class _AppRefreshButtonState extends ConsumerState<AppRefreshButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  bool _isRefreshing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleRefresh() async {
+    if (_isRefreshing) return;
+    setState(() => _isRefreshing = true);
+    _controller.repeat();
+
+    try {
+      // 1. Refetch user profile & updated authority from backend
+      await ref.read(authRepositoryProvider).getCurrentUser();
+
+      // 2. Refetch Buy & Sell feeds & categories
+      ref.read(buySellPaginationProvider.notifier).loadInitial();
+      ref.invalidate(buySellCategoriesProvider);
+
+      // 3. Refetch Lost & Found feeds & categories
+      ref.read(lostReportsPaginationProvider.notifier).loadInitial();
+      ref.read(foundReportsPaginationProvider.notifier).loadInitial();
+      ref.invalidate(lostFoundCategoriesProvider);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 18),
+                SizedBox(width: 8),
+                Text('All feeds and user permissions refreshed from server.'),
+              ],
+            ),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to refresh data: $e'),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        _controller.stop();
+        _controller.reset();
+        setState(() => _isRefreshing = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RotationTransition(
+      turns: _controller,
+      child: IconButton(
+        tooltip: 'Refresh all data from server',
+        icon: const Icon(Icons.refresh_rounded, size: 20),
+        onPressed: _isRefreshing ? null : _handleRefresh,
+      ),
+    );
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Theme toggle button
@@ -201,6 +299,8 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
               )
             : const SuperSearchBar(),
         actions: [
+          const AppRefreshButton(),
+          const SizedBox(width: 4),
           const ThemeToggleButton(),
           const SizedBox(width: 8),
 
@@ -429,6 +529,51 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
                   ),
                 ),
             ],
+            if (currentUser.isAdmin) ...[
+              const Divider(height: 24),
+              Row(
+                children: [
+                  Icon(Icons.admin_panel_settings_rounded, size: 16, color: Colors.blue.shade600),
+                  const SizedBox(width: 8),
+                  const Text('Admin Management Controls', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showDeactivateUserDialog(context);
+                      },
+                      icon: const Icon(Icons.person_off_outlined, size: 16),
+                      label: const Text('Account Status', style: TextStyle(fontSize: 12)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red.shade700,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showTransferAdminDialog(context);
+                      },
+                      icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+                      label: const Text('Transfer Role', style: TextStyle(fontSize: 12)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
         actions: [
@@ -443,6 +588,176 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
               ref.read(authRepositoryProvider).signOut();
             },
             child: const Text('Sign Out'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeactivateUserDialog(BuildContext context) {
+    final controller = TextEditingController();
+    bool isActive = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.manage_accounts_rounded, color: Colors.indigo),
+              SizedBox(width: 10),
+              Text('Update Account Status', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Enter the User UUID to activate or deactivate:'),
+              const SizedBox(height: 10),
+              TextField(
+                controller: controller,
+                decoration: const InputDecoration(
+                  labelText: 'User UUID',
+                  hintText: 'e.g. e3c8fb26-cee3-4c06...',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  const Text('Account State: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Spacer(),
+                  ChoiceChip(
+                    label: const Text('Active'),
+                    selected: isActive,
+                    onSelected: (val) => setState(() => isActive = true),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('Deactivated'),
+                    selected: !isActive,
+                    onSelected: (val) => setState(() => isActive = false),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final userId = controller.text.trim();
+                if (userId.isEmpty) return;
+                try {
+                  final status = await ref.read(authRepositoryProvider).updateAccountStatus(
+                    userId,
+                    isActive: isActive,
+                  );
+                  if (context.mounted) {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('User ${status.name} is now ${status.isActive ? "active" : "deactivated"}.'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
+              },
+              child: const Text('Apply'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTransferAdminDialog(BuildContext context) {
+    final controller = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red.shade700),
+            const SizedBox(width: 10),
+            const Text('Transfer Admin Role', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Text(
+                'Notice: CampusHub enforces a single-admin architecture. Once transferred, you will immediately be demoted to a standard student account.',
+                style: TextStyle(color: Colors.red.shade900, fontSize: 12),
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text('Enter Successor User UUID:'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Successor User ID',
+                hintText: 'e.g. f1d6ef8c-164b-438a...',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () async {
+              final targetId = controller.text.trim();
+              if (targetId.isEmpty) return;
+              try {
+                final status = await ref.read(authRepositoryProvider).transferAdminRole(targetId);
+                if (context.mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Admin role transferred to ${status.name}. You are now a signed-in member.'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to transfer: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            child: const Text('Confirm Handover'),
           ),
         ],
       ),

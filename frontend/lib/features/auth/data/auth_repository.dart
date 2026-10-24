@@ -14,12 +14,14 @@ abstract class IAuthRepository {
     String? programme,
     int? graduationYear,
   });
-  /// Admin endpoint: deactivate/reactivate account or change admin privileges (`PATCH /api/v1/users/{id}`).
+  /// Admin endpoint: deactivate or reactivate an account (`PATCH /api/v1/users/{id}`).
   Future<AccountStatus> updateAccountStatus(
     String userId, {
-    bool? isActive,
-    bool? isAdmin,
+    required bool isActive,
   });
+  /// Admin endpoint: transfer the single admin role to another user (`POST /api/v1/users/{id}/make-admin`).
+  /// The caller is automatically demoted to a regular signed-in student in the same transaction.
+  Future<AccountStatus> transferAdminRole(String targetUserId);
   Future<void> sendOtp(String email);
   Future<User> verifyOtp(String email, String otp);
   Future<User> signInWithEmail(String email);
@@ -110,15 +112,11 @@ class MockAuthRepository implements IAuthRepository {
   @override
   Future<AccountStatus> updateAccountStatus(
     String userId, {
-    bool? isActive,
-    bool? isAdmin,
+    required bool isActive,
   }) async {
     await _init();
     if (_currentUser != null && _currentUser!.id == userId) {
-      _currentUser = _currentUser!.copyWith(
-        isActive: isActive ?? _currentUser!.isActive,
-        isAdmin: isAdmin ?? _currentUser!.isAdmin,
-      );
+      _currentUser = _currentUser!.copyWith(isActive: isActive);
       await tokenStorage.saveUser(_currentUser!.toJson());
       _controller.add(_currentUser);
       return AccountStatus(
@@ -133,8 +131,31 @@ class MockAuthRepository implements IAuthRepository {
       id: userId,
       email: 'user_$userId@iisc.ac.in',
       name: 'User $userId',
-      isActive: isActive ?? true,
-      isAdmin: isAdmin ?? false,
+      isActive: isActive,
+      isAdmin: false,
+    );
+  }
+
+  @override
+  Future<AccountStatus> transferAdminRole(String targetUserId) async {
+    await _init();
+    if (_currentUser == null || !_currentUser!.isAdmin) {
+      throw Exception('Only the admin can hand over the admin role.');
+    }
+    if (_currentUser!.id == targetUserId) {
+      throw Exception('You are already the admin.');
+    }
+    // Caller is downgraded in the same transaction
+    _currentUser = _currentUser!.copyWith(isAdmin: false);
+    await tokenStorage.saveUser(_currentUser!.toJson());
+    _controller.add(_currentUser);
+
+    return AccountStatus(
+      id: targetUserId,
+      email: 'successor_$targetUserId@iisc.ac.in',
+      name: 'New Admin $targetUserId',
+      isActive: true,
+      isAdmin: true,
     );
   }
 
@@ -274,19 +295,26 @@ class ApiAuthRepository implements IAuthRepository {
   @override
   Future<AccountStatus> updateAccountStatus(
     String userId, {
-    bool? isActive,
-    bool? isAdmin,
+    required bool isActive,
   }) async {
-    final payload = <String, dynamic>{};
-    if (isActive != null) payload['is_active'] = isActive;
-    if (isAdmin != null) payload['is_admin'] = isAdmin;
-
     final response = await apiClient.patch(
       ApiEndpoints.user(userId),
-      data: payload,
+      data: {'is_active': isActive},
     );
 
     final data = response.data as Map<String, dynamic>;
+    return AccountStatus.fromJson(data);
+  }
+
+  @override
+  Future<AccountStatus> transferAdminRole(String targetUserId) async {
+    final response = await apiClient.post(
+      ApiEndpoints.userMakeAdmin(targetUserId),
+    );
+
+    final data = response.data as Map<String, dynamic>;
+    // Refetch current user to reflect downgraded status
+    await getCurrentUser();
     return AccountStatus.fromJson(data);
   }
 
