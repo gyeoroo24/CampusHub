@@ -200,4 +200,58 @@ void main() {
     // Verify LnF switched without overflow
     expect(find.byTooltip('Grid View'), findsOneWidget);
   });
+
+  testWidgets('Buy & Sell custom price range dialog opens and applies price filter', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    await tester.pumpWidget(const ProviderScope(child: CampusHubApp()));
+    await tester.pumpAndSettle();
+
+    // Verify custom price range button exists
+    final priceRangeBtn = find.byTooltip('Pick Custom Price Range');
+    expect(priceRangeBtn, findsOneWidget);
+
+    // Tap it to open dialog
+    await tester.tap(priceRangeBtn);
+    await tester.pumpAndSettle();
+
+    // Check dialog components
+    expect(find.text('Custom Price Range'), findsOneWidget);
+    expect(find.text('Quick Budget Presets'), findsOneWidget);
+    expect(find.widgetWithText(ActionChip, 'Under ₹500'), findsOneWidget);
+
+    // Tap a preset chip in the dialog
+    await tester.tap(find.widgetWithText(ActionChip, 'Under ₹500'));
+    await tester.pumpAndSettle();
+
+    // Tap Apply
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+
+    // Dialog closed
+    expect(find.text('Custom Price Range'), findsNothing);
+    // Button now shows active filter tooltip
+    expect(find.byTooltip('Custom: ₹0 - ₹500'), findsOneWidget);
+  });
+
+  testWidgets('Lost & Found category row includes Report Lost and Report Found buttons', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    await tester.pumpWidget(const ProviderScope(child: CampusHubApp()));
+    await tester.pumpAndSettle();
+
+    // Switch to Lost & Found
+    final lnfNav = find.text('Lost & Found');
+    expect(lnfNav, findsOneWidget);
+    await tester.tap(lnfNav);
+    await tester.pumpAndSettle();
+
+    // Verify Report Lost and Report Found action buttons in category row
+    expect(find.text('Report Lost'), findsOneWidget);
+    expect(find.text('Report Found'), findsOneWidget);
+  });
 }

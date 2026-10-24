@@ -237,13 +237,28 @@ Following manual testing and visual review of the Step 7 build, three specific U
 * **Automated Test Suite:**
   - `widget_test.dart` expanded to test desktop smoke, mobile responsiveness, account dialog, manual login banner visibility & dismissal, LnF date presets & view mode toggle, and mobile list-view overflow safety.
   - `data_layer_test.dart` and `ui_components_test.dart` all passing.
-* **Results:**
-  ```bash
-  $ flutter analyze
-  Analyzing frontend...
-  No issues found! (ran in 0.9s)
 
-  $ flutter test
-  00:05 +21: All tests passed!
-  ```
-* **Git Status:** Clean local commit state; **0 pushes to remote**.
+---
+
+## 7.6 Iteration 7.3 Report Buttons Relocation & Custom Price Range Picker
+
+**Date:** 24 October 2026  
+**Scope:** Category row action buttons in Lost & Found, removal of redundant column headers, and custom price range filter dialog in Buy & Sell.
+
+### 7.6.1 Lost & Found Category Row Action Buttons & Column Header Removal
+* **Category Row Actions:** Relocated the `+ Report Lost` and `+ Report Found` action buttons into the horizontal category pills row in `LostFoundFilterBar`.
+  - Wrapped category chips in `Expanded(SingleChildScrollView(...))` to ensure scrollability without overflow.
+  - Positioned action buttons on the right side: `+ Report Lost` (rose red accent) and `+ Report Found` (deep teal accent).
+  - Responsive button labels on mobile (`'Lost'` and `'Found'`) to preserve screen real estate.
+* **Column Header Removal:** Removed the redundant boxed column header containers in `LostFoundColumn`. The content feed directly renders at full height, with lightweight labels (`Lost Items` / `Found Items`) on desktop split-screen view.
+
+### 7.6.2 Buy & Sell Custom Price Range Picker Dialog
+* **Component:** Implemented `CompactPriceRangePickerDialog` in `lib/core/widgets/compact_price_range_picker_dialog.dart`.
+  - Added custom rupee icon button (`Icons.currency_rupee_rounded`) in `BuySellFeedScreen`'s toolbar immediately following the sort dropdown, mirroring the custom date range icon in Lost & Found.
+  - Displays quick budget chips (`Under ₹500`, `Under ₹1,500`, `Under ₹3,000`, `₹3k - ₹10k`, `Above ₹10k`), numeric Min/Max price text fields with validation, and Clear/Cancel/Apply actions.
+  - Active filter state dynamically highlights the rupee icon in the primary theme color with formatted tooltip range.
+
+### 7.6.3 Verification Metrics
+* `flutter analyze`: **0 issues found** (clean).
+* `flutter test`: **23/23 tests passed** (100% pass rate).
+* Git remote status: **0 pushes to remote**.

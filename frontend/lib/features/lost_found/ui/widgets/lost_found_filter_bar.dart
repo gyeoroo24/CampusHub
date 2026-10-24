@@ -4,7 +4,11 @@ import '../../../../core/enums/date_preset.dart';
 import '../../../../core/enums/sort_option.dart';
 import '../../../../core/enums/view_mode.dart';
 import '../../../../core/widgets/compact_date_range_picker_dialog.dart';
+import '../../../auth/providers/auth_providers.dart';
+import '../../../auth/ui/auth_dialog.dart';
+import '../../domain/lost_found_item.dart';
 import '../../providers/lost_found_providers.dart';
+import 'report_item_dialog.dart';
 
 class LostFoundFilterBar extends ConsumerWidget {
   const LostFoundFilterBar({super.key});
@@ -19,47 +23,117 @@ class LostFoundFilterBar extends ConsumerWidget {
     'Other': '📦',
   };
 
+  Future<void> _handleReport(BuildContext context, WidgetRef ref, PostType postType) async {
+    final signedIn = await AuthDialog.ensureSignedIn(
+      context,
+      ref,
+      title: postType == PostType.lost
+          ? 'Sign In to Report Lost Item'
+          : 'Sign In to Report Found Item',
+      message: 'Only verified IISc students can post lost and found reports.',
+    );
+    if (!signedIn || !context.mounted) return;
+
+    final user = ref.read(currentUserProvider);
+    showDialog(
+      context: context,
+      builder: (ctx) => ReportItemDialog(
+        postType: postType,
+        userEmail: user?.email,
+        userId: user?.id,
+        userName: user?.name,
+        onSubmit: (report) async {
+          final created = await ref.read(lostFoundRepositoryProvider).submitReport(report);
+          if (postType == PostType.lost) {
+            ref.read(lostReportsPaginationProvider.notifier).loadInitial();
+          } else {
+            ref.read(foundReportsPaginationProvider.notifier).loadInitial();
+          }
+          return created;
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(lostFoundFilterProvider);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isMobile = MediaQuery.of(context).size.width <= 750;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // ── Category Pills (Horizontal Scroll with Icons) ───────────────────
+        // ── Category Pills (Horizontal Scroll with Icons) & Report Buttons ──
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           color: theme.cardColor,
           child: Row(
             children: [
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: _categoryIcons.entries.map((entry) {
-                    final isSelected = filter.category == entry.key;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8.0),
-                      child: ChoiceChip(
-                        avatar: Text(entry.value, style: const TextStyle(fontSize: 13)),
-                        label: Text(entry.key),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          if (selected) {
-                            ref.read(lostFoundFilterProvider.notifier).update(
-                                  (s) => s.copyWith(category: entry.key),
-                                );
-                          }
-                        },
-                        visualDensity: VisualDensity.compact,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      ),
-                    );
-                  }).toList(),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: _categoryIcons.entries.map((entry) {
+                      final isSelected = filter.category == entry.key;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: ChoiceChip(
+                          avatar: Text(entry.value, style: const TextStyle(fontSize: 13)),
+                          label: Text(entry.key),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            if (selected) {
+                              ref.read(lostFoundFilterProvider.notifier).update(
+                                    (s) => s.copyWith(category: entry.key),
+                                  );
+                            }
+                          },
+                          visualDensity: VisualDensity.compact,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        ),
+                      );
+                    }).toList(),
+                  ),
                 ),
               ),
-              
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFBE185D), // Deep Rose/Pink
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 10 : 14,
+                    vertical: isMobile ? 8 : 12,
+                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () => _handleReport(context, ref, PostType.lost),
+                icon: const Icon(Icons.add_rounded, size: 16),
+                label: Text(
+                  isMobile ? 'Lost' : 'Report Lost',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF0F766E), // Deep Teal
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 10 : 14,
+                    vertical: isMobile ? 8 : 12,
+                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () => _handleReport(context, ref, PostType.found),
+                icon: const Icon(Icons.add_rounded, size: 16),
+                label: Text(
+                  isMobile ? 'Found' : 'Report Found',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ),
             ],
           ),
         ),

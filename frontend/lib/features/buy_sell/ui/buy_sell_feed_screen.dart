@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/enums/sort_option.dart';
 import '../../../core/enums/view_mode.dart';
+import '../../../core/widgets/compact_price_range_picker_dialog.dart';
 import '../../../core/widgets/skeleton_loader.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../auth/ui/auth_dialog.dart';
@@ -323,7 +324,46 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
+
+                  // Custom Price Range Picker button (Matching custom date range in LnF)
+                  IconButton(
+                    iconSize: 18,
+                    visualDensity: VisualDensity.compact,
+                    tooltip: (filter.minPrice != null || filter.maxPrice != null)
+                        ? 'Custom: ₹${filter.minPrice?.toStringAsFixed(0) ?? "0"} - ₹${filter.maxPrice?.toStringAsFixed(0) ?? "Any"}'
+                        : 'Pick Custom Price Range',
+                    icon: Icon(
+                      Icons.currency_rupee_rounded,
+                      color: (filter.minPrice != null || filter.maxPrice != null)
+                          ? theme.colorScheme.primary
+                          : null,
+                    ),
+                    onPressed: () async {
+                      final result = await showDialog(
+                        context: context,
+                        builder: (ctx) => CompactPriceRangePickerDialog(
+                          initialMin: filter.minPrice,
+                          initialMax: filter.maxPrice,
+                        ),
+                      );
+                      if (result == 'CLEAR') {
+                        ref.read(buySellFilterProvider.notifier).update(
+                              (s) => s.copyWith(clearMinPrice: true, clearMaxPrice: true),
+                            );
+                      } else if (result is ({double? min, double? max})) {
+                        ref.read(buySellFilterProvider.notifier).update(
+                              (s) => s.copyWith(
+                                minPrice: result.min,
+                                clearMinPrice: result.min == null,
+                                maxPrice: result.max,
+                                clearMaxPrice: result.max == null,
+                              ),
+                            );
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 4),
 
                   // View Mode Toggle (Grid vs List)
                   IconButton(

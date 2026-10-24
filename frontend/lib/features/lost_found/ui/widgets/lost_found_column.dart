@@ -2,28 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/enums/view_mode.dart';
 import '../../../../core/widgets/skeleton_loader.dart';
-import '../../../auth/providers/auth_providers.dart';
-import '../../../auth/ui/auth_dialog.dart';
 import '../../domain/lost_found_item.dart';
 import '../../providers/lost_found_providers.dart';
 import 'lost_found_card.dart';
 import 'lost_found_list_card.dart';
-import 'report_item_dialog.dart';
 
 class LostFoundColumn extends ConsumerStatefulWidget {
-  final String title;
-  final IconData icon;
   final Color headerColor;
-  final String buttonText;
   final PostType postType;
+  final String? title;
+  final IconData? icon;
+  final String? buttonText;
 
   const LostFoundColumn({
     super.key,
-    required this.title,
-    required this.icon,
     required this.headerColor,
-    required this.buttonText,
     required this.postType,
+    this.title,
+    this.icon,
+    this.buttonText,
   });
 
   @override
@@ -68,257 +65,146 @@ class _LostFoundColumnState extends ConsumerState<LostFoundColumn> {
 
     final items = paginatedState.items;
     final headerColor = widget.headerColor;
+    final title = widget.title ?? (widget.postType == PostType.lost ? 'Lost Items' : 'Found Items');
 
-    return Column(
-      children: [
-        // Sleek Responsive Column Header Bar
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: headerColor.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: headerColor.withValues(alpha: 0.25)),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    Icon(widget.icon, color: headerColor, size: 20),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        widget.title,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: headerColor,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+    if (paginatedState.isLoadingInitial) {
+      return ref.watch(lostFoundFilterProvider).viewMode == ViewMode.list
+          ? ListView.builder(
+              padding: const EdgeInsets.only(bottom: 16),
+              itemCount: 4,
+              itemBuilder: (_, __) => const ShimmerLoadingCard(isList: true),
+            )
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final isTwoCols = constraints.maxWidth > 440;
+                if (isTwoCols) {
+                  return GridView.builder(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      childAspectRatio: 0.72,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: headerColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '${items.length}${paginatedState.hasMore ? '+' : ''}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: headerColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: headerColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  elevation: 0,
-                  visualDensity: VisualDensity.compact,
-                ),
-                onPressed: () async {
-                  final signedIn = await AuthDialog.ensureSignedIn(
-                    context,
-                    ref,
-                    title: widget.postType == PostType.lost
-                        ? 'Sign In to Report Lost Item'
-                        : 'Sign In to Report Found Item',
-                    message: 'Only verified IISc students can post lost and found reports.',
+                    itemCount: 4,
+                    itemBuilder: (_, __) => const ShimmerLoadingCard(isList: false),
                   );
-                  if (!signedIn || !context.mounted) return;
+                }
+                return ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  itemCount: 3,
+                  itemBuilder: (_, __) => const ShimmerLoadingCard(isList: true),
+                );
+              },
+            );
+    }
 
-                  final user = ref.read(currentUserProvider);
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => ReportItemDialog(
-                      postType: widget.postType,
-                      userEmail: user?.email,
-                      userId: user?.id,
-                      userName: user?.name,
-                      onSubmit: (report) async {
-                        final created = await ref.read(lostFoundRepositoryProvider).submitReport(report);
-                        if (widget.postType == PostType.lost) {
-                          ref.read(lostReportsPaginationProvider.notifier).loadInitial();
-                        } else {
-                          ref.read(foundReportsPaginationProvider.notifier).loadInitial();
-                        }
-                        return created;
-                      },
-                    ),
-                  );
+    if (items.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off_rounded, size: 38, color: Colors.grey.shade400),
+            const SizedBox(height: 8),
+            Text(
+              'No ${title.toLowerCase()} matching filter.',
+              style: const TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final filter = ref.watch(lostFoundFilterProvider);
+    final totalCount = items.length +
+        (paginatedState.isLoadingMore || (!paginatedState.hasMore && items.isNotEmpty) ? 1 : 0);
+
+    // If user selected List View mode
+    if (filter.viewMode == ViewMode.list) {
+      return ListView.builder(
+        controller: _scrollController,
+        padding: const EdgeInsets.only(bottom: 24),
+        itemCount: totalCount,
+        itemBuilder: (context, index) {
+          if (index == items.length) {
+            return paginatedState.isLoadingMore
+                ? _buildLoadingMoreIndicator(headerColor)
+                : _buildAllCaughtUpIndicator(items.length);
+          }
+          return LostFoundListCard(
+            item: items[index],
+            onStatusChange: (status) {
+              if (widget.postType == PostType.lost) {
+                ref.read(lostReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
+              } else {
+                ref.read(foundReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
+              }
+            },
+          );
+        },
+      );
+    }
+
+    // Default: Responsive Grid View
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isTwoCols = constraints.maxWidth > 440;
+        if (isTwoCols) {
+          return GridView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.only(bottom: 24),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 0.72,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            itemCount: totalCount,
+            itemBuilder: (context, index) {
+              if (index == items.length) {
+                return paginatedState.isLoadingMore
+                    ? _buildLoadingMoreIndicator(headerColor)
+                    : _buildAllCaughtUpIndicator(items.length);
+              }
+              return LostFoundCard(
+                item: items[index],
+                onStatusChange: (status) {
+                  if (widget.postType == PostType.lost) {
+                    ref.read(lostReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
+                  } else {
+                    ref.read(foundReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
+                  }
                 },
-                icon: const Icon(Icons.add_rounded, size: 16),
-                label: Text(
-                  widget.buttonText,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                ),
+              );
+            },
+          );
+        }
+        return ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.only(bottom: 24),
+          itemCount: totalCount,
+          itemBuilder: (context, index) {
+            if (index == items.length) {
+              return paginatedState.isLoadingMore
+                  ? _buildLoadingMoreIndicator(headerColor)
+                  : _buildAllCaughtUpIndicator(items.length);
+            }
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: LostFoundCard(
+                item: items[index],
+                onStatusChange: (status) {
+                  if (widget.postType == PostType.lost) {
+                    ref.read(lostReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
+                  } else {
+                    ref.read(foundReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
+                  }
+                },
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-
-        // Content Feed (Adaptive Grid, List, or Skeletons with Infinite Scroll)
-        Expanded(
-          child: paginatedState.isLoadingInitial
-              ? (ref.watch(lostFoundFilterProvider).viewMode == ViewMode.list
-                  ? ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      itemCount: 4,
-                      itemBuilder: (_, __) => const ShimmerLoadingCard(isList: true),
-                    )
-                  : LayoutBuilder(
-                      builder: (context, constraints) {
-                        final isTwoCols = constraints.maxWidth > 440;
-                        if (isTwoCols) {
-                          return GridView.builder(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              childAspectRatio: 0.72,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                            ),
-                            itemCount: 4,
-                            itemBuilder: (_, __) => const ShimmerLoadingCard(isList: false),
-                          );
-                        }
-                        return ListView.builder(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          itemCount: 3,
-                          itemBuilder: (_, __) => const ShimmerLoadingCard(isList: true),
-                        );
-                      },
-                    ))
-              : items.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.search_off_rounded, size: 38, color: Colors.grey.shade400),
-                          const SizedBox(height: 8),
-                          Text(
-                            'No ${widget.title.toLowerCase()} matching filter.',
-                            style: const TextStyle(color: Colors.grey, fontSize: 13),
-                          ),
-                        ],
-                      ),
-                    )
-                  : Builder(
-                      builder: (context) {
-                        final filter = ref.watch(lostFoundFilterProvider);
-                        final totalCount = items.length +
-                            (paginatedState.isLoadingMore || (!paginatedState.hasMore && items.isNotEmpty) ? 1 : 0);
-
-                        // If user selected List View mode
-                        if (filter.viewMode == ViewMode.list) {
-                          return ListView.builder(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.only(bottom: 24),
-                            itemCount: totalCount,
-                            itemBuilder: (context, index) {
-                              if (index == items.length) {
-                                return paginatedState.isLoadingMore
-                                    ? _buildLoadingMoreIndicator(headerColor)
-                                    : _buildAllCaughtUpIndicator(items.length);
-                              }
-                              return LostFoundListCard(
-                                item: items[index],
-                                onStatusChange: (status) {
-                                  if (widget.postType == PostType.lost) {
-                                    ref.read(lostReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
-                                  } else {
-                                    ref.read(foundReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
-                                  }
-                                },
-                              );
-                            },
-                          );
-                        }
-
-                        // Otherwise Grid View (2 cols on desktop, 1 col on mobile)
-                        return LayoutBuilder(
-                          builder: (context, constraints) {
-                            final isTwoCols = constraints.maxWidth > 440;
-
-                            if (isTwoCols) {
-                              return ListView(
-                                controller: _scrollController,
-                                padding: const EdgeInsets.only(bottom: 24),
-                                children: [
-                                  GridView.builder(
-                                    physics: const NeverScrollableScrollPhysics(),
-                                    shrinkWrap: true,
-                                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                      crossAxisCount: 2,
-                                      childAspectRatio: 0.72,
-                                      crossAxisSpacing: 12,
-                                      mainAxisSpacing: 12,
-                                    ),
-                                    itemCount: items.length,
-                                    itemBuilder: (context, index) => LostFoundCard(
-                                      item: items[index],
-                                      onStatusChange: (status) {
-                                        if (widget.postType == PostType.lost) {
-                                          ref.read(lostReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
-                                        } else {
-                                          ref.read(foundReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                  if (paginatedState.isLoadingMore)
-                                    _buildLoadingMoreIndicator(headerColor)
-                                  else if (!paginatedState.hasMore && items.isNotEmpty)
-                                    _buildAllCaughtUpIndicator(items.length),
-                                ],
-                              );
-                            }
-
-                            // Mobile single-column: uses intrinsic height so cards never overflow
-                            return ListView.builder(
-                              controller: _scrollController,
-                              padding: const EdgeInsets.only(bottom: 24),
-                              itemCount: totalCount,
-                              itemBuilder: (context, index) {
-                                if (index == items.length) {
-                                  return paginatedState.isLoadingMore
-                                      ? _buildLoadingMoreIndicator(headerColor)
-                                      : _buildAllCaughtUpIndicator(items.length);
-                                }
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: LostFoundCard(
-                                    item: items[index],
-                                    onStatusChange: (status) {
-                                      if (widget.postType == PostType.lost) {
-                                        ref.read(lostReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
-                                      } else {
-                                        ref.read(foundReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
-                                      }
-                                    },
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                        );
-                      },
-                    ),
-        ),
-      ],
+            );
+          },
+        );
+      },
     );
   }
 

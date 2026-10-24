@@ -83,6 +83,8 @@ CampusHub/frontend/lib/
 │   ├── utils/
 │   │   └── date_time_formatter.dart   # Relative & absolute date formatting
 │   └── widgets/
+│       ├── compact_date_range_picker_dialog.dart # Custom date range dialog
+│       ├── compact_price_range_picker_dialog.dart# Custom min/max price dialog
 │       ├── photo_carousel.dart        # Interactive gallery with Hero animation
 │       ├── skeleton_loader.dart       # ShimmerLoadingCard, SkeletonGrid, SkeletonList
 │       └── super_search_bar.dart      # Global search with 300ms debounce & clear button
@@ -144,8 +146,12 @@ CampusHub/frontend/lib/
     * Added dismissible "x" button to "Trusted Campus Exchange" info bar; banner now only appears when user manually logs in via OTP during the session (`showTrustedExchangeBannerProvider`) and stays dismissed until the next manual login.
     * Added full LnF filter parity: `DatePresetFilter` chips ("All", "Today", "Yesterday", "Last 3 Days", "This Week", "This Month"), unified sort dropdown matching BnS, and implemented responsive `LostFoundListCard` with list view toggle.
     * Mobile and desktop split-column layout hardened with `Wrap` and `ConstrainedBox` across both modules to prevent any `RenderFlex` overflows on narrow widths down to 375px.
+  * Iteration 7.3 button relocation & custom price range:
+    * Relocated "+ Report Lost" and "+ Report Found" action buttons into the category pills row with spaceBetween in `LostFoundFilterBar`.
+    * Removed redundant boxed column header bars from `LostFoundColumn`.
+    * Added custom rupee icon (`Icons.currency_rupee_rounded`) in `BuySellFeedScreen` toolbar opening `CompactPriceRangePickerDialog` with quick presets and min/max inputs, matching the LnF custom date range picker.
 * **Static Analysis:** `flutter analyze` runs with **0 errors, 0 warnings, 0 hints**.
-* **Automated Tests:** `flutter test` executes **21 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`).
+* **Automated Tests:** `flutter test` executes **23 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`).
 
 ---
 
