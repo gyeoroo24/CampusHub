@@ -11,7 +11,7 @@ from ..common import forbidden
 from ..config import get_settings
 from ..db import get_conn
 from ..permissions import can_manage_course
-from ..storage import MB, UPLOAD_KINDS, check_sha256_b64, new_object_key, presign_put
+from ..storage import MB, PENDING_TAG, UPLOAD_KINDS, check_sha256_b64, new_object_key, presign_put
 
 router = APIRouter(prefix="/uploads", tags=["Uploads"])
 
@@ -28,7 +28,8 @@ class UploadTicket(BaseModel):
     s3_key: str
     upload_url: str
     method: str = "PUT"
-    headers: dict[str, str] = Field(description="Send exactly these headers with the PUT")
+    headers: dict[str, str] = Field(description="Send exactly these headers with the PUT. The file must also be "
+                                                "exactly size_bytes long (S3 checks Content-Length).")
     expires_in: int
 
 
@@ -50,7 +51,8 @@ async def create_upload(body: UploadRequest, user: CurrentUser = Depends(current
     key = new_object_key(body.kind, user.id, body.content_type, body.course_id)
     return UploadTicket(
         s3_key=key,
-        upload_url=presign_put(key, body.content_type, body.checksum_sha256),
-        headers={"Content-Type": body.content_type, "x-amz-checksum-sha256": body.checksum_sha256},
+        upload_url=presign_put(key, body.content_type, body.size_bytes, body.checksum_sha256),
+        headers={"Content-Type": body.content_type, "x-amz-checksum-sha256": body.checksum_sha256,
+                 "x-amz-tagging": PENDING_TAG},
         expires_in=get_settings().upload_url_expiry_seconds,
     )

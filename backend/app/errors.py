@@ -32,3 +32,8 @@ def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(asyncpg.exceptions.NotNullViolationError)
     async def _not_null(_: Request, exc: asyncpg.PostgresError) -> JSONResponse:
         return JSONResponse(status_code=422, content=_body("A required value is missing.", exc))
+
+    # Values the database can't store, e.g. an id larger than a 32-bit integer.
+    @app.exception_handler(asyncpg.exceptions.DataError)
+    async def _data(_: Request, exc: asyncpg.PostgresError) -> JSONResponse:
+        return JSONResponse(status_code=422, content=_body("A value is out of range or has the wrong format.", exc))

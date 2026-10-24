@@ -19,7 +19,9 @@ docs/
 ## Status
 
 - **Phase 1 backend is built:** sign-in and profiles, moderator roles, Buy & Sell, Lost & Found,
-  Academic Help, forums, reports and moderation, notifications. 69 endpoints, 43 passing tests.
+  Academic Help, forums, reports and moderation, notifications. 70 endpoints, 78 passing tests.
+- **Review fixes (24 Oct 2026):** the bugs from the 23 Oct backend review are fixed and covered
+  by `backend/tests/test_review_fixes.py`.
 - **Not built yet:** Placement Hub and Events APIs, real push delivery, chat, Terraform, frontend.
 
 ## Run the backend locally
@@ -31,7 +33,7 @@ cd backend
 docker compose up -d
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-cp .env.example .env
+cp .env.local.example .env
 uvicorn app.main:app --reload --env-file .env
 ```
 

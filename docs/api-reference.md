@@ -1,10 +1,10 @@
 # CampusHub API Reference
 
-Last updated 23 Oct 2026. For the exact JSON of every request and response, run the backend and open Swagger at `http://localhost:8000/docs`.
+Last updated 24 Oct 2026. For the exact JSON of every request and response, run the backend and open Swagger at `http://localhost:8000/docs`.
 
 ## Overview
 
-The CampusHub backend exposes 69 endpoints under `/api/v1`. This page lists each one, who may call it, and the fields it takes and returns, so screens can be designed around real data.
+The CampusHub backend exposes 70 endpoints under `/api/v1`. This page lists each one, who may call it, and the fields it takes and returns, so screens can be designed around real data.
 
 - **Base URL (local):** `http://localhost:8000/api/v1`. The cloud host isn't set up yet; only the host part will change.
 - **Try it live:** `http://localhost:8000/docs` (Swagger) shows the exact JSON for every request and response, and lets you send real calls.
@@ -28,14 +28,16 @@ Guests send nothing. Signed-in users send their token on every call, and the API
 | --- | --- |
 | Guest | No auth header. Every GET feed works. |
 | Signed in (cloud) | `Authorization: Bearer <Cognito ID token>` (the ID token, not the access token) |
-| Local testing | `X-Dev-User: name@iisc.ac.in`, and optionally `X-Dev-Name: Asha` |
+| Local testing | `X-Dev-User: name@iisc.ac.in`, and optionally `X-Dev-Name: Asha` (works only on the machine running the API) |
 
 - **No sign-up endpoint.** The user's account is created on their first signed-in call.
+- **Email must be verified first.** First-time sign-up: the user enters their IISc email and a password, Cognito emails them a code, they type it in, then sign in. Until then the API answers **403** asking them to enter the code.
 - **IISc emails only.** Addresses ending in `iisc.ac.in` (including subdomains such as `alum.iisc.ac.in`) are accepted. Others get **403** with a readable message to show the user.
-- **Expired or invalid token:** **401**. Send the user back to sign-in.
+- **Expired or invalid token:** **401** on every endpoint, including pages guests can read. Send the user back to sign-in. **503** means sign-in is briefly unavailable; retry.
 - **Role-based screens:** call `GET /me` after sign-in. `is_admin` and `moderator_grants` say which moderator tools to show. Thread detail also returns `viewer_can_moderate`.
 - **Roles can change at any time.** A revoked moderator gets **403** on their next call, so handle 403 even on buttons you chose to show.
-- **Contact details** (`seller_contact`, `reporter_contact`, `contact`) are `null` for guests. Design a "Sign in to see contact" state.
+- **Contact details** (`seller_contact`, `reporter_contact`, `contact`) are `null` for guests, and for posts by deactivated accounts. Design a "Sign in to see contact" state.
+- **Deactivated accounts** get **403** on every call. Show "This account has been deactivated".
 
 Moderator roles come in these shapes:
 
@@ -66,7 +68,7 @@ Errors return a status code and a `detail` you can show to the user:
 | 403 | Signed in but not allowed, or not an IISc email | "You can't do this" message |
 | 404 | Item doesn't exist or was removed | Empty or "not found" state |
 | 409 | Duplicate (e.g. reporting the same item twice) | Inline message |
-| 422 | A field is invalid; `detail` names it | Inline field error |
+| 422 | A field is invalid (including text that is only spaces); `detail` names it | Inline field error |
 
 For 422 from form validation, `detail` is a list of `{loc, msg}`. `loc` ends with the field name, so the error can sit under that field.
 
@@ -79,8 +81,8 @@ Photos and course files go straight from the app to storage, not through the API
 Only step 3 moves the file itself, so that's the step to show progress on.
 
 1. **Ask for an upload ticket:** `POST /uploads` with `kind`, `content_type`, `size_bytes` and `checksum_sha256` (the base64 SHA-256 of the file). Course materials also need `course_id`. The reply has `upload_url`, `headers`, `s3_key` and `expires_in` (900 seconds).
-2. **Upload the file:** `PUT` the raw file to `upload_url` with exactly those `headers`. Storage rejects a different file type or a corrupted file. Show the progress bar on this step.
-3. **Attach it:** send the `s3_key` when creating or editing the post: `photo_keys` for listings and lost/found reports, `s3_key` for course materials. The API refuses a key that wasn't uploaded or belongs to someone else.
+2. **Upload the file:** `PUT` the raw file to `upload_url` with exactly those `headers` (Content-Type, the checksum and `x-amz-tagging`). The file must be exactly `size_bytes` long. Storage rejects a different file type, size or a corrupted file. Show the progress bar on this step.
+3. **Attach it:** send the `s3_key` when creating or editing the post: `photo_keys` for listings and lost/found reports, `s3_key` for course materials. The API refuses a key that wasn't uploaded, belongs to someone else, or is already used by another material. Files never attached are deleted after a day.
 
 | `kind` | Allowed types | Max size | Max per post |
 | --- | --- | --- | --- |
@@ -89,11 +91,11 @@ Only step 3 moves the file itself, so that's the step to show progress on.
 
 - **Photo order:** `photo_keys` are kept in the order sent. The first is the cover (`cover_photo_url` in lists).
 - **Editing photos later:** `PUT .../photos` with the full new list adds, removes and reorders in one call.
-- **Image links** (`url`, `cover_photo_url`, `download_url`) can be temporary and expire after about an hour. Don't save them; fetch the item again.
+- **Image links** (`url`, `cover_photo_url`, `download_url`) expire after about an hour. Don't save them; fetch the item again.
 
 ## Users, profiles and moderators
 
-Eight endpoints cover the signed-in user's profile, other people's public profiles, moderator roles and upload tickets.
+Nine endpoints cover the signed-in user's profile, other people's public profiles, admin account controls, moderator roles and upload tickets.
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
@@ -101,6 +103,7 @@ Eight endpoints cover the signed-in user's profile, other people's public profil
 | GET | `/me` | user | My profile, `is_admin` and my active `moderator_grants` |
 | PATCH | `/me` | user | Edit my `name`, `phone`, `department_id`, `programme`, `graduation_year` |
 | GET | `/users/{user_id}` | guest | Someone's public profile; `contact` only for signed-in viewers |
+| PATCH | `/users/{user_id}` | admin | Deactivate or reactivate an account (`is_active`), or make or remove an admin (`is_admin`). Not for your own account. Returns `id`, `email`, `name`, `is_active`, `is_admin` |
 | POST | `/moderators` | admin; department moderator (for their courses) | Make someone a moderator: `email`, `module`, `scope_type`, `department_id` or `course_id` |
 | GET | `/moderators` | admin, department moderator | List roles. Filters: `module`, `department_id`, `course_id`, `include_revoked` |
 | DELETE | `/moderators/{grant_id}` | same as POST | Revoke a role |
@@ -119,7 +122,7 @@ Eight endpoints cover the signed-in user's profile, other people's public profil
 
 ## Buy & Sell
 
-Guests can browse and search listings. Sellers create, edit and mark their own listings, and moderators can remove any listing.
+Guests can browse and search listings. Sellers create, edit and mark their own listings, admins can edit any listing, and moderators can remove any listing.
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
@@ -128,9 +131,9 @@ Guests can browse and search listings. Sellers create, edit and mark their own l
 | GET | `/listings` | guest | Browse, newest first. Filters: `q` (title and description), `category_id`, `min_price`, `max_price`, `status` (repeatable), `seller_id` |
 | POST | `/listings` | user | Create: `title`, `price`, `category_id`, `description`, `location`, `photo_keys` (up to 10) |
 | GET | `/listings/{id}` | guest | One listing with all photos; `seller_contact` for signed-in users |
-| PATCH | `/listings/{id}` | owner | Edit `title`, `description`, `price`, `category_id`, `location` |
-| PATCH | `/listings/{id}/status` | owner | Set `status`: `available`, `reserved` or `sold` |
-| PUT | `/listings/{id}/photos` | owner | Replace the photo list: `photo_keys` in the new order |
+| PATCH | `/listings/{id}` | owner, admin | Edit `title`, `description`, `price`, `category_id`, `location` |
+| PATCH | `/listings/{id}/status` | owner, admin | Set `status`: `available`, `reserved` or `sold` |
+| PUT | `/listings/{id}/photos` | owner, admin | Replace the photo list: `photo_keys` in the new order |
 | DELETE | `/listings/{id}` | owner, Buy & Sell moderator, admin | Remove. Moderators can add `?reason=` |
 
 **Fields to design with:**
@@ -155,9 +158,9 @@ Lost reports and found reports have identical endpoints. Swap `/lost-reports` fo
 | GET | `/lost-reports` | guest | Browse, newest first. Filters: `q` (description), `category_id`, `status` (repeatable), `reporter_id` |
 | POST | `/lost-reports` | user | File a report: `description`, `category_id`, `occurred_at`, `location`, `photo_keys` (up to 10). The reply includes `possible_matches` |
 | GET | `/lost-reports/{id}` | guest | One report with photos; `reporter_contact` for signed-in users |
-| PATCH | `/lost-reports/{id}` | owner | Edit `description`, `category_id`, `occurred_at`, `location` |
-| PATCH | `/lost-reports/{id}/status` | owner | Set `status`: `open`, `matched` or `closed` |
-| PUT | `/lost-reports/{id}/photos` | owner | Replace the photo list |
+| PATCH | `/lost-reports/{id}` | owner, admin | Edit `description`, `category_id`, `occurred_at`, `location` |
+| PATCH | `/lost-reports/{id}/status` | owner, admin | Set `status`: `open`, `matched` or `closed` |
+| PUT | `/lost-reports/{id}/photos` | owner, admin | Replace the photo list |
 | DELETE | `/lost-reports/{id}` | owner, Lost & Found moderator, admin | Remove. Moderators can add `?reason=` |
 
 **Fields to design with:**
@@ -169,7 +172,7 @@ Lost reports and found reports have identical endpoints. Swap `/lost-reports` fo
 | Create reply only | `possible_matches`: up to 10 open reports of the other kind, same category, by other people, with compatible times |
 
 - **`occurred_at`** is when the item was lost or found, as entered by the user. It's separate from `created_at`, so the form needs a date-and-time picker.
-- **Matching:** filing a found report notifies everyone with an open lost report in that category, lost on or before that time. They get a `lost_found_match` notification.
+- **Matching:** filing a found report notifies everyone with an open lost report in that category, lost on or before that time. They get a `lost_found_match` notification. Changing a found report's category or time, or reopening it, checks again; nobody is notified twice about the same found report.
 - **`matched`** is never set automatically; the reporter chooses it.
 - **Limits:** description 1–2,000 characters, location up to 200, up to 10 photos.
 
@@ -195,7 +198,7 @@ The screens go department → course → materials and feedback. Each course and
 | GET | `/courses/{id}/feedback` | guest | Feedback, newest first |
 | POST | `/courses/{id}/feedback` | user | Post feedback: `content` |
 | PATCH | `/feedback/{id}` | owner, department moderator, admin | Edit `content` |
-| DELETE | `/feedback/{id}` | owner, department moderator, admin | Remove. Optional `?reason=` |
+| DELETE | `/feedback/{id}` | owner, course moderator (that course), department moderator, admin | Remove. Optional `?reason=` |
 
 **Fields to design with:**
 
@@ -222,10 +225,10 @@ Forums go forum → thread → comments. Each course and each department has exa
 | GET | `/forums/{id}/threads` | guest | Threads, newest first |
 | POST | `/forums/{id}/threads` | user | Start a thread: `title` plus `content` (the opening post) |
 | GET | `/threads/{id}` | guest | The thread with every comment in order, and `viewer_can_moderate` |
-| PATCH | `/threads/{id}` | owner | Rename: `title` |
+| PATCH | `/threads/{id}` | owner, admin | Rename: `title` |
 | DELETE | `/threads/{id}` | owner, forum moderator, admin | Remove the thread and all its comments. Optional `?reason=` |
 | POST | `/threads/{id}/comments` | user | Reply: `content` |
-| PATCH | `/comments/{id}` | owner | Edit `content` |
+| PATCH | `/comments/{id}` | owner, admin | Edit `content` |
 | DELETE | `/comments/{id}` | owner, forum moderator, admin | Remove. Optional `?reason=` |
 
 **Fields to design with:**
@@ -263,7 +266,7 @@ Any signed-in user can flag content. Moderators work through a queue limited to 
 - **What can be flagged** (`target_type`): `listing`, `lost_report`, `found_report`, `course_material`, `course_feedback`, `thread`, `comment`. Put a "Report" action on each of these.
 - **One open report per user per item.** A second one returns 409, so show "You've already reported this".
 - **The queue has no preview.** Show the item by fetching it with `target_type` and `target_id`, e.g. `GET /listings/{target_id}`.
-- **Resolving one report closes every open report on that item.** With `remove_content: true` it also removes the item in the same step. If another moderator resolved it first, you get 409.
+- **Resolving one report closes every open report on that item.** With `remove_content: true` it also removes the item in the same step. If another moderator resolved it first, you get 409. Removing an item with its DELETE endpoint also closes its reports.
 - **Limits:** reason 1–1,000 characters, resolution note up to 1,000.
 
 ## Notifications and devices
@@ -276,7 +279,7 @@ Every notification lands in the user's in-app inbox. Push to phones is registere
 | POST | `/me/notifications/{id}/read` | user | Mark one read |
 | POST | `/me/notifications/read-all` | user | Mark all read; returns `{"updated": <count>}` |
 | POST | `/me/devices` | user | Register this device for push: `platform` (`android`, `ios`, `web`, `desktop`) and `push_token` |
-| DELETE | `/me/devices?push_token=` | user | Unregister this device. Call it on sign-out |
+| DELETE | `/me/devices` | user | Unregister this device; body `{"push_token": "..."}`. Call it on sign-out |
 
 A notification has `id`, `type`, `payload`, `is_read` and `created_at`. Every `payload` has a ready-to-show `message`; the other fields say where tapping should go.
 

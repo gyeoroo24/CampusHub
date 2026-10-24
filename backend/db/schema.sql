@@ -644,7 +644,7 @@ CREATE INDEX idx_reports_target ON reports(target_type, target_id);
 CREATE TABLE moderation_log (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     moderator_id UUID NOT NULL REFERENCES users(id),
-    action       TEXT NOT NULL,             -- e.g. 'soft_delete_listing', 'grant_moderator', 'delete_course'
+    action       TEXT NOT NULL,             -- e.g. 'remove_listing', 'grant_moderator', 'delete_course'
     target_type  TEXT NOT NULL,
     target_id    UUID NOT NULL,
     reason       TEXT,

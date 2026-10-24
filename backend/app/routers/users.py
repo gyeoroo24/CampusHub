@@ -1,4 +1,4 @@
-"""Health check, the caller's own profile, and other users' public profiles."""
+"""Health check, the caller's own profile, other users' public profiles, and admin account controls."""
 from datetime import datetime
 from uuid import UUID
 
@@ -7,8 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..auth import CurrentUser, current_user, optional_user
-from ..common import Contact, not_found, set_clause
+from ..common import Contact, forbidden, not_found, set_clause, text
 from ..db import get_conn
+from ..permissions import log_moderation
 
 router = APIRouter(tags=["Users"])
 
@@ -43,7 +44,7 @@ class MyProfile(BaseModel):
 
 
 class ProfileUpdate(BaseModel):
-    name: str | None = Field(None, min_length=1, max_length=100)
+    name: text(100) | None = None
     phone: str | None = Field(None, pattern=r"^\+?[0-9]{10,15}$", description="Optional; send null to remove it")
     department_id: UUID | None = None
     programme: str | None = Field(None, max_length=100)
@@ -57,6 +58,19 @@ class PublicProfile(BaseModel):
     programme: str | None
     graduation_year: int | None
     contact: Contact | None = Field(None, description="Email and phone; only shown to signed-in users")
+
+
+class AccountUpdate(BaseModel):
+    is_active: bool | None = Field(None, description="false deactivates the account: every request it makes gets 403")
+    is_admin: bool | None = None
+
+
+class AccountStatus(BaseModel):
+    id: UUID
+    email: str
+    name: str
+    is_active: bool
+    is_admin: bool
 
 
 async def _my_profile(conn: asyncpg.Connection, user_id: UUID) -> MyProfile:
@@ -97,3 +111,32 @@ async def get_user(user_id: UUID, viewer: CurrentUser | None = Depends(optional_
     contact = Contact(email=row["email"], phone=row["phone"]) if viewer else None
     return PublicProfile(id=row["id"], name=row["name"], department_id=row["department_id"],
                          programme=row["programme"], graduation_year=row["graduation_year"], contact=contact)
+
+
+@router.patch("/users/{user_id}", response_model=AccountStatus,
+              summary="Deactivate or reactivate an account, or make someone an admin (admin)")
+async def update_account(user_id: UUID, body: AccountUpdate, user: CurrentUser = Depends(current_user),
+                         conn: asyncpg.Connection = Depends(get_conn)):
+    if not user.is_admin:
+        raise forbidden("Only admins can change accounts.")
+    if user_id == user.id:
+        raise HTTPException(422, "You can't change your own account status; ask another admin.")
+    changes = {}
+    if body.is_active is not None:
+        changes["is_active"] = body.is_active
+    if body.is_admin is not None:
+        changes["base_role"] = "admin" if body.is_admin else "signed_in"
+    sql, values = set_clause(changes, start=2)
+    async with conn.transaction():
+        row = await conn.fetchrow(
+            f"""UPDATE users SET {sql} WHERE id = $1
+                RETURNING id, email::text AS email, name, is_active, base_role = 'admin' AS is_admin""",
+            user_id, *values)
+        if row is None:
+            raise not_found("User")
+        if body.is_active is not None:
+            await log_moderation(conn, user.id, "reactivate_user" if body.is_active else "deactivate_user",
+                                 "user", user_id)
+        if body.is_admin is not None:
+            await log_moderation(conn, user.id, "make_admin" if body.is_admin else "remove_admin", "user", user_id)
+    return AccountStatus(**dict(row))

@@ -2,15 +2,18 @@
 
 Upload flow (keeps big files off Lambda):
   1. Client asks POST /uploads for a ticket: kind, content type, size, SHA-256 (base64).
-  2. API returns a presigned PUT URL. Content-Type and x-amz-checksum-sha256 are part of
-     the signature, so S3 rejects a different file type or a corrupted upload (NFR-8).
+  2. API returns a presigned PUT URL. Content-Type, Content-Length and x-amz-checksum-sha256
+     are part of the signature, so S3 rejects a different file type, a different size or a
+     corrupted upload (NFR-8). The file is also tagged state=pending.
   3. Client PUTs the file straight to S3 with exactly those headers.
   4. Client creates/updates the post with the returned s3_key. The API checks the key is
      inside the caller's own folder and that the object really exists with an allowed
-     size and type before saving it.
+     size and type before saving it, then retags it state=attached. A file that fails the
+     check is deleted. Files never attached keep state=pending, and an S3 lifecycle rule on
+     that tag (see README) deletes them after a day.
 
-The database stores only object keys. Files are served through CloudFront when
-cdn_base_url is set, otherwise through short-lived presigned GET URLs.
+The database stores only object keys. Files are served through short-lived links: signed
+CloudFront URLs when cdn_base_url is set, otherwise presigned S3 GET URLs.
 """
 import asyncio
 import base64
@@ -18,12 +21,17 @@ import binascii
 import logging
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
+from urllib.parse import quote
 from uuid import UUID
 
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
+from botocore.signers import CloudFrontSigner
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 from fastapi import HTTPException
 
 from .config import get_settings
@@ -93,20 +101,34 @@ def check_sha256_b64(value: str) -> None:
         raise HTTPException(422, "checksum_sha256 must be the base64-encoded SHA-256 of the file.")
 
 
-def presign_put(key: str, content_type: str, checksum_sha256_b64: str) -> str:
+PENDING_TAG = "state=pending"
+
+
+def presign_put(key: str, content_type: str, size_bytes: int, checksum_sha256_b64: str) -> str:
     s = get_settings()
     return s3_client().generate_presigned_url(
         "put_object",
-        Params={"Bucket": s.s3_bucket, "Key": key, "ContentType": content_type,
-                "ChecksumSHA256": checksum_sha256_b64},
+        Params={"Bucket": s.s3_bucket, "Key": key, "ContentType": content_type, "ContentLength": size_bytes,
+                "ChecksumSHA256": checksum_sha256_b64, "Tagging": PENDING_TAG},
         ExpiresIn=s.upload_url_expiry_seconds,
     )
 
 
+@lru_cache
+def _cdn_signer() -> CloudFrontSigner:
+    s = get_settings()
+    key = serialization.load_pem_private_key(s.cdn_private_key.encode(), password=None)
+    # CloudFront signed URLs use RSA with SHA-1.
+    return CloudFrontSigner(s.cdn_key_pair_id, lambda message: key.sign(message, padding.PKCS1v15(), hashes.SHA1()))
+
+
 def file_url(key: str) -> str:
+    """A link to the file that expires after download_url_expiry_seconds."""
     s = get_settings()
     if s.cdn_base_url:
-        return f"{s.cdn_base_url.rstrip('/')}/{key}"
+        expires = datetime.now(timezone.utc) + timedelta(seconds=s.download_url_expiry_seconds)
+        return _cdn_signer().generate_presigned_url(f"{s.cdn_base_url.rstrip('/')}/{quote(key)}",
+                                                    date_less_than=expires)
     return s3_client().generate_presigned_url(
         "get_object", Params={"Bucket": s.s3_bucket, "Key": key}, ExpiresIn=s.download_url_expiry_seconds)
 
@@ -116,13 +138,18 @@ async def _verify_object(key: str, kind: UploadKind) -> None:
     try:
         head = await asyncio.to_thread(s3_client().head_object, Bucket=s.s3_bucket, Key=key)
     except ClientError as exc:
-        if exc.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+        # Without s3:ListBucket, S3 answers 403 rather than 404 for a missing object.
+        if exc.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound", "403", "AccessDenied"):
             raise HTTPException(422, f"File {key} has not been uploaded yet. Finish the upload first.") from exc
         raise
+    problem = None
     if head["ContentLength"] > kind.max_bytes:
-        raise HTTPException(422, f"File {key} is larger than {kind.max_bytes // MB} MB.")
-    if head.get("ContentType") not in kind.content_types:
-        raise HTTPException(422, f"File {key} has a file type that isn't allowed here.")
+        problem = f"File {key} is larger than {kind.max_bytes // MB} MB."
+    elif head.get("ContentType") not in kind.content_types:
+        problem = f"File {key} has a file type that isn't allowed here."
+    if problem:
+        await delete_objects([key])
+        raise HTTPException(422, problem)
 
 
 async def verify_own_uploads(keys: list[str], kind: str, user_id: UUID, course_id: UUID | None = None) -> None:
@@ -135,6 +162,20 @@ async def verify_own_uploads(keys: list[str], kind: str, user_id: UUID, course_i
     await asyncio.gather(*(_verify_object(k, UPLOAD_KINDS[kind]) for k in keys))
 
 
+async def mark_attached(keys: list[str]) -> None:
+    """Best effort, after the post is saved: retag the files so the lifecycle rule keeps them."""
+    s = get_settings()
+
+    def tag(key: str) -> None:
+        s3_client().put_object_tagging(Bucket=s.s3_bucket, Key=key,
+                                       Tagging={"TagSet": [{"Key": "state", "Value": "attached"}]})
+    for key in keys:
+        try:
+            await asyncio.to_thread(tag, key)
+        except Exception:  # noqa: BLE001 - the post is already saved; never fail the request here
+            log.exception("Could not mark %s as attached; the lifecycle rule may delete it", key)
+
+
 async def delete_objects(keys: list[str]) -> None:
     """Best effort: called after a post or its photos are deleted. Failures are logged, not raised."""
     if not keys:
@@ -143,6 +184,9 @@ async def delete_objects(keys: list[str]) -> None:
     for start in range(0, len(keys), 1000):
         batch = [{"Key": k} for k in keys[start:start + 1000]]
         try:
-            await asyncio.to_thread(s3_client().delete_objects, Bucket=s.s3_bucket, Delete={"Objects": batch})
+            resp = await asyncio.to_thread(s3_client().delete_objects, Bucket=s.s3_bucket, Delete={"Objects": batch})
         except Exception:  # noqa: BLE001 - cleanup must never break the request
             log.exception("Could not delete %d S3 objects", len(batch))
+            continue
+        for err in resp.get("Errors", []):
+            log.error("Could not delete S3 object %s: %s %s", err.get("Key"), err.get("Code"), err.get("Message"))

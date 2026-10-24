@@ -23,6 +23,7 @@ BUCKET = "campushub-test"
 os.environ.update({
     "CAMPUSHUB_DATABASE_URL": DB_URL,
     "CAMPUSHUB_AUTH_MODE": "dev",
+    "CAMPUSHUB_ALLOW_DEV_AUTH": "true",
     "CAMPUSHUB_S3_BUCKET": BUCKET,
     "CAMPUSHUB_S3_REGION": "ap-south-1",
     "AWS_ACCESS_KEY_ID": "testing",
@@ -32,7 +33,7 @@ os.environ.update({
 # Ignore a local .env (e.g. its MinIO endpoint), so S3 calls go to the moto mock below.
 from app.config import Settings  # noqa: E402
 Settings.model_config["env_file"] = None
-SCHEMA =pathlib.Path(__file__).resolve().parents[1] / "db" / "schema.sql"
+SCHEMA = pathlib.Path(__file__).resolve().parents[1] / "db" / "schema.sql"
 API = "/api/v1"
 
 
@@ -126,7 +127,7 @@ def upload(client, s3, headers, kind, content=b"fake image bytes", content_type=
         "checksum_sha256": checksum, "course_id": course_id})
     assert r.status_code == 201, r.text
     key = r.json()["s3_key"]
-    s3.put_object(Bucket=BUCKET, Key=key, Body=content, ContentType=content_type)
+    s3.put_object(Bucket=BUCKET, Key=key, Body=content, ContentType=content_type, Tagging="state=pending")
     return key
 
 

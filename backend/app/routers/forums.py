@@ -2,9 +2,9 @@
 
 Every course and department has one forum, created the first time it's opened.
 A thread has a title and an author; its first comment (lowest seq) is the opening post.
-The author can edit or remove their thread/comment. Admins and the relevant moderators
-(see can_moderate_forum() in schema.sql) can remove anyone's. Removing a thread removes
-all its comments (database trigger).
+The author can edit or remove their thread/comment, and admins can edit anyone's. Admins
+and the relevant moderators (see can_moderate_forum() in schema.sql) can remove anyone's.
+Removing a thread removes all its comments (database trigger).
 """
 from datetime import datetime
 from typing import Literal
@@ -15,10 +15,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response
 from pydantic import BaseModel, Field
 
 from ..auth import CurrentUser, current_user, optional_user
-from ..common import Page, PageParams, UserRef, forbidden, make_page, not_found, page_params
+from ..common import Page, PageParams, UserRef, forbidden, make_page, not_found, page_params, text
 from ..db import get_conn
 from ..notify import create_notifications, deliver_push
-from ..permissions import can_moderate_forum, log_moderation
+from ..permissions import can_moderate_forum, close_reports, log_moderation
 
 router = APIRouter(tags=["Forums"])
 
@@ -33,16 +33,16 @@ class Forum(BaseModel):
 
 
 class ThreadCreate(BaseModel):
-    title: str = Field(min_length=1, max_length=200)
-    content: str = Field(min_length=1, max_length=10_000, description="The opening post")
+    title: text(200)
+    content: text(10_000) = Field(description="The opening post")
 
 
 class ThreadUpdate(BaseModel):
-    title: str = Field(min_length=1, max_length=200)
+    title: text(200)
 
 
 class CommentIn(BaseModel):
-    content: str = Field(min_length=1, max_length=10_000)
+    content: text(10_000)
 
 
 class ThreadSummary(BaseModel):
@@ -81,12 +81,16 @@ FROM forums f
 
 async def _get_or_create_forum(conn: asyncpg.Connection, scope: str, scope_id: UUID) -> Forum:
     table, column = {"course": ("courses", "course_id"), "department": ("departments", "department_id")}[scope]
-    if not await conn.fetchval(f"SELECT EXISTS (SELECT 1 FROM {table} WHERE id = $1)", scope_id):
-        raise not_found(scope.capitalize())
-    await conn.execute(
-        f"INSERT INTO forums (scope_type, {column}) VALUES ($1, $2) ON CONFLICT ({column}) DO NOTHING",
-        scope, scope_id)
-    return Forum(**dict(await conn.fetchrow(_FORUM_SELECT + f" WHERE f.{column} = $1", scope_id)))
+    row = await conn.fetchrow(_FORUM_SELECT + f" WHERE f.{column} = $1", scope_id)
+    if row is None:
+        # First visit: create the forum (only once, so later reads don't write).
+        if not await conn.fetchval(f"SELECT EXISTS (SELECT 1 FROM {table} WHERE id = $1)", scope_id):
+            raise not_found(scope.capitalize())
+        await conn.execute(
+            f"INSERT INTO forums (scope_type, {column}) VALUES ($1, $2) ON CONFLICT ({column}) DO NOTHING",
+            scope, scope_id)
+        row = await conn.fetchrow(_FORUM_SELECT + f" WHERE f.{column} = $1", scope_id)
+    return Forum(**dict(row))
 
 
 @router.get("/courses/{course_id}/forum", response_model=Forum, summary="A course's forum")
@@ -149,7 +153,7 @@ async def list_threads(forum_id: UUID, page: PageParams = Depends(page_params),
         raise not_found("Forum")
     rows = await conn.fetch(
         _THREAD_SELECT + """ WHERE t.forum_id = $1 AND t.deleted_at IS NULL
-        ORDER BY t.created_at DESC LIMIT $2 OFFSET $3""", forum_id, page.limit + 1, page.offset)
+        ORDER BY t.created_at DESC, t.id DESC LIMIT $2 OFFSET $3""", forum_id, page.limit + 1, page.offset)
     return make_page(rows, page, _thread_summary)
 
 
@@ -162,7 +166,7 @@ async def create_thread(forum_id: UUID, body: ThreadCreate, user: CurrentUser = 
     async with conn.transaction():
         thread_id = await conn.fetchval(
             "INSERT INTO threads (forum_id, author_id, title) VALUES ($1, $2, $3) RETURNING id",
-            forum_id, user.id, body.title.strip())
+            forum_id, user.id, body.title)
         await conn.execute("INSERT INTO comments (thread_id, user_id, content) VALUES ($1, $2, $3)",
                            thread_id, user.id, body.content)
     return await _thread_detail(conn, thread_id, user)
@@ -174,13 +178,17 @@ async def get_thread(thread_id: UUID, viewer: CurrentUser | None = Depends(optio
     return await _thread_detail(conn, thread_id, viewer)
 
 
-@router.patch("/threads/{thread_id}", response_model=ThreadDetail, summary="Rename a thread (author only)")
+@router.patch("/threads/{thread_id}", response_model=ThreadDetail, summary="Rename a thread (author or admin)")
 async def rename_thread(thread_id: UUID, body: ThreadUpdate, user: CurrentUser = Depends(current_user),
                         conn: asyncpg.Connection = Depends(get_conn)):
     thread = await _live_thread(conn, thread_id)
-    if thread["author_id"] != user.id:
+    is_author = thread["author_id"] == user.id
+    if not is_author and not user.is_admin:
         raise forbidden("Only the thread's author can rename it.")
-    await conn.execute("UPDATE threads SET title = $2 WHERE id = $1", thread_id, body.title.strip())
+    async with conn.transaction():
+        await conn.execute("UPDATE threads SET title = $2 WHERE id = $1", thread_id, body.title)
+        if not is_author:
+            await log_moderation(conn, user.id, "rename_thread", "thread", thread_id)
     return await _thread_detail(conn, thread_id, user)
 
 
@@ -193,7 +201,12 @@ async def delete_thread(thread_id: UUID, reason: str | None = Query(None, max_le
     if not is_author and not await can_moderate_forum(conn, user, thread["forum_id"]):
         raise forbidden("Only the author or a moderator of this forum can remove this thread.")
     async with conn.transaction():
+        comment_ids = [r["id"] for r in await conn.fetch(
+            "SELECT id FROM comments WHERE thread_id = $1 AND deleted_at IS NULL", thread_id)]
         await conn.execute("UPDATE threads SET deleted_at = now(), deleted_by = $2 WHERE id = $1", thread_id, user.id)
+        # The trigger removed its comments too, so close the reports about them as well.
+        await close_reports(conn, "thread", [thread_id], user.id, reason)
+        await close_reports(conn, "comment", comment_ids, user.id, reason)
         if not is_author:
             await log_moderation(conn, user.id, "remove_thread", "thread", thread_id, reason)
     return Response(status_code=204)
@@ -231,13 +244,17 @@ async def _live_comment(conn: asyncpg.Connection, comment_id: UUID) -> asyncpg.R
     return row
 
 
-@router.patch("/comments/{comment_id}", response_model=Comment, summary="Edit a comment (author only)")
+@router.patch("/comments/{comment_id}", response_model=Comment, summary="Edit a comment (author or admin)")
 async def update_comment(comment_id: UUID, body: CommentIn, user: CurrentUser = Depends(current_user),
                          conn: asyncpg.Connection = Depends(get_conn)):
     row = await _live_comment(conn, comment_id)
-    if row["user_id"] != user.id:
+    is_author = row["user_id"] == user.id
+    if not is_author and not user.is_admin:
         raise forbidden("Only the author can edit this comment.")
-    await conn.execute("UPDATE comments SET content = $2 WHERE id = $1", comment_id, body.content)
+    async with conn.transaction():
+        await conn.execute("UPDATE comments SET content = $2 WHERE id = $1", comment_id, body.content)
+        if not is_author:
+            await log_moderation(conn, user.id, "edit_comment", "comment", comment_id)
     updated = await conn.fetchrow(
         """SELECT c.id, c.seq, c.user_id, u.name AS author_name, c.content, c.created_at, c.updated_at, c.deleted_at
            FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id = $1""", comment_id)
@@ -253,6 +270,7 @@ async def delete_comment(comment_id: UUID, reason: str | None = Query(None, max_
         raise forbidden("Only the author or a moderator of this forum can remove this comment.")
     async with conn.transaction():
         await conn.execute("UPDATE comments SET deleted_at = now(), deleted_by = $2 WHERE id = $1", comment_id, user.id)
+        await close_reports(conn, "comment", [comment_id], user.id, reason)
         if not is_author:
             await log_moderation(conn, user.id, "remove_comment", "comment", comment_id, reason)
     return Response(status_code=204)

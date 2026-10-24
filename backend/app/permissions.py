@@ -1,10 +1,11 @@
 """Permission checks (PRD §3.1, FR-2, FR-3, FR-13), always read from the database.
 
-  admin                         everything
+  admin                         everything, including editing other people's posts
   module moderator              buy_sell / lost_found / placement_hub: remove anyone's posts
   department moderator (AH)     manage courses, materials, feedback and course moderators
                                 of every course in their department
-  course moderator (AH)         create/read/update/delete materials of their own course
+  course moderator (AH)         create/read/update/delete materials of their own course,
+                                and remove feedback on it (team decision)
   owner / author                edit and delete their own posts
 """
 from uuid import UUID
@@ -59,3 +60,14 @@ async def log_moderation(conn: asyncpg.Connection, moderator_id: UUID, action: s
         """INSERT INTO moderation_log (moderator_id, action, target_type, target_id, reason)
            VALUES ($1, $2, $3, $4, $5)""",
         moderator_id, action, target_type, target_id, reason)
+
+
+async def close_reports(conn: asyncpg.Connection, target_type: str, target_ids: list[UUID],
+                        handled_by: UUID, note: str | None = None) -> None:
+    """Content was removed: close its open reports so they leave the moderation queue."""
+    if target_ids:
+        await conn.execute(
+            """UPDATE reports SET status = 'actioned', handled_by = $3, handled_at = now(),
+                      resolution_note = coalesce($4, 'Removed')
+               WHERE target_type = $1 AND target_id = ANY($2::uuid[]) AND status = 'open'""",
+            target_type, target_ids, handled_by, note)

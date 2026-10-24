@@ -15,14 +15,15 @@ def _ticket(client, **overrides):
     return client.post(f"{API}/uploads", headers=ASHA, json=body)
 
 
-def test_ticket_signs_type_and_checksum(client):
-    """NFR-8: S3 rejects an upload whose type or SHA-256 differs from what was signed."""
+def test_ticket_signs_type_size_and_checksum(client):
+    """NFR-8: S3 rejects an upload whose type, size or SHA-256 differs from what was signed."""
     r = _ticket(client)
     assert r.status_code == 201
     ticket = r.json()
     signed = urllib.parse.parse_qs(urllib.parse.urlparse(ticket["upload_url"]).query)["X-Amz-SignedHeaders"][0]
-    assert set(signed.split(";")) >= {"content-type", "x-amz-checksum-sha256"}
-    assert ticket["headers"] == {"Content-Type": "image/jpeg", "x-amz-checksum-sha256": CHECKSUM}
+    assert set(signed.split(";")) >= {"content-type", "content-length", "x-amz-checksum-sha256", "x-amz-tagging"}
+    assert ticket["headers"] == {"Content-Type": "image/jpeg", "x-amz-checksum-sha256": CHECKSUM,
+                                 "x-amz-tagging": "state=pending"}
     assert ticket["s3_key"].startswith("listings/") and ticket["s3_key"].endswith(".jpg")
 
 

@@ -1,13 +1,28 @@
-"""Small shared pieces: pagination, reference models and the PATCH helper."""
+"""Small shared pieces: pagination, reference models, text and id types, and the PATCH helper."""
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Generic, TypeVar
+from typing import Annotated, Generic, TypeVar
 from uuid import UUID
 
 from fastapi import HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StringConstraints
 
 T = TypeVar("T")
+
+# Category ids are 32-bit integers in the database.
+MAX_INT_ID = 2_147_483_647
+CategoryId = Annotated[int, Field(ge=1, le=MAX_INT_ID)]
+
+
+def text(max_length: int, min_length: int = 1):
+    """A string with surrounding whitespace removed; by default it must not be blank."""
+    return Annotated[str, StringConstraints(strip_whitespace=True, min_length=min_length, max_length=max_length)]
+
+
+def search_text(q: str | None) -> str | None:
+    """A search box sends q= when it's empty; treat that as no search."""
+    if q is None or not q.strip():
+        return None
+    return q.strip()
 
 
 class Page(BaseModel, Generic[T]):
@@ -61,11 +76,6 @@ class Photo(BaseModel):
     s3_key: str
     url: str
     sort_order: int
-
-
-class Timestamps(BaseModel):
-    created_at: datetime
-    updated_at: datetime
 
 
 def set_clause(changes: dict, start: int = 1) -> tuple[str, list]:

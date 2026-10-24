@@ -2,16 +2,21 @@
 
 Inbox rows are written inside the request's transaction. Push delivery runs as a
 background task after the response, so a rolled-back request never sends a push.
+On Lambda (Mangum) background tasks finish before the invocation returns, so their time
+counts towards the response; push_timeout_seconds caps it. Moving pushes to a queue (SQS)
+would take them off the response path entirely.
 
 Push sending is pluggable: LogPushSender only logs. Replace it with an SNS / FCM sender
 (see push_devices.sns_endpoint_arn) when push is wired up (PRD stretch goal).
 """
+import asyncio
 import logging
 from typing import Protocol
 from uuid import UUID
 
 import asyncpg
 
+from .config import get_settings
 from .db import get_pool
 
 log = logging.getLogger("campushub.notify")
@@ -52,6 +57,10 @@ async def deliver_push(user_ids: list[UUID], notification_type: str, payload: di
             devices = await conn.fetch(
                 "SELECT user_id, platform::text AS platform, push_token, sns_endpoint_arn "
                 "FROM push_devices WHERE user_id = ANY($1::uuid[])", user_ids)
-        await push_sender.send(devices, notification_type, payload)
+        await asyncio.wait_for(push_sender.send(devices, notification_type, payload),
+                               timeout=get_settings().push_timeout_seconds)
+    except TimeoutError:
+        log.error("Push delivery for %s took longer than %ss and was abandoned",
+                  notification_type, get_settings().push_timeout_seconds)
     except Exception:  # noqa: BLE001 - a failed push must not surface as an API error
         log.exception("Push delivery failed for %s", notification_type)

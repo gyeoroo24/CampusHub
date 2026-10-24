@@ -8,7 +8,8 @@ Who sees which reports:
   admin                         all
   Buy & Sell / Lost & Found / Placement Hub moderator    that module's reports
   department moderator          Academic Help reports about their department's courses or forum
-  course moderator              Academic Help reports about their course
+  course moderator              Academic Help reports about their course (materials, feedback, forum);
+                                they may remove all of these (team decision)
 """
 from datetime import datetime
 from typing import Literal
@@ -19,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ..auth import CurrentUser, current_user
-from ..common import Page, PageParams, UserRef, forbidden, make_page, not_found, page_params
+from ..common import Page, PageParams, UserRef, forbidden, make_page, not_found, page_params, text
 from ..db import get_conn
 from ..permissions import log_moderation
 
@@ -49,12 +50,12 @@ FORUM_MODULE = {"course": "academic_help", "department": "academic_help", "compa
 class ReportCreate(BaseModel):
     target_type: TargetType
     target_id: UUID
-    reason: str = Field(min_length=1, max_length=1000)
+    reason: text(1000)
 
 
 class ResolveRequest(BaseModel):
     action: Literal["actioned", "dismissed"]
-    note: str | None = Field(None, max_length=1000)
+    note: text(1000, min_length=0) | None = None
     remove_content: bool = Field(False, description="With action=actioned, also remove the reported item")
 
 
@@ -150,7 +151,7 @@ async def create_report(body: ReportCreate, user: CurrentUser = Depends(current_
         report_id = await conn.fetchval(
             f"""INSERT INTO reports (reporter_id, module, target_type, {column}, reason)
                 VALUES ($1, $2, $3, $4, $5) RETURNING id""",
-            user.id, module, body.target_type, body.target_id, body.reason.strip())
+            user.id, module, body.target_type, body.target_id, body.reason)
     except asyncpg.UniqueViolationError as exc:
         raise HTTPException(409, "You already have an open report on this item.") from exc
     row = await conn.fetchrow(_SCOPED + " AND r.id = $5", True, [], [], [], report_id)
@@ -161,7 +162,7 @@ async def create_report(body: ReportCreate, user: CurrentUser = Depends(current_
 async def my_reports(page: PageParams = Depends(page_params), user: CurrentUser = Depends(current_user),
                      conn: asyncpg.Connection = Depends(get_conn)):
     rows = await conn.fetch(
-        _SCOPED + " AND r.reporter_id = $5 ORDER BY r.created_at DESC LIMIT $6 OFFSET $7",
+        _SCOPED + " AND r.reporter_id = $5 ORDER BY r.created_at DESC, r.id DESC LIMIT $6 OFFSET $7",
         True, [], [], [], user.id, page.limit + 1, page.offset)
     return make_page(rows, page, lambda r: _report(r, with_reporter=False))
 
@@ -175,7 +176,7 @@ async def list_reports(status: Literal["open", "actioned", "dismissed"] | None =
         raise forbidden("Only moderators and admins can see reports.")
     rows = await conn.fetch(
         _SCOPED + """ AND ($5::text IS NULL OR r.status::text = $5) AND ($6::text IS NULL OR r.module::text = $6)
-        ORDER BY r.created_at LIMIT $7 OFFSET $8""",
+        ORDER BY r.created_at, r.id LIMIT $7 OFFSET $8""",
         user.is_admin, modules, departments, courses, status, module, page.limit + 1, page.offset)
     return make_page(rows, page, _report)
 
@@ -197,6 +198,15 @@ async def resolve_report(report_id: UUID, body: ResolveRequest, user: CurrentUse
     target_type, target_id = row["target_type"], row["target_id"]
     removed = False
     async with conn.transaction():
+        # Close the reports first: this locks them, so if another moderator resolves the same item
+        # at the same moment, one of the two finds nothing left open and gets 409.
+        result = await conn.execute(
+            """UPDATE reports SET status = $3, handled_by = $4, handled_at = now(), resolution_note = $5
+               WHERE target_type = $1 AND target_id = $2 AND status = 'open'""",
+            target_type, target_id, body.action, user.id, body.note)
+        resolved = int(result.split()[-1])
+        if resolved == 0:
+            raise HTTPException(409, "This report has already been resolved.")
         if body.remove_content:
             table, _ = TARGETS[target_type]
             removed = await conn.fetchval(
@@ -204,9 +214,5 @@ async def resolve_report(report_id: UUID, body: ResolveRequest, user: CurrentUse
                 "RETURNING true", target_id, user.id) or False
             if removed:
                 await log_moderation(conn, user.id, f"remove_{target_type}", target_type, target_id, body.note)
-        result = await conn.execute(
-            """UPDATE reports SET status = $3, handled_by = $4, handled_at = now(), resolution_note = $5
-               WHERE target_type = $1 AND target_id = $2 AND status = 'open'""",
-            target_type, target_id, body.action, user.id, body.note)
         await log_moderation(conn, user.id, f"report_{body.action}", target_type, target_id, body.note)
-    return ResolveResult(reports_resolved=int(result.split()[-1]), content_removed=removed)
+    return ResolveResult(reports_resolved=resolved, content_removed=removed)

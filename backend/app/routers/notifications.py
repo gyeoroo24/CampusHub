@@ -4,7 +4,7 @@ from typing import Literal
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, Field
 
 from ..auth import CurrentUser, current_user
@@ -27,13 +27,17 @@ class DeviceIn(BaseModel):
     push_token: str = Field(min_length=1, max_length=4096, description="Token from FCM / APNs / Web Push")
 
 
+class DeviceToken(BaseModel):
+    push_token: str = Field(min_length=1, max_length=4096)
+
+
 @router.get("/notifications", response_model=Page[Notification], summary="My notifications, newest first")
 async def list_notifications(unread_only: bool = False, page: PageParams = Depends(page_params),
                              user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
     rows = await conn.fetch(
         """SELECT id, type::text AS type, payload, is_read, created_at FROM notifications
            WHERE user_id = $1 AND (NOT $2 OR NOT is_read)
-           ORDER BY created_at DESC LIMIT $3 OFFSET $4""",
+           ORDER BY created_at DESC, id DESC LIMIT $3 OFFSET $4""",
         user.id, unread_only, page.limit + 1, page.offset)
     return make_page(rows, page, lambda r: Notification(**dict(r)))
 
@@ -64,7 +68,8 @@ async def register_device(body: DeviceIn, user: CurrentUser = Depends(current_us
 
 
 @router.delete("/devices", status_code=204, summary="Stop push notifications to this device (call on sign-out)")
-async def unregister_device(push_token: str = Query(min_length=1), user: CurrentUser = Depends(current_user),
+async def unregister_device(body: DeviceToken, user: CurrentUser = Depends(current_user),
                             conn: asyncpg.Connection = Depends(get_conn)):
-    await conn.execute("DELETE FROM push_devices WHERE push_token = $1 AND user_id = $2", push_token, user.id)
+    # The token travels in the body, not the URL, so it doesn't end up in access logs.
+    await conn.execute("DELETE FROM push_devices WHERE push_token = $1 AND user_id = $2", body.push_token, user.id)
     return Response(status_code=204)

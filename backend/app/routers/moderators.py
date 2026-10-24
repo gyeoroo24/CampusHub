@@ -11,7 +11,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, model_validator
 
-from ..auth import IISC_EMAIL, CurrentUser, current_user
+from ..auth import CurrentUser, current_user, is_iisc_email
 from ..common import forbidden, not_found
 from ..db import get_conn
 from ..permissions import can_manage_department, log_moderation
@@ -30,7 +30,8 @@ class GrantCreate(BaseModel):
 
     @model_validator(mode="after")
     def _shape(self):
-        if not IISC_EMAIL.match(self.email):
+        self.email = self.email.strip()
+        if not is_iisc_email(self.email):
             raise ValueError("email must be an IISc address")
         if self.module == "academic_help":
             if self.scope_type == "department" and (self.department_id is None or self.course_id is not None):
@@ -84,13 +85,14 @@ async def grant(body: GrantCreate, user: CurrentUser = Depends(current_user),
     if target is None:
         raise HTTPException(404, "No user with that email yet. They need to sign in to CampusHub once first.")
     try:
-        grant_id = await conn.fetchval(
-            """INSERT INTO moderator_assignments (user_id, module, scope_type, department_id, course_id, granted_by)
-               VALUES ($1, $2, $3, $4, $5, $6) RETURNING id""",
-            target, body.module, body.scope_type, body.department_id, body.course_id, user.id)
+        async with conn.transaction():
+            grant_id = await conn.fetchval(
+                """INSERT INTO moderator_assignments (user_id, module, scope_type, department_id, course_id, granted_by)
+                   VALUES ($1, $2, $3, $4, $5, $6) RETURNING id""",
+                target, body.module, body.scope_type, body.department_id, body.course_id, user.id)
+            await log_moderation(conn, user.id, "grant_moderator", "moderator_assignment", grant_id)
     except asyncpg.UniqueViolationError as exc:
         raise HTTPException(409, "This person already has this moderator role.") from exc
-    await log_moderation(conn, user.id, "grant_moderator", "moderator_assignment", grant_id)
     return Grant(**dict(await conn.fetchrow(_GRANT_SELECT + " WHERE m.id = $1", grant_id)))
 
 
@@ -104,9 +106,13 @@ async def revoke(grant_id: UUID, user: CurrentUser = Depends(current_user),
         raise not_found("Active moderator role")
     if not await _may_manage_grant(conn, user, row["module"], row["scope_type"], row["course_id"]):
         raise forbidden()
-    await conn.execute("UPDATE moderator_assignments SET revoked_at = now(), revoked_by = $2 WHERE id = $1",
-                       grant_id, user.id)
-    await log_moderation(conn, user.id, "revoke_moderator", "moderator_assignment", grant_id)
+    async with conn.transaction():
+        # Only an active grant is revoked, so two admins revoking at once can't both succeed.
+        if await conn.fetchval(
+                "UPDATE moderator_assignments SET revoked_at = now(), revoked_by = $2 "
+                "WHERE id = $1 AND revoked_at IS NULL RETURNING id", grant_id, user.id) is None:
+            raise not_found("Active moderator role")
+        await log_moderation(conn, user.id, "revoke_moderator", "moderator_assignment", grant_id)
     return Response(status_code=204)
 
 
@@ -132,6 +138,6 @@ async def list_grants(module: Module | None = None, department_id: UUID | None =
           AND ($3::uuid IS NULL OR m.department_id = $3 OR c.department_id = $3)
           AND ($4::uuid IS NULL OR m.course_id = $4)
           AND ($5::uuid[] IS NULL OR c.department_id = ANY($5::uuid[]))
-        ORDER BY m.granted_at DESC""",
+        ORDER BY m.granted_at DESC, m.id DESC""",
         include_revoked, module, department_id, course_id, visible_departments)
     return [Grant(**dict(r)) for r in rows]

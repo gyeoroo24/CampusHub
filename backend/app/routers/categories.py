@@ -5,17 +5,17 @@ Names are matched ignoring case and extra spaces (categories.name_key), so addin
 """
 import asyncpg
 from fastapi import APIRouter, Depends, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from ..auth import CurrentUser, current_user
-from ..common import CategoryRef
+from ..common import CategoryRef, text
 from ..db import get_conn
 
 router = APIRouter(tags=["Categories"])
 
 
 class CategoryCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=50)
+    name: text(50)
 
 
 def _register(path: str, table: str, tag: str) -> None:

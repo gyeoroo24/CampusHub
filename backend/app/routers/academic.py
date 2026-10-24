@@ -4,7 +4,8 @@
   courses            admins and department moderators add/edit/remove courses in their department
   materials          course moderators (own course) and department moderators (their department)
                      create/edit/remove; anyone can read
-  feedback           any signed-in user posts; the author, department moderators and admins edit/remove
+  feedback           any signed-in user posts; the author, department moderators and admins edit;
+                     the author, moderators of the course (course or department level) and admins remove
 
 Deleting a course deletes everything under it (materials, feedback, its forum, threads,
 comments, course moderator roles and reports about them) — a team decision.
@@ -18,10 +19,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from pydantic import BaseModel, Field
 
 from ..auth import CurrentUser, current_user
-from ..common import Page, PageParams, UserRef, forbidden, make_page, not_found, page_params, set_clause
+from ..common import Page, PageParams, UserRef, forbidden, make_page, not_found, page_params, set_clause, text
 from ..db import get_conn
-from ..permissions import can_manage_course, can_manage_department, log_moderation
-from ..storage import delete_objects, file_url, verify_own_uploads
+from ..permissions import can_manage_course, can_manage_department, close_reports, log_moderation
+from ..storage import delete_objects, file_url, mark_attached, verify_own_uploads
 
 router = APIRouter(tags=["Academic Help"])
 
@@ -30,7 +31,7 @@ MaterialType = Literal["notes", "slides", "past_assignment", "exam_material", "o
 
 # ---------------------------------------------------------------- models
 class DepartmentIn(BaseModel):
-    name: str = Field(min_length=1, max_length=120)
+    name: text(120)
 
 
 class Department(BaseModel):
@@ -42,13 +43,13 @@ class Department(BaseModel):
 
 
 class CourseCreate(BaseModel):
-    code: str = Field(min_length=1, max_length=20, examples=["DS 252"])
-    name: str = Field(min_length=1, max_length=200)
+    code: text(20) = Field(examples=["DS 252"])
+    name: text(200)
 
 
 class CourseUpdate(BaseModel):
-    code: str | None = Field(None, min_length=1, max_length=20)
-    name: str | None = Field(None, min_length=1, max_length=200)
+    code: text(20) | None = None
+    name: text(200) | None = None
 
 
 class Course(BaseModel):
@@ -64,13 +65,13 @@ class Course(BaseModel):
 
 
 class MaterialCreate(BaseModel):
-    title: str = Field(min_length=1, max_length=200)
+    title: text(200)
     material_type: MaterialType = "other"
     s3_key: str = Field(description="From POST /uploads with kind=course_material and this course_id")
 
 
 class MaterialUpdate(BaseModel):
-    title: str | None = Field(None, min_length=1, max_length=200)
+    title: text(200) | None = None
     material_type: MaterialType | None = None
 
 
@@ -86,7 +87,7 @@ class Material(BaseModel):
 
 
 class FeedbackIn(BaseModel):
-    content: str = Field(min_length=1, max_length=5000)
+    content: text(5000)
 
 
 class Feedback(BaseModel):
@@ -258,7 +259,7 @@ async def list_materials(course_id: UUID, material_type: MaterialType | None = N
     rows = await conn.fetch(
         _MATERIAL_SELECT + """
         WHERE m.course_id = $1 AND m.deleted_at IS NULL AND ($2::text IS NULL OR m.material_type::text = $2)
-        ORDER BY m.created_at DESC LIMIT $3 OFFSET $4""",
+        ORDER BY m.created_at DESC, m.id DESC LIMIT $3 OFFSET $4""",
         course_id, material_type, page.limit + 1, page.offset)
     return make_page(rows, page, _material)
 
@@ -271,10 +272,17 @@ async def create_material(course_id: UUID, body: MaterialCreate, user: CurrentUs
     if not await can_manage_course(conn, user, course_id):
         raise forbidden("Only moderators of this course or its department can add materials.")
     await verify_own_uploads([body.s3_key], "course_material", user.id, course_id)
-    material_id = await conn.fetchval(
-        """INSERT INTO course_materials (course_id, uploaded_by, title, material_type, file_s3_key)
-           VALUES ($1, $2, $3, $4, $5) RETURNING id""",
-        course_id, user.id, body.title.strip(), body.material_type, body.s3_key)
+    async with conn.transaction():
+        # One uploaded file backs one material (the lock stops two requests attaching it at once).
+        await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1))", body.s3_key)
+        if await conn.fetchval("SELECT EXISTS (SELECT 1 FROM course_materials WHERE file_s3_key = $1)",
+                               body.s3_key):
+            raise HTTPException(409, "This file is already attached to a material. Upload it again for a new one.")
+        material_id = await conn.fetchval(
+            """INSERT INTO course_materials (course_id, uploaded_by, title, material_type, file_s3_key)
+               VALUES ($1, $2, $3, $4, $5) RETURNING id""",
+            course_id, user.id, body.title, body.material_type, body.s3_key)
+    await mark_attached([body.s3_key])
     return _material(await conn.fetchrow(_MATERIAL_SELECT + " WHERE m.id = $1", material_id))
 
 
@@ -286,7 +294,10 @@ async def update_material(material_id: UUID, body: MaterialUpdate, user: Current
         raise forbidden("Only moderators of this course or its department can edit materials.")
     changes = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
     sql, values = set_clause(changes, start=2)
-    await conn.execute(f"UPDATE course_materials SET {sql} WHERE id = $1", material_id, *values)
+    async with conn.transaction():
+        await conn.execute(f"UPDATE course_materials SET {sql} WHERE id = $1", material_id, *values)
+        if row["uploaded_by"] != user.id:
+            await log_moderation(conn, user.id, "edit_course_material", "course_material", material_id)
     return _material(await conn.fetchrow(_MATERIAL_SELECT + " WHERE m.id = $1", material_id))
 
 
@@ -299,6 +310,7 @@ async def delete_material(material_id: UUID, reason: str | None = Query(None, ma
     async with conn.transaction():
         await conn.execute("UPDATE course_materials SET deleted_at = now(), deleted_by = $2 WHERE id = $1",
                            material_id, user.id)
+        await close_reports(conn, "course_material", [material_id], user.id, reason)
         if row["uploaded_by"] != user.id:
             await log_moderation(conn, user.id, "remove_course_material", "course_material", material_id, reason)
     return Response(status_code=204)
@@ -317,15 +329,22 @@ def _feedback(r: asyncpg.Record) -> Feedback:
                     created_at=r["created_at"], updated_at=r["updated_at"])
 
 
-async def _may_change_feedback(conn: asyncpg.Connection, user: CurrentUser, feedback_id: UUID) -> asyncpg.Record:
-    """The author, a moderator of the course's department (scenario 4), or an admin."""
+async def _may_change_feedback(conn: asyncpg.Connection, user: CurrentUser, feedback_id: UUID,
+                               removing: bool) -> asyncpg.Record:
+    """Editing: the author, a moderator of the course's department (scenario 4), or an admin.
+    Removing: also a course moderator of that course (team decision)."""
     row = await conn.fetchrow(
-        """SELECT f.author_id, c.department_id FROM course_feedback f JOIN courses c ON c.id = f.course_id
+        """SELECT f.author_id, f.course_id, c.department_id FROM course_feedback f JOIN courses c ON c.id = f.course_id
            WHERE f.id = $1 AND f.deleted_at IS NULL""", feedback_id)
     if row is None:
         raise not_found("Feedback")
-    if row["author_id"] != user.id and not await can_manage_department(conn, user, row["department_id"]):
-        raise forbidden("Only the author or this department's moderators can change this feedback.")
+    if row["author_id"] == user.id:
+        return row
+    if removing:
+        if not await can_manage_course(conn, user, row["course_id"]):
+            raise forbidden("Only the author or this course's moderators can remove this feedback.")
+    elif not await can_manage_department(conn, user, row["department_id"]):
+        raise forbidden("Only the author or this department's moderators can edit this feedback.")
     return row
 
 
@@ -335,7 +354,7 @@ async def list_feedback(course_id: UUID, page: PageParams = Depends(page_params)
     await _course_department(conn, course_id)
     rows = await conn.fetch(
         _FEEDBACK_SELECT + """ WHERE f.course_id = $1 AND f.deleted_at IS NULL
-        ORDER BY f.created_at DESC LIMIT $2 OFFSET $3""", course_id, page.limit + 1, page.offset)
+        ORDER BY f.created_at DESC, f.id DESC LIMIT $2 OFFSET $3""", course_id, page.limit + 1, page.offset)
     return make_page(rows, page, _feedback)
 
 
@@ -346,25 +365,31 @@ async def create_feedback(course_id: UUID, body: FeedbackIn, user: CurrentUser =
     await _course_department(conn, course_id)
     feedback_id = await conn.fetchval(
         "INSERT INTO course_feedback (course_id, author_id, content) VALUES ($1, $2, $3) RETURNING id",
-        course_id, user.id, body.content.strip())
+        course_id, user.id, body.content)
     return _feedback(await conn.fetchrow(_FEEDBACK_SELECT + " WHERE f.id = $1", feedback_id))
 
 
-@router.patch("/feedback/{feedback_id}", response_model=Feedback, summary="Edit feedback")
+@router.patch("/feedback/{feedback_id}", response_model=Feedback,
+              summary="Edit feedback (author, department moderator, admin)")
 async def update_feedback(feedback_id: UUID, body: FeedbackIn, user: CurrentUser = Depends(current_user),
                           conn: asyncpg.Connection = Depends(get_conn)):
-    await _may_change_feedback(conn, user, feedback_id)
-    await conn.execute("UPDATE course_feedback SET content = $2 WHERE id = $1", feedback_id, body.content.strip())
+    row = await _may_change_feedback(conn, user, feedback_id, removing=False)
+    async with conn.transaction():
+        await conn.execute("UPDATE course_feedback SET content = $2 WHERE id = $1", feedback_id, body.content)
+        if row["author_id"] != user.id:
+            await log_moderation(conn, user.id, "edit_course_feedback", "course_feedback", feedback_id)
     return _feedback(await conn.fetchrow(_FEEDBACK_SELECT + " WHERE f.id = $1", feedback_id))
 
 
-@router.delete("/feedback/{feedback_id}", status_code=204, summary="Remove feedback")
+@router.delete("/feedback/{feedback_id}", status_code=204,
+               summary="Remove feedback (author, course or department moderator, admin)")
 async def delete_feedback(feedback_id: UUID, reason: str | None = Query(None, max_length=500),
                           user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
-    row = await _may_change_feedback(conn, user, feedback_id)
+    row = await _may_change_feedback(conn, user, feedback_id, removing=True)
     async with conn.transaction():
         await conn.execute("UPDATE course_feedback SET deleted_at = now(), deleted_by = $2 WHERE id = $1",
                            feedback_id, user.id)
+        await close_reports(conn, "course_feedback", [feedback_id], user.id, reason)
         if row["author_id"] != user.id:
             await log_moderation(conn, user.id, "remove_course_feedback", "course_feedback", feedback_id, reason)
     return Response(status_code=204)
