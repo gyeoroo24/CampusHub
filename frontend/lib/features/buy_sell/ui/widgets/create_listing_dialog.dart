@@ -77,9 +77,10 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return ModalHistoryWrapper(
       child: AlertDialog(
-        backgroundColor: Colors.white,
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
         surfaceTintColor: Colors.transparent,
         title: const Row(
         children: [

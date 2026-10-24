@@ -44,7 +44,7 @@ class BuySellDetailDialog extends ConsumerWidget {
 
     return ModalHistoryWrapper(
       child: Dialog(
-        backgroundColor: Colors.white,
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
         surfaceTintColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
         clipBehavior: Clip.antiAlias,
@@ -108,63 +108,33 @@ class BuySellDetailDialog extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            item.title,
-                            style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
-                          ),
+                    // Category Badge Pill (Small, above title)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+                      ),
+                      child: Text(
+                        item.category.name,
+                        style: TextStyle(
+                          color: theme.colorScheme.primary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
                         ),
-                        const SizedBox(width: 8),
-                        Chip(
-                          label: Text(
-                            item.category.name,
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-                          ),
-                          backgroundColor: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '₹${item.price.toStringAsFixed(0)}',
-                      style: TextStyle(
-                        color: theme.colorScheme.primary,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Icon(Icons.location_on_outlined, size: 18, color: Colors.grey[600]),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            item.location.isNotEmpty ? item.location : 'IISc Campus',
-                            style: TextStyle(fontSize: 13, color: Colors.grey[600], fontWeight: FontWeight.w500),
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 10),
+
+                    // Title
+                    Text(
+                      item.title,
+                      style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(Icons.access_time_rounded, size: 18, color: Colors.grey[600]),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            'Listed ${DateTimeFormatter.timeAgo(item.createdAt)} (${DateTimeFormatter.fullDateTime(item.createdAt)})',
-                            style: TextStyle(fontSize: 13, color: Colors.grey[600], fontWeight: FontWeight.w500),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 28),
-                    const Text('Description', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 14),
+
+                    // Description (without "Description" heading)
                     Text(
                       item.description.isNotEmpty ? item.description : 'No additional description provided.',
                       style: TextStyle(
@@ -173,7 +143,62 @@ class BuySellDetailDialog extends ConsumerWidget {
                         color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
                       ),
                     ),
-                    const Divider(height: 28),
+                    const SizedBox(height: 20),
+
+                    // Price and Seller-Location Row (between title & description)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.person_outline_rounded, size: 15, color: Colors.grey[600]),
+                                const SizedBox(width: 4),
+                                Text(
+                                  item.seller.name,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.location_on_outlined, size: 15, color: Colors.grey[500]),
+                                const SizedBox(width: 4),
+                                Text(
+                                  item.location.isNotEmpty ? item.location : 'IISc Campus',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[500],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        Text(
+                          '₹${item.price.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            color: theme.colorScheme.primary,
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 20),
 
                     // ── Owner Controls (Change Status) ─────────────────────────
                     if (isOwner) ...[
@@ -327,6 +352,26 @@ class BuySellDetailDialog extends ConsumerWidget {
                         ),
                       ),
                     ],
+
+                    // ── Listed Timestamp (Bottom of modal) ────────────────────
+                    const SizedBox(height: 18),
+                    Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.access_time_rounded, size: 14, color: Colors.grey[500]),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Listed ${DateTimeFormatter.timeAgo(item.createdAt)} (${DateTimeFormatter.fullDateTime(item.createdAt)})',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[500],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),

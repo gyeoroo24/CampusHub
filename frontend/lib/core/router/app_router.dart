@@ -113,10 +113,15 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
     final currentIndex = ref.read(tabIndexProvider);
     if (newIndex == currentIndex) return;
 
-    final bool goingRight = newIndex > currentIndex;
+    final isDesktop = MediaQuery.of(context).size.width > 750;
+    final bool goingForward = newIndex > currentIndex;
+
+    final Offset beginOffset = isDesktop
+        ? (goingForward ? const Offset(0, 0.08) : const Offset(0, -0.08))
+        : (goingForward ? const Offset(0.12, 0) : const Offset(-0.12, 0));
 
     _slideAnimation = Tween<Offset>(
-      begin: goingRight ? const Offset(0.12, 0) : const Offset(-0.12, 0),
+      begin: beginOffset,
       end: Offset.zero,
     ).chain(CurveTween(curve: Curves.easeOutCubic)).animate(_animController);
 

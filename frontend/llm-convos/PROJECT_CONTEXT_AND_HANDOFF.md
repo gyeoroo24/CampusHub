@@ -1,6 +1,6 @@
 # CampusHub: Project Context, Architecture & Session Handoff Guide
 
-**Document Version:** 3.2  
+**Document Version:** 3.3  
 **Last Updated:** 24 October 2026  
 **Project:** CampusHub — Cloud Computing Course Project (DS252), MTech CSA, Indian Institute of Science (IISc), Bangalore.  
 **Repository Branch Context:**
@@ -88,6 +88,7 @@ CampusHub/frontend/lib/
 │   └── widgets/
 │       ├── compact_date_range_picker_dialog.dart # Custom date range dialog
 │       ├── compact_price_range_picker_dialog.dart# Custom min/max price dialog
+│       ├── no_photo_placeholder.dart  # Responsive intentional no-photo placeholder
 │       ├── photo_carousel.dart        # Interactive gallery with Hero animation
 │       ├── skeleton_loader.dart       # ShimmerLoadingCard, SkeletonGrid, SkeletonList
 │       └── super_search_bar.dart      # Global search with 300ms debounce & clear button
@@ -166,8 +167,15 @@ CampusHub/frontend/lib/
       * Horizontal left/right tab transition animations matching bottom navigation bar navigation.
       * Compact TabBar for mobile Lost & Found items (height 36px, horizontal icon + text).
       * Web history navigation: Implemented `ModalHistoryWrapper` via `dart:html` `window.history.pushState` / `popstate` to intercept browser back-button presses and dismiss active modals without exiting the web application.
+  * Iteration 7.5 / Step 9 Modal Refinements, Multi-Photo Dummy Data & Placeholders:
+    * Backend Phone Number Verification: Confirmed backend stores optional phone numbers in `users` table (`phone TEXT`), exposed in `Contact(email, phone)` for authenticated users. Maintained `phone` in models and detail dialogs.
+    * Multi-Photo Support: Added multiple photos (2–4 photos) across mock listings and reports, enabling dot and arrow navigation in `PhotoCarousel`. Designated items with zero photos to test placeholder logic.
+    * BnS Detail Modal Restructuring: Small category badge above title (matching LnF modal), removed "Description" heading, inserted price and seller-location row between title and description with `spaceBetween`, and relocated listed timestamp to the bottom of the modal.
+    * Responsive `NoPhotoPlaceholder`: Designed adaptive placeholder that distinguishes deliberate absence of photos from image load failures across grid cards, compact list cards, and modal carousels.
+    * Responsive Module Page Transitions: Vertical slide transitions for desktop (`Offset(0, ±0.08)`); horizontal slide transitions for mobile (`Offset(±0.12, 0)`).
+    * Restored Dark Mode Modal Backgrounds: Set modal backgrounds to `isDark ? const Color(0xFF1E293B) : Colors.white` with `surfaceTintColor: Colors.transparent` across all custom dialogs and modals.
 * **Static Analysis:** `flutter analyze` runs with **0 errors, 0 warnings, 0 hints**.
-* **Automated Tests:** `flutter test` executes **23 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`).
+* **Automated Tests:** `flutter test` executes **24 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`).
 
 ---
 

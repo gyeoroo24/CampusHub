@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/utils/date_time_formatter.dart';
+import '../../../../core/widgets/no_photo_placeholder.dart';
 import '../../domain/buy_sell_item.dart';
 import 'buy_sell_detail_dialog.dart';
 
@@ -96,21 +97,36 @@ class _BuySellGridCardState extends State<BuySellGridCard> {
                       tag: 'listing_hero_${item.id}',
                       child: Opacity(
                         opacity: isSold ? 0.6 : 1.0,
-                        child: Image.network(
-                          item.imageUrl,
-                          fit: BoxFit.cover,
-                          gaplessPlayback: true,
-                          errorBuilder: (_, __, ___) => Container(
-                            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                            child: Center(
-                              child: Icon(
-                                Icons.shopping_bag_outlined,
-                                size: 40,
-                                color: Colors.grey.shade400,
-                              ),
-                            ),
-                          ),
-                        ),
+                        child: item.imageUrl.isNotEmpty
+                            ? Image.network(
+                                item.imageUrl,
+                                fit: BoxFit.cover,
+                                gaplessPlayback: true,
+                                errorBuilder: (_, __, ___) => Container(
+                                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.broken_image_outlined,
+                                          size: 32,
+                                          color: Colors.grey.shade400,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Failed to load',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.grey.shade400,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : const NoPhotoPlaceholder(),
                       ),
                     ),
                     // Gradient vignette overlay for better badge readability

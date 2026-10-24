@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/utils/date_time_formatter.dart';
+import '../../../../core/widgets/no_photo_placeholder.dart';
 import '../../domain/lost_found_item.dart';
 import 'lost_found_detail_dialog.dart';
 
@@ -87,21 +88,38 @@ class _LostFoundCardState extends State<LostFoundCard> {
                   children: [
                     Hero(
                       tag: 'report_hero_${item.id}',
-                      child: Image.network(
-                        item.imageUrl,
-                        fit: BoxFit.cover,
-                        gaplessPlayback: true,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                          child: Center(
-                            child: Icon(
-                              isLost ? Icons.search_off : Icons.check_circle_outline,
-                              size: 36,
-                              color: Colors.grey.shade400,
+                      child: item.imageUrl.isNotEmpty
+                          ? Image.network(
+                              item.imageUrl,
+                              fit: BoxFit.cover,
+                              gaplessPlayback: true,
+                              errorBuilder: (_, __, ___) => Container(
+                                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                                child: Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.broken_image_outlined,
+                                        size: 32,
+                                        color: Colors.grey.shade400,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Failed to load',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.grey.shade400,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            )
+                          : NoPhotoPlaceholder(
+                              message: isLost ? 'No photo of lost item' : 'No photo attached',
                             ),
-                          ),
-                        ),
-                      ),
                     ),
                     // Top gradient overlay for badge contrast
                     Positioned.fill(
@@ -174,13 +192,13 @@ class _LostFoundCardState extends State<LostFoundCard> {
               Expanded(
                 flex: 12,
                 child: Padding(
-                  padding: const EdgeInsets.all(12.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Category Tag right above title
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.0),
                         decoration: BoxDecoration(
                           color: badgeColor.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(6),
@@ -194,7 +212,7 @@ class _LostFoundCardState extends State<LostFoundCard> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4),
 
                       // Title
                       Text(
@@ -207,71 +225,77 @@ class _LostFoundCardState extends State<LostFoundCard> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 3),
 
                       // Description taking remaining white space
                       Expanded(
                         child: Text(
                           item.description.isNotEmpty ? item.description : 'No distinguishing description provided.',
                           style: TextStyle(
-                            fontSize: 11.5,
+                            fontSize: 11.0,
                             color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                            height: 1.3,
+                            height: 1.25,
                           ),
-                          maxLines: 3,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 4),
 
                     // Reporter and Location row (consistent with BnS: username on top, location under username)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.start,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.person_outline_rounded, size: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]),
-                                const SizedBox(width: 3),
-                                  Text(
-                                    item.reporter.name,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.person_outline_rounded, size: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                                  const SizedBox(width: 3),
+                                  Flexible(
+                                    child: Text(
+                                      item.reporter.name,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 2),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.location_on_outlined, size: 11, color: Colors.grey.shade500),
-                                const SizedBox(width: 2),
-                                  Text(
-                                    item.location.isNotEmpty ? item.location : 'Campus',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.grey.shade500,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
                                   ),
-                              ],
-                            ),
-                          ],
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.location_on_outlined, size: 11, color: Colors.grey.shade500),
+                                  const SizedBox(width: 2),
+                                  Flexible(
+                                    child: Text(
+                                      item.location.isNotEmpty ? item.location : 'Campus',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey.shade500,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
 
                     // Email Contact Copy Button at very bottom
                     SizedBox(

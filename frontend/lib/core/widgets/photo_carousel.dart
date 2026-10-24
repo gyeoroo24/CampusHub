@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'no_photo_placeholder.dart';
 
 /// A square photo carousel with dot indicators and arrow navigation.
 /// Shows [BoxFit.contain] so the full image is always visible regardless of
@@ -53,10 +54,7 @@ class _PhotoCarouselState extends State<PhotoCarousel> {
       return SizedBox(
         width: widget.size,
         height: widget.size,
-        child: Container(
-          color: bgColor,
-          child: Icon(Icons.image_not_supported_outlined, size: 48, color: Colors.grey[400]),
-        ),
+        child: const NoPhotoPlaceholder(),
       );
     }
 

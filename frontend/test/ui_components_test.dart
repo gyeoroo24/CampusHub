@@ -5,6 +5,7 @@ import 'package:campus_hub/core/models/category_ref.dart';
 import 'package:campus_hub/core/models/contact.dart';
 import 'package:campus_hub/core/models/photo.dart';
 import 'package:campus_hub/core/models/user_ref.dart';
+import 'package:campus_hub/core/widgets/no_photo_placeholder.dart';
 import 'package:campus_hub/core/widgets/skeleton_loader.dart';
 import 'package:campus_hub/features/auth/domain/user.dart';
 import 'package:campus_hub/features/auth/providers/auth_providers.dart';
@@ -153,6 +154,26 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.byType(ShimmerLoadingCard), findsNWidgets(3));
+  });
+
+  testWidgets('NoPhotoPlaceholder renders intentional placeholder in compact and full modes', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              SizedBox(width: 100, height: 80, child: NoPhotoPlaceholder(compact: true)),
+              SizedBox(width: 250, height: 200, child: NoPhotoPlaceholder()),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No photo'), findsOneWidget);
+    expect(find.text('No photos attached'), findsOneWidget);
+    expect(find.text('The author did not attach images'), findsOneWidget);
   });
 
   test('BuySellPaginationNotifier loads initial page and supports loadMore()', () async {

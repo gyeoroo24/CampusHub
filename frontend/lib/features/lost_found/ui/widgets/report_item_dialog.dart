@@ -148,11 +148,12 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
   Widget build(BuildContext context) {
     final isLost = widget.postType == PostType.lost;
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final primaryColor = isLost ? Colors.pinkAccent.shade700 : Colors.teal.shade700;
 
     return ModalHistoryWrapper(
       child: AlertDialog(
-        backgroundColor: Colors.white,
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
         surfaceTintColor: Colors.transparent,
         title: Row(
         children: [

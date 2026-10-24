@@ -92,7 +92,7 @@ class _CompactDateRangePickerDialogState extends State<CompactDateRangePickerDia
 
     return ModalHistoryWrapper(
       child: Dialog(
-        backgroundColor: Colors.white,
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Container(

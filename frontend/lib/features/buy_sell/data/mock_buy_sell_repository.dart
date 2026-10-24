@@ -32,6 +32,7 @@ class MockBuySellRepository implements IBuySellRepository {
       coverPhotoUrl: 'https://images.unsplash.com/photo-1584820927498-cfe5211fd8bf?w=700&auto=format&fit=crop&q=80',
       photos: const [
         Photo(s3Key: 'mock_coat_1', url: 'https://images.unsplash.com/photo-1584820927498-cfe5211fd8bf?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+        Photo(s3Key: 'mock_coat_2', url: 'https://images.unsplash.com/photo-1576086213369-97a306d36557?w=700&auto=format&fit=crop&q=80', sortOrder: 1),
       ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(hours: 3)),
@@ -49,6 +50,8 @@ class MockBuySellRepository implements IBuySellRepository {
       coverPhotoUrl: 'https://images.unsplash.com/photo-1580481077194-c71c4c95f137?w=700&auto=format&fit=crop&q=80',
       photos: const [
         Photo(s3Key: 'mock_chair_1', url: 'https://images.unsplash.com/photo-1580481077194-c71c4c95f137?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+        Photo(s3Key: 'mock_chair_2', url: 'https://images.unsplash.com/photo-1505797149-43b0069ec26b?w=700&auto=format&fit=crop&q=80', sortOrder: 1),
+        Photo(s3Key: 'mock_chair_3', url: 'https://images.unsplash.com/photo-1592078615290-033ee584e267?w=700&auto=format&fit=crop&q=80', sortOrder: 2),
       ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(days: 1)),
@@ -66,6 +69,7 @@ class MockBuySellRepository implements IBuySellRepository {
       coverPhotoUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=700&auto=format&fit=crop&q=80',
       photos: const [
         Photo(s3Key: 'mock_book_1', url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+        Photo(s3Key: 'mock_book_2', url: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=700&auto=format&fit=crop&q=80', sortOrder: 1),
       ],
       status: ListingStatus.reserved,
       createdAt: DateTime.now().subtract(const Duration(days: 2)),
@@ -83,6 +87,7 @@ class MockBuySellRepository implements IBuySellRepository {
       coverPhotoUrl: 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=700&auto=format&fit=crop&q=80',
       photos: const [
         Photo(s3Key: 'mock_kettle_1', url: 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+        Photo(s3Key: 'mock_kettle_2', url: 'https://images.unsplash.com/photo-1570784332176-fdd73da66f03?w=700&auto=format&fit=crop&q=80', sortOrder: 1),
       ],
       status: ListingStatus.sold,
       createdAt: DateTime.now().subtract(const Duration(days: 4)),
@@ -100,6 +105,8 @@ class MockBuySellRepository implements IBuySellRepository {
       coverPhotoUrl: 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?w=700&auto=format&fit=crop&q=80',
       photos: const [
         Photo(s3Key: 'mock_cycle_1', url: 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+        Photo(s3Key: 'mock_cycle_2', url: 'https://images.unsplash.com/photo-1532298229144-0ec0c57515c7?w=700&auto=format&fit=crop&q=80', sortOrder: 1),
+        Photo(s3Key: 'mock_cycle_3', url: 'https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?w=700&auto=format&fit=crop&q=80', sortOrder: 2),
       ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(hours: 12)),
@@ -117,24 +124,23 @@ class MockBuySellRepository implements IBuySellRepository {
       coverPhotoUrl: 'https://images.unsplash.com/photo-1611125832047-1d7ad1e8e48f?w=700&auto=format&fit=crop&q=80',
       photos: const [
         Photo(s3Key: 'mock_calc_1', url: 'https://images.unsplash.com/photo-1611125832047-1d7ad1e8e48f?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+        Photo(s3Key: 'mock_calc_2', url: 'https://images.unsplash.com/photo-1587145820266-a5951ee6f620?w=700&auto=format&fit=crop&q=80', sortOrder: 1),
       ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(hours: 18)),
     ),
-    // 7
+    // 7 (No Photo item for testing placeholder)
     ListingItem(
       id: '7',
       seller: const UserRef(id: 'user_karan', name: 'Karan Mehra'),
       sellerContact: const Contact(email: 'karanm@iisc.ac.in'),
       title: 'Solid Wood Bedside / Study Table',
-      description: 'Lightweight table repurposed as bedside study unit. Height 45cm. Natural varnish finish, very sturdy. Easy to shift between hostel rooms.',
+      description: 'Lightweight table repurposed as bedside study unit. Height 45cm. Natural varnish finish, very sturdy. Easy to shift between hostel rooms. No pictures attached.',
       price: 800.0,
       category: const CategoryRef(id: 4, name: 'Furniture'),
       location: 'Aryabhata Hostel Block A',
-      coverPhotoUrl: 'https://images.unsplash.com/photo-1533090161767-e6ffed986c88?w=700&auto=format&fit=crop&q=80',
-      photos: const [
-        Photo(s3Key: 'mock_table_1', url: 'https://images.unsplash.com/photo-1533090161767-e6ffed986c88?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
-      ],
+      coverPhotoUrl: null,
+      photos: const [],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(days: 3)),
     ),
@@ -151,6 +157,8 @@ class MockBuySellRepository implements IBuySellRepository {
       coverPhotoUrl: 'https://images.unsplash.com/photo-1532012164546-f432f2e3edd4?w=700&auto=format&fit=crop&q=80',
       photos: const [
         Photo(s3Key: 'mock_clrs_1', url: 'https://images.unsplash.com/photo-1532012164546-f432f2e3edd4?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+        Photo(s3Key: 'mock_clrs_2', url: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?w=700&auto=format&fit=crop&q=80', sortOrder: 1),
+        Photo(s3Key: 'mock_clrs_3', url: 'https://images.unsplash.com/photo-1495446815901-a7297e633e8d?w=700&auto=format&fit=crop&q=80', sortOrder: 2),
       ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(hours: 5)),
@@ -168,6 +176,8 @@ class MockBuySellRepository implements IBuySellRepository {
       coverPhotoUrl: 'https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=700&auto=format&fit=crop&q=80',
       photos: const [
         Photo(s3Key: 'mock_mon_1', url: 'https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+        Photo(s3Key: 'mock_mon_2', url: 'https://images.unsplash.com/photo-1547119957-637f8679db1e?w=700&auto=format&fit=crop&q=80', sortOrder: 1),
+        Photo(s3Key: 'mock_mon_3', url: 'https://images.unsplash.com/photo-1585792180666-f7347c490ee2?w=700&auto=format&fit=crop&q=80', sortOrder: 2),
       ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(hours: 8)),
@@ -185,6 +195,7 @@ class MockBuySellRepository implements IBuySellRepository {
       coverPhotoUrl: 'https://images.unsplash.com/photo-1507035895480-2b3156c31fc8?w=700&auto=format&fit=crop&q=80',
       photos: const [
         Photo(s3Key: 'mock_btwin_1', url: 'https://images.unsplash.com/photo-1507035895480-2b3156c31fc8?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+        Photo(s3Key: 'mock_btwin_2', url: 'https://images.unsplash.com/photo-1532298229144-0ec0c57515c7?w=700&auto=format&fit=crop&q=80', sortOrder: 1),
       ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(hours: 22)),
@@ -202,6 +213,8 @@ class MockBuySellRepository implements IBuySellRepository {
       coverPhotoUrl: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=700&auto=format&fit=crop&q=80',
       photos: const [
         Photo(s3Key: 'mock_kb_1', url: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+        Photo(s3Key: 'mock_kb_2', url: 'https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?w=700&auto=format&fit=crop&q=80', sortOrder: 1),
+        Photo(s3Key: 'mock_kb_3', url: 'https://images.unsplash.com/photo-1595225476474-87563907a212?w=700&auto=format&fit=crop&q=80', sortOrder: 2),
       ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 4)),
@@ -219,6 +232,7 @@ class MockBuySellRepository implements IBuySellRepository {
       coverPhotoUrl: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=700&auto=format&fit=crop&q=80',
       photos: const [
         Photo(s3Key: 'mock_probe_1', url: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+        Photo(s3Key: 'mock_probe_2', url: 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=700&auto=format&fit=crop&q=80', sortOrder: 1),
       ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 8)),
@@ -236,6 +250,7 @@ class MockBuySellRepository implements IBuySellRepository {
       coverPhotoUrl: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=700&auto=format&fit=crop&q=80',
       photos: const [
         Photo(s3Key: 'mock_racket_1', url: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+        Photo(s3Key: 'mock_racket_2', url: 'https://images.unsplash.com/photo-1613918108466-292b78a8ef95?w=700&auto=format&fit=crop&q=80', sortOrder: 1),
       ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(days: 2, hours: 3)),
@@ -287,6 +302,7 @@ class MockBuySellRepository implements IBuySellRepository {
       coverPhotoUrl: 'https://images.unsplash.com/photo-1609592424368-24cf23055375?w=700&auto=format&fit=crop&q=80',
       photos: const [
         Photo(s3Key: 'mock_pb_1', url: 'https://images.unsplash.com/photo-1609592424368-24cf23055375?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+        Photo(s3Key: 'mock_pb_2', url: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=700&auto=format&fit=crop&q=80', sortOrder: 1),
       ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(days: 3, hours: 6)),
@@ -304,6 +320,7 @@ class MockBuySellRepository implements IBuySellRepository {
       coverPhotoUrl: 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?w=700&auto=format&fit=crop&q=80',
       photos: const [
         Photo(s3Key: 'mock_cat_1', url: 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+        Photo(s3Key: 'mock_cat_2', url: 'https://images.unsplash.com/photo-1507035895480-2b3156c31fc8?w=700&auto=format&fit=crop&q=80', sortOrder: 1),
       ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(days: 4, hours: 2)),
@@ -321,6 +338,7 @@ class MockBuySellRepository implements IBuySellRepository {
       coverPhotoUrl: 'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=700&auto=format&fit=crop&q=80',
       photos: const [
         Photo(s3Key: 'mock_foldtable_1', url: 'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+        Photo(s3Key: 'mock_foldtable_2', url: 'https://images.unsplash.com/photo-1533090161767-e6ffed986c88?w=700&auto=format&fit=crop&q=80', sortOrder: 1),
       ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(days: 4, hours: 9)),
@@ -338,6 +356,7 @@ class MockBuySellRepository implements IBuySellRepository {
       coverPhotoUrl: 'https://images.unsplash.com/photo-1555774698-0b77e0d5fac6?w=700&auto=format&fit=crop&q=80',
       photos: const [
         Photo(s3Key: 'mock_pi_1', url: 'https://images.unsplash.com/photo-1555774698-0b77e0d5fac6?w=700&auto=format&fit=crop&q=80', sortOrder: 0),
+        Photo(s3Key: 'mock_pi_2', url: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=700&auto=format&fit=crop&q=80', sortOrder: 1),
       ],
       status: ListingStatus.available,
       createdAt: DateTime.now().subtract(const Duration(days: 5, hours: 4)),

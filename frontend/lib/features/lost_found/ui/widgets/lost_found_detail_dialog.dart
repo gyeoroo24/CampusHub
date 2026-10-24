@@ -33,7 +33,7 @@ class LostFoundDetailDialog extends ConsumerWidget {
 
     return ModalHistoryWrapper(
       child: Dialog(
-        backgroundColor: Colors.white,
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
         surfaceTintColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
         clipBehavior: Clip.antiAlias,

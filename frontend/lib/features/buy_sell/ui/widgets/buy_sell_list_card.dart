@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/utils/date_time_formatter.dart';
+import '../../../../core/widgets/no_photo_placeholder.dart';
 import '../../domain/buy_sell_item.dart';
 import 'buy_sell_detail_dialog.dart';
 
@@ -98,19 +99,32 @@ class _BuySellListCardState extends State<BuySellListCard> {
                             tag: 'listing_hero_${item.id}',
                             child: Opacity(
                               opacity: isSold ? 0.6 : 1.0,
-                              child: Image.network(
-                                item.imageUrl,
-                                width: 105,
-                                height: 85,
-                                fit: BoxFit.cover,
-                                gaplessPlayback: true,
-                                errorBuilder: (_, __, ___) => Container(
-                                  width: 105,
-                                  height: 85,
-                                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                                  child: Icon(Icons.shopping_bag_outlined, size: 28, color: Colors.grey.shade400),
-                                ),
-                              ),
+                              child: item.imageUrl.isNotEmpty
+                                  ? Image.network(
+                                      item.imageUrl,
+                                      width: 105,
+                                      height: 85,
+                                      fit: BoxFit.cover,
+                                      gaplessPlayback: true,
+                                      errorBuilder: (_, __, ___) => Container(
+                                        width: 105,
+                                        height: 85,
+                                        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.broken_image_outlined, size: 24, color: Colors.grey.shade400),
+                                            const SizedBox(height: 2),
+                                            Text('Failed to load', style: TextStyle(fontSize: 8, color: Colors.grey.shade400)),
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                  : const SizedBox(
+                                      width: 105,
+                                      height: 85,
+                                      child: NoPhotoPlaceholder(compact: true),
+                                    ),
                             ),
                           ),
                           Positioned(
