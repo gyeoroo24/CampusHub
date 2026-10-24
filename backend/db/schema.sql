@@ -130,6 +130,9 @@ CREATE TABLE users (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 -- Guests are not rows here: FR-1 gives them read-only access with no account.
+-- Exactly one admin at a time (team decision): the admin hands the role over with
+-- POST /users/{id}/make-admin, which demotes them in the same transaction.
+CREATE UNIQUE INDEX uq_users_single_admin ON users ((true)) WHERE base_role = 'admin';
 
 -- Moderator grants. "Is this user a moderator for this action?" is answered
 -- ONLY from active rows here, on every privileged request. JWT group claims

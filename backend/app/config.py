@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     #            refuses to start with it inside Lambda.
     auth_mode: Literal["cognito", "dev"] = "cognito"
     allow_dev_auth: bool = False
+    # Sharing a dev server on a private network (e.g. teammates on the same Wi-Fi): other
+    # machines may use X-Dev-User only if they also send "X-Dev-Key: <this value>".
+    dev_auth_key: str | None = None
     cognito_region: str = "ap-south-1"
     cognito_user_pool_id: str = ""
     cognito_app_client_id: str = ""

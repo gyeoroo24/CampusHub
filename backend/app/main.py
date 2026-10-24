@@ -49,13 +49,19 @@ def _add_sign_in_to_docs(app: FastAPI) -> None:
         if app.openapi_schema:
             return app.openapi_schema
         schema = get_openapi(title=app.title, version=app.version, description=app.description, routes=app.routes)
-        if get_settings().auth_mode == "dev":
-            scheme = {"type": "apiKey", "in": "header", "name": "X-Dev-User",
-                      "description": "Local testing: any IISc email, e.g. asha@iisc.ac.in"}
+        settings = get_settings()
+        schemes = schema.setdefault("components", {}).setdefault("securitySchemes", {})
+        if settings.auth_mode == "dev":
+            schemes["signIn"] = {"type": "apiKey", "in": "header", "name": "X-Dev-User",
+                                 "description": "Local testing: any IISc email, e.g. asha@iisc.ac.in"}
         else:
-            scheme = {"type": "http", "scheme": "bearer", "bearerFormat": "JWT", "description": "Cognito ID token"}
-        schema.setdefault("components", {}).setdefault("securitySchemes", {})["signIn"] = scheme
+            schemes["signIn"] = {"type": "http", "scheme": "bearer", "bearerFormat": "JWT",
+                                 "description": "Cognito ID token"}
         schema["security"] = [{"signIn": []}, {}]   # signed in, or a guest
+        if settings.auth_mode == "dev" and settings.dev_auth_key:
+            schemes["devKey"] = {"type": "apiKey", "in": "header", "name": "X-Dev-Key",
+                                 "description": "Needed from other machines on the network; ask whoever runs the server"}
+            schema["security"].insert(0, {"signIn": [], "devKey": []})
         app.openapi_schema = schema
         return schema
     app.openapi = openapi

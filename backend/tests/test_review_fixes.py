@@ -154,6 +154,21 @@ def test_dev_sign_in_only_from_this_machine():
     assert exc.value.status_code == 403
 
 
+def test_dev_sign_in_from_the_network_needs_the_team_key(monkeypatch):
+    from app.auth import _dev_identity
+    from app.config import get_settings
+    monkeypatch.setattr(get_settings(), "dev_auth_key", "team-secret")
+
+    def request(host, key=None):
+        headers = [(b"x-dev-user", b"asha@iisc.ac.in")] + ([(b"x-dev-key", key.encode())] if key else [])
+        return Request({"type": "http", "headers": headers, "client": (host, 5000)})
+    assert _dev_identity(request("10.217.1.5", "team-secret"))["email"] == "asha@iisc.ac.in"
+    for denied in (request("10.217.1.5"), request("10.217.1.5", "wrong"), request("8.8.8.8", "team-secret")):
+        with pytest.raises(HTTPException) as exc:
+            _dev_identity(denied)
+        assert exc.value.status_code == 403
+
+
 def test_dev_mode_needs_an_explicit_opt_in(monkeypatch):
     from app.config import get_settings
     from app.main import _check_settings
@@ -213,10 +228,29 @@ def test_admin_deactivates_and_reactivates_accounts(client):
     assert r.status_code == 200 and r.json()["is_active"] is False
     assert client.get(f"{API}/listings", headers=ASHA).status_code == 403      # list pages too, not only details
     assert client.get(f"{API}/listings/{listing['id']}", headers=RAVI).json()["seller_contact"] is None
-    r = client.patch(f"{API}/users/{asha_id}", headers=ADMIN, json={"is_active": True, "is_admin": True})
+    r = client.patch(f"{API}/users/{asha_id}", headers=ADMIN, json={"is_active": True})
     assert r.json() | {"id": None} == {"id": None, "email": "asha@iisc.ac.in", "name": "Asha",
-                                       "is_active": True, "is_admin": True}
+                                       "is_active": True, "is_admin": False}
+    # admin changes only go through the hand-over endpoint
+    assert client.patch(f"{API}/users/{asha_id}", headers=ADMIN, json={"is_admin": True}).status_code == 422
+
+
+def test_admin_hands_over_the_role(client):
+    admin_id = make_admin(client, ADMIN)
+    asha_id, ravi_id = sign_in(client, ASHA), sign_in(client, RAVI)
+    assert client.post(f"{API}/users/{ravi_id}/make-admin", headers=ASHA).status_code == 403   # not the admin
+    assert client.post(f"{API}/users/{admin_id}/make-admin", headers=ADMIN).status_code == 422  # self
+    r = client.post(f"{API}/users/{asha_id}/make-admin", headers=ADMIN)
+    assert r.status_code == 200 and r.json()["is_admin"] is True
+    assert client.get(f"{API}/me", headers=ADMIN).json()["is_admin"] is False   # downgraded
     assert client.get(f"{API}/me", headers=ASHA).json()["is_admin"] is True
+    assert [r["n"] for r in sql("SELECT count(*) AS n FROM users WHERE base_role = 'admin'")] == [1]
+    # the old admin can't do it any more; the new one can pass it on
+    assert client.post(f"{API}/users/{ravi_id}/make-admin", headers=ADMIN).status_code == 403
+    client.patch(f"{API}/users/{ravi_id}", headers=ASHA, json={"is_active": False})
+    assert client.post(f"{API}/users/{ravi_id}/make-admin", headers=ASHA).status_code == 422   # deactivated
+    with pytest.raises(asyncpg.UniqueViolationError):   # the database itself allows one admin
+        sql("UPDATE users SET base_role = 'admin' WHERE id = $1::uuid", ravi_id)
 
 
 # ---------------------------------------------------------------- moderation (B-5, B-12, B-13)

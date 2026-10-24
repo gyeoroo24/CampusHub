@@ -14,6 +14,8 @@ moderator rights from moderator_assignments, read fresh on every request, so a r
 moderator's next call is rejected (FR-3).
 """
 import asyncio
+import hmac
+import ipaddress
 import logging
 import re
 from dataclasses import dataclass
@@ -32,7 +34,8 @@ log = logging.getLogger("campushub.auth")
 # ASCII only, so Unicode lookalikes (e.g. the Kelvin sign for "k") don't pass; use fullmatch().
 IISC_EMAIL = re.compile(r"[^@\s]+@([a-z0-9-]+\.)*iisc\.ac\.in", re.IGNORECASE | re.ASCII)
 
-# Dev sign-in (X-Dev-User) is only honoured from this machine; "testclient" is FastAPI's TestClient.
+# Dev sign-in (X-Dev-User) is honoured from this machine ("testclient" is FastAPI's TestClient),
+# and from private networks only with the dev_auth_key.
 _LOCAL_CLIENTS = {"127.0.0.1", "::1", "localhost", "testclient"}
 
 
@@ -88,12 +91,27 @@ def verify_cognito_id_token(token: str) -> dict:
     return claims
 
 
+def _from_trusted_network(request: Request) -> bool:
+    """Another machine on a private network (e.g. the same Wi-Fi) that knows the team's dev key."""
+    key = get_settings().dev_auth_key
+    if not key or request.client is None:
+        return False
+    try:
+        private = ipaddress.ip_address(request.client.host).is_private
+    except ValueError:
+        return False
+    sent = request.headers.get("x-dev-key", "")
+    return private and hmac.compare_digest(sent.encode(), key.encode())
+
+
 def _dev_identity(request: Request) -> dict | None:
     email = request.headers.get("x-dev-user")
     if not email:
         return None
-    if request.client is None or request.client.host not in _LOCAL_CLIENTS:
-        raise HTTPException(403, "Dev sign-in only works from the machine the API runs on.")
+    local = request.client is not None and request.client.host in _LOCAL_CLIENTS
+    if not local and not _from_trusted_network(request):
+        raise HTTPException(403, "Dev sign-in only works from the machine the API runs on, "
+                                 "or from the same network with the team's X-Dev-Key.")
     return {"sub": f"dev|{email.strip().lower()}", "email": email.strip(), "email_verified": True,
             "name": request.headers.get("x-dev-name") or email.split("@")[0]}
 

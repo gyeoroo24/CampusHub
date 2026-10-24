@@ -19,7 +19,7 @@ docs/
 ## Status
 
 - **Phase 1 backend is built:** sign-in and profiles, moderator roles, Buy & Sell, Lost & Found,
-  Academic Help, forums, reports and moderation, notifications. 70 endpoints, 78 passing tests.
+  Academic Help, forums, reports and moderation, notifications. 71 endpoints, 80 passing tests.
 - **Review fixes (24 Oct 2026):** the bugs from the 23 Oct backend review are fixed and covered
   by `backend/tests/test_review_fixes.py`.
 - **Not built yet:** Placement Hub and Events APIs, real push delivery, chat, Terraform, frontend.

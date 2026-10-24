@@ -4,7 +4,7 @@ Last updated 24 Oct 2026. For the exact JSON of every request and response, run 
 
 ## Overview
 
-The CampusHub backend exposes 70 endpoints under `/api/v1`. This page lists each one, who may call it, and the fields it takes and returns, so screens can be designed around real data.
+The CampusHub backend exposes 71 endpoints under `/api/v1`. This page lists each one, who may call it, and the fields it takes and returns, so screens can be designed around real data.
 
 - **Base URL (local):** `http://localhost:8000/api/v1`. The cloud host isn't set up yet; only the host part will change.
 - **Try it live:** `http://localhost:8000/docs` (Swagger) shows the exact JSON for every request and response, and lets you send real calls.
@@ -95,7 +95,7 @@ Only step 3 moves the file itself, so that's the step to show progress on.
 
 ## Users, profiles and moderators
 
-Nine endpoints cover the signed-in user's profile, other people's public profiles, admin account controls, moderator roles and upload tickets.
+Ten endpoints cover the signed-in user's profile, other people's public profiles, admin account controls, moderator roles and upload tickets.
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
@@ -103,7 +103,8 @@ Nine endpoints cover the signed-in user's profile, other people's public profile
 | GET | `/me` | user | My profile, `is_admin` and my active `moderator_grants` |
 | PATCH | `/me` | user | Edit my `name`, `phone`, `department_id`, `programme`, `graduation_year` |
 | GET | `/users/{user_id}` | guest | Someone's public profile; `contact` only for signed-in viewers |
-| PATCH | `/users/{user_id}` | admin | Deactivate or reactivate an account (`is_active`), or make or remove an admin (`is_admin`). Not for your own account. Returns `id`, `email`, `name`, `is_active`, `is_admin` |
+| PATCH | `/users/{user_id}` | admin | Deactivate or reactivate an account: `{"is_active": false}`. Not your own. Returns `id`, `email`, `name`, `is_active`, `is_admin` |
+| POST | `/users/{user_id}/make-admin` | admin | Hand the admin role to this user. There is only ever one admin, so the caller becomes a normal signed-in user. 403 for anyone else; 422 for yourself or a deactivated account |
 | POST | `/moderators` | admin; department moderator (for their courses) | Make someone a moderator: `email`, `module`, `scope_type`, `department_id` or `course_id` |
 | GET | `/moderators` | admin, department moderator | List roles. Filters: `module`, `department_id`, `course_id`, `include_revoked` |
 | DELETE | `/moderators/{grant_id}` | same as POST | Revoke a role |

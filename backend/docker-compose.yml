@@ -1,5 +1,11 @@
 # Local development: PostgreSQL (schema loaded on first start) and MinIO (S3-compatible storage).
 # The API itself runs on your machine with uvicorn; see README.md.
+#
+# Postgres and the MinIO console listen on this machine only. MinIO's S3 port (9000) listens on
+# every interface, so other machines on the network can use upload and photo links. Its login is
+# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from .env (docker compose reads that file), or
+# minioadmin when unset; change it before sharing the server on a network.
+name: campushub
 services:
   db:
     image: postgres:16.4
@@ -8,7 +14,7 @@ services:
       POSTGRES_PASSWORD: campushub
       POSTGRES_DB: campushub
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - ./db/init-test-db.sql:/docker-entrypoint-initdb.d/00-test-db.sql:ro
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
@@ -19,13 +25,13 @@ services:
     # build of the same server. It creates the uploads bucket on start.
     image: bitnamilegacy/minio:2025.7.23-debian-12-r5
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
       MINIO_DEFAULT_BUCKETS: campushub-uploads
       MINIO_SITE_REGION: ap-south-1   # same region the API signs URLs for
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # web console
+      - "9000:9000"             # S3 API: upload and photo links
+      - "127.0.0.1:9001:9001"   # web console, this machine only
     volumes:
       - s3data:/bitnami/minio/data
 

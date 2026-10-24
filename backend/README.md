@@ -35,12 +35,32 @@ accepts the header from the machine the API runs on, and refuses to start inside
 curl -H "X-Dev-User: asha@iisc.ac.in" -H "X-Dev-Name: Asha" http://localhost:8000/api/v1/me
 ```
 
-To make someone the first admin (after they've made one request); after that, admins use
-`PATCH /api/v1/users/{id}`:
+There is exactly one admin (the database enforces it). To make the first admin (after they've made
+one request), use SQL; after that, the admin hands the role over with `POST /api/v1/users/{id}/make-admin`:
 
 ```bash
 docker compose exec db psql -U campushub -c "UPDATE users SET base_role = 'admin' WHERE email = 'asha@iisc.ac.in';"
 ```
+
+### Share it on your network
+
+To let teammates on the same Wi-Fi use your running backend (no cloud needed):
+
+1. In `.env`, set:
+   - `CAMPUSHUB_DEV_AUTH_KEY` to a long random value. Other machines must send it as the
+     `X-Dev-Key` header along with `X-Dev-User`; without it they can only browse as guests.
+   - `CAMPUSHUB_S3_ENDPOINT_URL=http://<this laptop's IP>:9000`, so their upload and photo links
+     work (on macOS: `ipconfig getifaddr en0`).
+   - `AWS_SECRET_ACCESS_KEY` (and `AWS_ACCESS_KEY_ID`) to a new login, because MinIO's port 9000
+     is reachable from the network. Then run `docker compose up -d` to restart MinIO with it.
+2. Start the API on every interface: `uvicorn app.main:app --reload --env-file .env --host 0.0.0.0`.
+3. Teammates open `http://<this laptop's IP>:8000/docs`, click **Authorize**, and enter their
+   email (`X-Dev-User`) and the team key (`X-Dev-Key`).
+
+Anyone with the key can act as any user, admins included, so share it only with the team.
+Postgres and the MinIO console stay reachable from this machine only. If the laptop's IP
+changes, update `CAMPUSHUB_S3_ENDPOINT_URL` and restart the API. Some campus networks block
+traffic between laptops; a phone hotspot works around that.
 
 To purge notifications older than 30 days (deployed as a daily scheduled Lambda, see below):
 
@@ -124,7 +144,8 @@ takes and returns, written for frontend design, see [docs/api-reference.md](../d
 | GET /health | guest | Health check (CloudWatch canary) |
 | GET, PATCH /me | user | My profile, admin flag and active moderator roles; update profile (phone is optional) |
 | GET /users/{id} | guest | Public profile; email and phone only for signed-in viewers |
-| PATCH /users/{id} | admin | Deactivate or reactivate an account (`is_active`), make or remove an admin (`is_admin`); not your own |
+| PATCH /users/{id} | admin | Deactivate or reactivate an account (`is_active`); not your own |
+| POST /users/{id}/make-admin | admin | Hand the admin role over: there is exactly one admin, so the caller becomes a signed-in user |
 | POST /moderators | admin; department moderator for their courses | Grant a moderator role by email |
 | DELETE /moderators/{id} | same | Revoke a role |
 | GET /moderators | admin, department moderator | List roles |
