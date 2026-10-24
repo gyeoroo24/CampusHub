@@ -9,7 +9,7 @@
 
 ## 1. Architecture Overview & Component Mapping
 
-This repository contains production-ready, modular Terraform code automating the serverless infrastructure proposed in `Proposal-Serverless-Cropped.jpg` and `Cloud_Computing_Project-PRD.pdf`.
+This repository contains production-ready, modular Terraform code automating the serverless infrastructure proposed in `Proposal-Serverless-Architecture.jpg` and `Cloud_Computing_Project-PRD.pdf`.
 
 ```
                     +------------------------------------+
