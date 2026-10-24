@@ -292,3 +292,16 @@ final buySellListingsProvider = FutureProvider<List<ListingItem>>((ref) async {
     fromDate: fromDate,
   );
 });
+
+final myBuySellListingsProvider = FutureProvider<List<ListingItem>>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null || user.isGuest) return [];
+  final repo = ref.watch(buySellRepositoryProvider);
+  final all = await repo.fetchListings();
+  return all
+      .where((it) =>
+          it.seller.id == user.id ||
+          it.seller.name == user.name ||
+          (it.sellerContact?.email != null && it.sellerContact!.email == user.email))
+      .toList();
+});

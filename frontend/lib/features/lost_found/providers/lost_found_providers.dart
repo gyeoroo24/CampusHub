@@ -217,3 +217,34 @@ final foundReportsProvider = FutureProvider<List<LostFoundItem>>((ref) async {
     sortOption: filter.sortOption,
   );
 });
+
+final possibleMatchesForItemProvider =
+    FutureProvider.family<List<LostFoundItem>, LostFoundItem>((ref, item) async {
+  return ref.watch(lostFoundRepositoryProvider).getPossibleMatches(item);
+});
+
+final myLostReportsProvider = FutureProvider<List<LostFoundItem>>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null || user.isGuest) return [];
+  final repo = ref.watch(lostFoundRepositoryProvider);
+  final all = await repo.fetchReports(type: PostType.lost, limit: 100);
+  return all
+      .where((r) =>
+          r.reporter.id == user.id ||
+          r.reporter.name == user.name ||
+          (r.reporterContact?.email != null && r.reporterContact!.email == user.email))
+      .toList();
+});
+
+final myFoundReportsProvider = FutureProvider<List<LostFoundItem>>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null || user.isGuest) return [];
+  final repo = ref.watch(lostFoundRepositoryProvider);
+  final all = await repo.fetchReports(type: PostType.found, limit: 100);
+  return all
+      .where((r) =>
+          r.reporter.id == user.id ||
+          r.reporter.name == user.name ||
+          (r.reporterContact?.email != null && r.reporterContact!.email == user.email))
+      .toList();
+});

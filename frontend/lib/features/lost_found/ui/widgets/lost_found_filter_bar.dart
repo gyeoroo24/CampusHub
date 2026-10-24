@@ -47,6 +47,7 @@ class LostFoundFilterBar extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => ReportItemDialog(
+        parentContext: context,
         postType: postType,
         userEmail: user?.email,
         userId: user?.id,

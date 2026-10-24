@@ -256,4 +256,23 @@ class ApiLostFoundRepository implements ILostFoundRepository {
 
     return CategoryRef.fromJson(response.data as Map<String, dynamic>);
   }
+
+  @override
+  Future<List<LostFoundItem>> getPossibleMatches(LostFoundItem item) async {
+    if (item.possibleMatches != null && item.possibleMatches!.isNotEmpty) {
+      return item.possibleMatches!;
+    }
+    try {
+      final oppositeType = item.kind == PostType.lost ? PostType.found : PostType.lost;
+      final response = await fetchReportsPage(
+        type: oppositeType,
+        categoryId: item.category.id,
+        statusList: [ReportStatus.open],
+        limit: 10,
+      );
+      return response.items.where((r) => r.id != item.id).toList();
+    } catch (_) {
+      return [];
+    }
+  }
 }

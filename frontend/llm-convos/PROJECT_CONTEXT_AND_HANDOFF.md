@@ -201,9 +201,12 @@ CampusHub/frontend/lib/
   * **Step 14 (AlertDialog Viewport Intrinsic Dimension Fix & Test Suite Expansion):**
     * Diagnosed and fixed `RenderShrinkWrappingViewport does not support returning intrinsic dimensions` in `report_item_dialog.dart:459` by replacing loose `ConstrainedBox` with responsive, bounded `SizedBox(width: dialogWidth, height: dialogHeight)` and disabling `shrinkWrap` on the `ListView`.
     * Enforced author-only permissions in `BuySellDetailDialog` and `LostFoundDetailDialog`, masking contact buttons on cards ("Email"/"Call") for student privacy.
-    * Expanded test suite to **40 automated tests with 100% pass rate**.
+  * **Step 15 (Admin Controls Page, Rich User Profile, Email-Based Governance & Possible Matches Navigation):**
+    * Built full `AdminControlsScreen` (`/admin`): 5 tabs covering Moderator promotion/demotion by IISc Email ID (FR-3), single-admin handover and account activation/deactivation by email, content moderation reports queue (FR-10), campus categories governance, and system telemetry health canary.
+    * Built rich `UserProfileScreen` (`/profile`): user details header with role badges, profile update form (`PATCH /api/v1/me`: name, phone, programme, graduation year), and personal postings activity hub across Buy & Sell, Lost reports, and Found reports with quick Edit, Status toggle, and Delete actions.
+    * Wired Possible Matches section into `LostFoundDetailDialog` for both Lost posts and Found posts with 1-click tap-to-inspect navigation.
 * **Static Analysis:** `flutter analyze` runs with **0 errors, 0 warnings, 0 hints**.
-* **Automated Tests:** `flutter test` executes **40 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`, `live_backend_integration_test.dart`, `filter_and_seller_actions_test.dart`).
+* **Automated Tests:** `flutter test` executes **49 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`, `live_backend_integration_test.dart`, `filter_and_seller_actions_test.dart`, `admin_and_profile_test.dart`).
 
 ---
 

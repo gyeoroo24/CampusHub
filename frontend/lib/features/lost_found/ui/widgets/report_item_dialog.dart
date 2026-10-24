@@ -16,6 +16,7 @@ class ReportItemDialog extends ConsumerStatefulWidget {
   final String? userEmail;
   final String? userName;
   final String? userId;
+  final BuildContext? parentContext;
 
   const ReportItemDialog({
     super.key,
@@ -24,6 +25,7 @@ class ReportItemDialog extends ConsumerStatefulWidget {
     this.userEmail,
     this.userName,
     this.userId,
+    this.parentContext,
   });
 
   @override
@@ -417,14 +419,17 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
 
       final createdReport = await widget.onSubmit(newItem);
 
+      final hostContext = widget.parentContext ?? (mounted ? Navigator.of(context).context : null);
       if (!mounted) return;
       Navigator.of(context).pop();
 
       // If backend returns possible matches (FR-9), present them in a modal!
       if (createdReport != null &&
           createdReport.possibleMatches != null &&
-          createdReport.possibleMatches!.isNotEmpty) {
-        _showPossibleMatchesModal(context, createdReport);
+          createdReport.possibleMatches!.isNotEmpty &&
+          hostContext != null &&
+          hostContext.mounted) {
+        _showPossibleMatchesModal(hostContext, createdReport);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

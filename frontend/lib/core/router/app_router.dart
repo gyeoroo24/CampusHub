@@ -10,6 +10,8 @@ import '../../features/buy_sell/providers/buy_sell_providers.dart';
 import '../../features/buy_sell/ui/buy_sell_feed_screen.dart';
 import '../../features/lost_found/providers/lost_found_providers.dart';
 import '../../features/lost_found/ui/lost_found_feed_screen.dart';
+import '../../features/admin/ui/admin_controls_screen.dart';
+import '../../features/profile/ui/user_profile_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Tab index provider — drives in-app tab switching WITHOUT browser history
@@ -28,6 +30,14 @@ final GoRouter appRouter = GoRouter(
         GoRoute(
           path: '/app',
           builder: (context, state) => const AppShellLayout(),
+        ),
+        GoRoute(
+          path: '/profile',
+          builder: (context, state) => const UserProfileScreen(),
+        ),
+        GoRoute(
+          path: '/admin',
+          builder: (context, state) => const AdminControlsScreen(),
         ),
       ],
     ),
@@ -304,6 +314,21 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
           const ThemeToggleButton(),
           const SizedBox(width: 8),
 
+          // Admin Controls Quick Access
+          if (!isGuest && currentUser.isAdmin)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilledButton.tonalIcon(
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+                icon: const Icon(Icons.admin_panel_settings_rounded, size: 16, color: Colors.red),
+                label: const Text('Admin Panel', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                onPressed: () => context.push('/admin'),
+              ),
+            ),
+
           // User Profile / Sign In Pill
           if (isDesktop)
             InkWell(
@@ -529,6 +554,18 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
                   ),
                 ),
             ],
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.tonalIcon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  context.push('/profile');
+                },
+                icon: const Icon(Icons.person_outline_rounded, size: 16),
+                label: const Text('Open Full Profile & My Postings'),
+              ),
+            ),
             if (currentUser.isAdmin) ...[
               const Divider(height: 24),
               Row(

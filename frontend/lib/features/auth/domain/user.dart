@@ -24,24 +24,35 @@ enum UserRole {
 /// Represents an active moderator assignment for a specific module or scope (FR-3).
 class ModeratorGrant {
   final String id;
+  final String? userId;
+  final String? userEmail;
+  final String? userName;
   final String module; // 'buy_sell', 'lost_found', 'academic_help', 'placement_hub'
-  final String scopeType; // 'all', 'department', 'course'
+  final String scopeType; // 'all', 'module', 'department', 'course'
   final String? departmentId;
   final String? courseId;
   final DateTime grantedAt;
+  final DateTime? revokedAt;
 
   const ModeratorGrant({
     required this.id,
+    this.userId,
+    this.userEmail,
+    this.userName,
     required this.module,
     required this.scopeType,
     this.departmentId,
     this.courseId,
     required this.grantedAt,
+    this.revokedAt,
   });
 
   factory ModeratorGrant.fromJson(Map<String, dynamic> json) {
     return ModeratorGrant(
       id: json['id']?.toString() ?? '',
+      userId: json['user_id']?.toString(),
+      userEmail: json['user_email']?.toString(),
+      userName: json['user_name']?.toString(),
       module: json['module']?.toString() ?? '',
       scopeType: json['scope_type']?.toString() ?? 'all',
       departmentId: json['department_id']?.toString(),
@@ -49,17 +60,24 @@ class ModeratorGrant {
       grantedAt: json['granted_at'] != null
           ? DateTime.tryParse(json['granted_at'].toString()) ?? DateTime.now()
           : DateTime.now(),
+      revokedAt: json['revoked_at'] != null
+          ? DateTime.tryParse(json['revoked_at'].toString())
+          : null,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      if (userId != null) 'user_id': userId,
+      if (userEmail != null) 'user_email': userEmail,
+      if (userName != null) 'user_name': userName,
       'module': module,
       'scope_type': scopeType,
       'department_id': departmentId,
       'course_id': courseId,
       'granted_at': grantedAt.toIso8601String(),
+      if (revokedAt != null) 'revoked_at': revokedAt!.toIso8601String(),
     };
   }
 }

@@ -540,4 +540,18 @@ class MockLostFoundRepository implements ILostFoundRepository {
     _categories.add(newCat);
     return newCat;
   }
+
+  @override
+  Future<List<LostFoundItem>> getPossibleMatches(LostFoundItem item) async {
+    final oppositeKind = item.kind == PostType.lost ? PostType.found : PostType.lost;
+    return _mockReports
+        .where(
+          (r) =>
+              r.id != item.id &&
+              r.kind == oppositeKind &&
+              r.category.id == item.category.id &&
+              r.status == ReportStatus.open,
+        )
+        .toList();
+  }
 }

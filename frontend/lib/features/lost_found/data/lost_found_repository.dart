@@ -71,4 +71,7 @@ abstract class ILostFoundRepository {
 
   /// Adds a category or retrieves existing one (`POST /api/v1/lost-found/categories`).
   Future<CategoryRef> createCategory(String name);
+
+  /// Retrieves potential matches for an item (open reports of opposite kind in same category).
+  Future<List<LostFoundItem>> getPossibleMatches(LostFoundItem item);
 }
