@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:campus_hub/core/models/category_ref.dart';
 import 'package:campus_hub/core/models/contact.dart';
 import 'package:campus_hub/core/models/user_ref.dart';
@@ -11,7 +12,7 @@ import 'package:campus_hub/features/auth/data/auth_repository.dart';
 import 'package:campus_hub/features/auth/domain/user.dart';
 import 'package:campus_hub/features/auth/providers/auth_providers.dart';
 import 'package:campus_hub/features/buy_sell/data/mock_buy_sell_repository.dart';
-import 'package:campus_hub/features/buy_sell/domain/buy_sell_item.dart';
+import 'package:campus_hub/core/router/app_router.dart';
 import 'package:campus_hub/features/buy_sell/providers/buy_sell_providers.dart';
 import 'package:campus_hub/features/lost_found/data/mock_lost_found_repository.dart';
 import 'package:campus_hub/features/lost_found/domain/lost_found_item.dart';
@@ -20,6 +21,9 @@ import 'package:campus_hub/features/lost_found/ui/widgets/lost_found_detail_dial
 import 'package:campus_hub/features/profile/ui/user_profile_screen.dart';
 
 void main() {
+  setUp(() {
+    MockAdminRepository.resetMockData();
+  });
   group('Admin Repository & Email-Based Operations Tests', () {
     test('Admin promotes and revokes moderator using IISc email ID', () async {
       final repo = MockAdminRepository();
@@ -258,8 +262,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Access Restricted'), findsOneWidget);
-      expect(find.textContaining('This area is restricted to the active IISc CampusHub Administrator'), findsOneWidget);
+      expect(find.text('Access Restricted'), findsNWidgets(2));
+      expect(find.textContaining('This area is restricted to active IISc CampusHub Administrators'), findsOneWidget);
     });
 
     testWidgets('Administrator sees full governance tabs', (WidgetTester tester) async {
@@ -293,6 +297,69 @@ void main() {
       expect(find.text('Categories'), findsOneWidget);
       expect(find.text('System & Health'), findsOneWidget);
       expect(find.text('Promote User to Moderator by IISc Email'), findsOneWidget);
+    });
+
+    testWidgets('Module moderator has access to Moderator Panel and Reports Queue', (WidgetTester tester) async {
+      final modUser = User(
+        id: 'usr_mock_002',
+        email: 'cadithya@iisc.ac.in',
+        name: 'Adithya Chippa',
+        isAdmin: false,
+        moderatorGrants: [
+          ModeratorGrant(
+            id: 'grant_101',
+            module: 'buy_sell',
+            scopeType: 'module',
+            grantedAt: DateTime.now(),
+          ),
+        ],
+        createdAt: DateTime.now(),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            currentUserProvider.overrideWith((ref) => modUser),
+            adminRepositoryProvider.overrideWithValue(MockAdminRepository()),
+            buySellCategoriesProvider.overrideWith((ref) => [const CategoryRef(id: 1, name: 'Books')]),
+            lostFoundCategoriesProvider.overrideWith((ref) => [const CategoryRef(id: 1, name: 'Electronics')]),
+          ],
+          child: const MaterialApp(
+            home: AdminControlsScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Access is granted, not restricted
+      expect(find.text('Access Restricted'), findsNothing);
+      expect(find.text('Moderator Controls & Reports'), findsOneWidget);
+      expect(find.text('Reports Queue (FR-10)'), findsOneWidget);
+    });
+
+    test('MockAuthRepository hydrates active moderator grants and profile for designated moderator', () async {
+      final authRepo = MockAuthRepository();
+
+      // Sign in as cadithya@iisc.ac.in (designated Buy & Sell moderator in MockAdminRepository)
+      final user = await authRepo.signInWithEmail('cadithya@iisc.ac.in');
+
+      expect(user.email, 'cadithya@iisc.ac.in');
+      expect(user.name, 'Adithya Chippa');
+      expect(user.isAdmin, isFalse);
+      expect(user.isModerator, isTrue);
+      expect(user.canModerateBuySell, isTrue);
+      expect(user.canModerateLostFound, isFalse);
+      expect(user.roles.contains(UserRole.moderator), isTrue);
+      expect(user.moderatorGrants.length, greaterThanOrEqualTo(1));
+      expect(user.moderatorGrants.first.module, 'buy_sell');
+    });
+
+    test('GoRouter root path / is configured with redirect to /app', () {
+      final rootRoute = appRouter.configuration.routes
+          .whereType<GoRoute>()
+          .firstWhere((r) => r.path == '/');
+      expect(rootRoute.path, '/');
+      expect(rootRoute.redirect, isNotNull);
     });
   });
 }

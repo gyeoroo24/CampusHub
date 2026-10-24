@@ -24,6 +24,10 @@ final tabIndexProvider = StateProvider<int>((ref) => 0);
 final GoRouter appRouter = GoRouter(
   initialLocation: '/app',
   routes: [
+    GoRoute(
+      path: '/',
+      redirect: (_, __) => '/app',
+    ),
     ShellRoute(
       builder: (context, state, child) => child,
       routes: [
@@ -42,6 +46,7 @@ final GoRouter appRouter = GoRouter(
       ],
     ),
   ],
+  errorBuilder: (context, state) => const AppShellLayout(),
 );
 
 // ---------------------------------------------------------------------------
@@ -103,6 +108,7 @@ class _AppRefreshButtonState extends ConsumerState<AppRefreshButton>
     try {
       // 1. Refetch user profile & updated authority from backend
       await ref.read(authRepositoryProvider).getCurrentUser();
+      ref.invalidate(authStateProvider);
 
       // 2. Refetch Buy & Sell feeds & categories
       ref.read(buySellPaginationProvider.notifier).loadInitial();
@@ -325,6 +331,19 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
                 ),
                 icon: const Icon(Icons.admin_panel_settings_rounded, size: 16, color: Colors.red),
                 label: const Text('Admin Panel', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                onPressed: () => context.push('/admin'),
+              ),
+            )
+          else if (!isGuest && currentUser.isModerator)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilledButton.tonalIcon(
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+                icon: const Icon(Icons.shield_outlined, size: 16, color: Colors.blue),
+                label: const Text('Moderator', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 onPressed: () => context.push('/admin'),
               ),
             ),

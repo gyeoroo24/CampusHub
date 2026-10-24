@@ -1,6 +1,6 @@
 # CampusHub: Project Context, Architecture & Session Handoff Guide
 
-**Document Version:** 3.7  
+**Document Version:** 3.8  
 **Last Updated:** 24 October 2026  
 **Project:** CampusHub — Cloud Computing Course Project (DS252), MTech CSA, Indian Institute of Science (IISc), Bangalore.  
 **Repository Branch Context:**
@@ -205,8 +205,13 @@ CampusHub/frontend/lib/
     * Built full `AdminControlsScreen` (`/admin`): 5 tabs covering Moderator promotion/demotion by IISc Email ID (FR-3), single-admin handover and account activation/deactivation by email, content moderation reports queue (FR-10), campus categories governance, and system telemetry health canary.
     * Built rich `UserProfileScreen` (`/profile`): user details header with role badges, profile update form (`PATCH /api/v1/me`: name, phone, programme, graduation year), and personal postings activity hub across Buy & Sell, Lost reports, and Found reports with quick Edit, Status toggle, and Delete actions.
     * Wired Possible Matches section into `LostFoundDetailDialog` for both Lost posts and Found posts with 1-click tap-to-inspect navigation.
+  * **Step 16 (Root Path Redirect & Moderator Role Hydration Across UI):**
+    * Fixed `GoException: no routes for location: /` by adding dedicated `/` -> `/app` redirect and an `errorBuilder` fallback in `app_router.dart`.
+    * Implemented dynamic moderator grant and profile hydration in `MockAuthRepository` (`verifyOtp` and `getCurrentUser`), ensuring appointed moderators (`cadithya@iisc.ac.in`, `dinkylakhani@iisc.ac.in`) receive `UserRole.moderator`, `canModerateBuySell` / `canModerateLostFound`, active moderation scope chips, and `Moderator: Remove Listing` buttons on other users' postings.
+    * Extended governance panel `/admin` access to appointed moderators, defaulting to the Reports Queue (FR-10) with responsive action buttons while safeguarding single-admin tasks.
+    * Added 'Moderator' dynamic action to the global AppBar and UserProfileScreen.
 * **Static Analysis:** `flutter analyze` runs with **0 errors, 0 warnings, 0 hints**.
-* **Automated Tests:** `flutter test` executes **49 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`, `live_backend_integration_test.dart`, `filter_and_seller_actions_test.dart`, `admin_and_profile_test.dart`).
+* **Automated Tests:** `flutter test` executes **52 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`, `live_backend_integration_test.dart`, `filter_and_seller_actions_test.dart`, `admin_and_profile_test.dart`).
 
 ---
 

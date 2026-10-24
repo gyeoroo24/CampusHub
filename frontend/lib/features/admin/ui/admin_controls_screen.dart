@@ -38,7 +38,9 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    final user = ref.read(currentUserProvider);
+    final initialIndex = (user != null && !user.isAdmin && user.isModerator) ? 2 : 0;
+    _tabController = TabController(length: 5, vsync: this, initialIndex: initialIndex);
   }
 
   @override
@@ -56,15 +58,15 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
     final isDark = theme.brightness == Brightness.dark;
     final currentUser = ref.watch(currentUserProvider);
 
-    // Security Gate: Admin only
-    if (currentUser == null || !currentUser.isAdmin) {
+    // Security Gate: Admin or Moderator
+    if (currentUser == null || (!currentUser.isAdmin && !currentUser.isModerator)) {
       return Scaffold(
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => context.go('/app'),
           ),
-          title: const Text('Admin Controls'),
+          title: const Text('Access Restricted'),
         ),
         body: Center(
           child: ConstrainedBox(
@@ -89,7 +91,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'This area is restricted to the active IISc CampusHub Administrator. Please sign in with an administrator account to view and execute governance actions.',
+                      'This area is restricted to active IISc CampusHub Administrators and appointed Module Moderators. Please sign in with an authorized account to view and execute governance actions.',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: theme.hintColor, fontSize: 13, height: 1.4),
                     ),
@@ -128,23 +130,29 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
             Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: Colors.blue.shade900,
+                color: currentUser.isAdmin ? Colors.blue.shade900 : Colors.teal.shade800,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.admin_panel_settings_rounded, color: Colors.white, size: 20),
+              child: Icon(
+                currentUser.isAdmin ? Icons.admin_panel_settings_rounded : Icons.shield_outlined,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 12),
-            const Column(
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Admin Controls & Governance',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  currentUser.isAdmin ? 'Admin Controls & Governance' : 'Moderator Controls & Reports',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 Text(
-                  'Single-Admin Architecture • PRD §3.1 & FR-3',
-                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                  currentUser.isAdmin
+                      ? 'Single-Admin Architecture • PRD §3.1 & FR-3'
+                      : 'Module Moderation • PRD §3.1 & FR-10',
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
                 ),
               ],
             ),
@@ -182,6 +190,8 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
   // ---------------------------------------------------------------------------
   Widget _buildModeratorsTab(bool isDark, ThemeData theme) {
     final grantsAsync = ref.watch(moderatorGrantsProvider);
+    final currentUser = ref.watch(currentUserProvider);
+    final isUserAdmin = currentUser?.isAdmin ?? false;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -191,108 +201,138 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Promote form card
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(
-                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+              // Promote form card (Admin only) or Informative card (Moderator)
+              if (isUserAdmin)
+                Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.person_add_alt_1_rounded, size: 20, color: theme.colorScheme.primary),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Promote User to Moderator by IISc Email',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Admins can grant module-scoped review authority to any IISc student or faculty by their email address.',
+                          style: TextStyle(fontSize: 12, color: theme.hintColor),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _modEmailController,
+                          decoration: InputDecoration(
+                            labelText: 'IISc Email Address',
+                            hintText: 'e.g. cadithya@iisc.ac.in',
+                            prefixIcon: const Icon(Icons.email_outlined, size: 18),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                initialValue: _selectedModule,
+                                decoration: InputDecoration(
+                                  labelText: 'Target Module',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                ),
+                                items: const [
+                                  DropdownMenuItem(value: 'buy_sell', child: Text('Buy & Sell')),
+                                  DropdownMenuItem(value: 'lost_found', child: Text('Lost & Found')),
+                                  DropdownMenuItem(value: 'academic_help', child: Text('Academic Help')),
+                                  DropdownMenuItem(value: 'placement_hub', child: Text('Placement Hub')),
+                                ],
+                                onChanged: (val) {
+                                  if (val != null) setState(() => _selectedModule = val);
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                initialValue: _selectedScope,
+                                decoration: InputDecoration(
+                                  labelText: 'Scope Type',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                ),
+                                items: const [
+                                  DropdownMenuItem(value: 'module', child: Text('Module-wide')),
+                                  DropdownMenuItem(value: 'department', child: Text('Department-scoped')),
+                                  DropdownMenuItem(value: 'course', child: Text('Course-scoped')),
+                                ],
+                                onChanged: (val) {
+                                  if (val != null) setState(() => _selectedScope = val);
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: FilledButton.icon(
+                            onPressed: _isPromotingMod ? null : _handlePromoteModerator,
+                            icon: _isPromotingMod
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  )
+                                : const Icon(Icons.shield_outlined, size: 16),
+                            label: const Text('Promote to Moderator'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(color: Colors.blue.shade200),
+                  ),
+                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Icon(Icons.shield_outlined, color: Colors.blue.shade700, size: 24),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Moderator View: Only the Administrator can assign or demote moderators. To review and action reported content, switch to Reports Queue.',
+                            style: TextStyle(fontSize: 13, color: isDark ? Colors.blue.shade200 : Colors.blue.shade900),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton.tonal(
+                          onPressed: () => _tabController.animateTo(2),
+                          child: const Text('Reports Queue'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.person_add_alt_1_rounded, size: 20, color: theme.colorScheme.primary),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Promote User to Moderator by IISc Email',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Admins can grant module-scoped review authority to any IISc student or faculty by their email address.',
-                        style: TextStyle(fontSize: 12, color: theme.hintColor),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _modEmailController,
-                        decoration: InputDecoration(
-                          labelText: 'IISc Email Address',
-                          hintText: 'e.g. cadithya@iisc.ac.in',
-                          prefixIcon: const Icon(Icons.email_outlined, size: 18),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: _selectedModule,
-                              decoration: InputDecoration(
-                                labelText: 'Target Module',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              ),
-                              items: const [
-                                DropdownMenuItem(value: 'buy_sell', child: Text('Buy & Sell')),
-                                DropdownMenuItem(value: 'lost_found', child: Text('Lost & Found')),
-                                DropdownMenuItem(value: 'academic_help', child: Text('Academic Help')),
-                                DropdownMenuItem(value: 'placement_hub', child: Text('Placement Hub')),
-                              ],
-                              onChanged: (val) {
-                                if (val != null) setState(() => _selectedModule = val);
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: _selectedScope,
-                              decoration: InputDecoration(
-                                labelText: 'Scope Type',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              ),
-                              items: const [
-                                DropdownMenuItem(value: 'module', child: Text('Module-wide')),
-                                DropdownMenuItem(value: 'department', child: Text('Department-scoped')),
-                                DropdownMenuItem(value: 'course', child: Text('Course-scoped')),
-                              ],
-                              onChanged: (val) {
-                                if (val != null) setState(() => _selectedScope = val);
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: FilledButton.icon(
-                          onPressed: _isPromotingMod ? null : _handlePromoteModerator,
-                          icon: _isPromotingMod
-                              ? const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                )
-                              : const Icon(Icons.shield_outlined, size: 16),
-                          label: const Text('Promote to Moderator'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
 
               const SizedBox(height: 24),
               const Text(
@@ -364,16 +404,18 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
                             'Email: ${grant.userEmail ?? "—"} • Scope: ${grant.scopeType} • Granted: ${DateTimeFormatter.timeAgo(grant.grantedAt)}',
                             style: TextStyle(fontSize: 12, color: theme.hintColor),
                           ),
-                          trailing: OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.red.shade700,
-                              side: BorderSide(color: Colors.red.shade300),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            icon: const Icon(Icons.remove_circle_outline, size: 14),
-                            label: const Text('Revoke / Demote', style: TextStyle(fontSize: 12)),
-                            onPressed: () => _handleRevokeModerator(grant),
-                          ),
+                          trailing: isUserAdmin
+                              ? OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.red.shade700,
+                                    side: BorderSide(color: Colors.red.shade300),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                  icon: const Icon(Icons.remove_circle_outline, size: 14),
+                                  label: const Text('Revoke / Demote', style: TextStyle(fontSize: 12)),
+                                  onPressed: () => _handleRevokeModerator(grant),
+                                )
+                              : null,
                         ),
                       );
                     },
@@ -446,6 +488,48 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
   // TAB 2: User Account Controls & Single Admin Handover
   // ---------------------------------------------------------------------------
   Widget _buildUsersTab(bool isDark, ThemeData theme) {
+    final currentUser = ref.watch(currentUserProvider);
+    final isUserAdmin = currentUser?.isAdmin ?? false;
+
+    if (!isUserAdmin) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 580),
+          child: Card(
+            margin: const EdgeInsets.all(24),
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.lock_person_outlined, size: 48, color: Colors.orange.shade700),
+                  const SizedBox(height: 12),
+                  const Text('Administrator Privileges Required', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'User account deactivation and administrative role handover are reserved strictly for the Administrator. Switch to Reports Queue to review flagged listings.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: theme.hintColor, fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    icon: const Icon(Icons.report_gmailerrorred_rounded, size: 16),
+                    label: const Text('Go to Reports Queue'),
+                    onPressed: () => _tabController.animateTo(2),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     final usersAsync = ref.watch(registeredUsersProvider);
 
     return SingleChildScrollView(
@@ -811,26 +895,29 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
                               ],
                               if (isOpen) ...[
                                 const Divider(height: 24),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    OutlinedButton(
-                                      onPressed: () => _handleResolveReport(r.id, action: 'dismissed', removeContent: false),
-                                      child: const Text('Dismiss Flag'),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    OutlinedButton(
-                                      onPressed: () => _handleResolveReport(r.id, action: 'actioned', removeContent: false),
-                                      child: const Text('Action (Keep Content)'),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    FilledButton.icon(
-                                      style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-                                      icon: const Icon(Icons.delete_sweep_rounded, size: 16),
-                                      label: const Text('Action & Soft-Delete'),
-                                      onPressed: () => _handleResolveReport(r.id, action: 'actioned', removeContent: true),
-                                    ),
-                                  ],
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Wrap(
+                                    alignment: WrapAlignment.end,
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      OutlinedButton(
+                                        onPressed: () => _handleResolveReport(r.id, action: 'dismissed', removeContent: false),
+                                        child: const Text('Dismiss Flag'),
+                                      ),
+                                      OutlinedButton(
+                                        onPressed: () => _handleResolveReport(r.id, action: 'actioned', removeContent: false),
+                                        child: const Text('Action (Keep Content)'),
+                                      ),
+                                      FilledButton.icon(
+                                        style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+                                        icon: const Icon(Icons.delete_sweep_rounded, size: 16),
+                                        label: const Text('Action & Soft-Delete'),
+                                        onPressed: () => _handleResolveReport(r.id, action: 'actioned', removeContent: true),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ],

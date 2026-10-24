@@ -30,7 +30,24 @@ abstract class IAdminRepository {
 
 /// In-memory mock admin repository for local UI development and testing.
 class MockAdminRepository implements IAdminRepository {
-  static final List<ModeratorGrant> _mockGrants = [
+  static void setAdmin(String email, bool isAdmin) {
+    final clean = email.trim().toLowerCase();
+    final idx = _mockUsers.indexWhere((u) => u.email.toLowerCase() == clean);
+    if (idx != -1) {
+      _mockUsers[idx] = _mockUsers[idx].copyWith(isAdmin: isAdmin);
+    }
+  }
+
+  static void resetMockData() {
+    _mockGrants
+      ..clear()
+      ..addAll(_buildInitialGrants());
+    _mockUsers
+      ..clear()
+      ..addAll(_buildInitialUsers());
+  }
+
+  static List<ModeratorGrant> _buildInitialGrants() => [
     ModeratorGrant(
       id: 'grant_101',
       userId: 'usr_mod_1',
@@ -60,7 +77,7 @@ class MockAdminRepository implements IAdminRepository {
     ),
   ];
 
-  static final List<User> _mockUsers = [
+  static List<User> _buildInitialUsers() => [
     User(
       id: 'usr_mock_001',
       email: 'kmukund@iisc.ac.in',
@@ -118,6 +135,9 @@ class MockAdminRepository implements IAdminRepository {
     ),
   ];
 
+  static final List<ModeratorGrant> _mockGrants = _buildInitialGrants();
+  static final List<User> _mockUsers = _buildInitialUsers();
+
   static final List<ContentReport> _mockReports = [
     ContentReport(
       id: 'rep_001',
@@ -147,6 +167,20 @@ class MockAdminRepository implements IAdminRepository {
       createdAt: DateTime.now().subtract(const Duration(days: 1)),
     ),
   ];
+
+  static List<ModeratorGrant> getActiveGrantsForEmail(String email) {
+    final clean = email.trim().toLowerCase();
+    return _mockGrants
+        .where((g) => g.userEmail?.toLowerCase() == clean && g.revokedAt == null)
+        .toList();
+  }
+
+  static User? findRegisteredUser(String email) {
+    final clean = email.trim().toLowerCase();
+    final idx = _mockUsers.indexWhere((u) => u.email.toLowerCase() == clean);
+    if (idx != -1) return _mockUsers[idx];
+    return null;
+  }
 
   @override
   Future<List<ModeratorGrant>> listModerators({bool includeRevoked = false}) async {

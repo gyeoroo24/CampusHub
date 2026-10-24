@@ -2,6 +2,7 @@ import 'dart:async';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_endpoints.dart';
 import '../../../../core/storage/token_storage.dart';
+import '../../admin/data/admin_repository.dart';
 import '../domain/account_status.dart';
 import '../domain/user.dart';
 
@@ -45,7 +46,15 @@ class MockAuthRepository implements IAuthRepository {
 
     final savedUser = await tokenStorage.getSavedUser();
     if (savedUser != null) {
-      _currentUser = User.fromJson(savedUser);
+      final user = User.fromJson(savedUser);
+      final activeGrants = MockAdminRepository.getActiveGrantsForEmail(user.email);
+      final registered = MockAdminRepository.findRegisteredUser(user.email);
+      _currentUser = user.copyWith(
+        name: registered != null && registered.name.isNotEmpty ? registered.name : user.name,
+        isAdmin: registered?.isAdmin ?? user.isAdmin,
+        isActive: registered?.isActive ?? user.isActive,
+        moderatorGrants: activeGrants,
+      );
     } else {
       // Default initial mock user with IISc identity
       _currentUser = User(
@@ -81,6 +90,18 @@ class MockAuthRepository implements IAuthRepository {
   @override
   Future<User?> getCurrentUser() async {
     await _init();
+    if (_currentUser != null) {
+      final activeGrants = MockAdminRepository.getActiveGrantsForEmail(_currentUser!.email);
+      final registered = MockAdminRepository.findRegisteredUser(_currentUser!.email);
+      _currentUser = _currentUser!.copyWith(
+        name: registered != null && registered.name.isNotEmpty ? registered.name : _currentUser!.name,
+        isAdmin: registered?.isAdmin ?? _currentUser!.isAdmin,
+        isActive: registered?.isActive ?? _currentUser!.isActive,
+        moderatorGrants: activeGrants,
+      );
+      await tokenStorage.saveUser(_currentUser!.toJson());
+      _controller.add(_currentUser);
+    }
     return _currentUser;
   }
 
@@ -147,6 +168,7 @@ class MockAuthRepository implements IAuthRepository {
     }
     // Caller is downgraded in the same transaction
     _currentUser = _currentUser!.copyWith(isAdmin: false);
+    MockAdminRepository.setAdmin(_currentUser!.email, false);
     await tokenStorage.saveUser(_currentUser!.toJson());
     _controller.add(_currentUser);
 
@@ -179,11 +201,16 @@ class MockAuthRepository implements IAuthRepository {
       throw Exception('Please enter a valid 6-digit verification code.');
     }
 
-    final user = User(
+    final registered = MockAdminRepository.findRegisteredUser(trimmedEmail);
+    final grants = MockAdminRepository.getActiveGrantsForEmail(trimmedEmail);
+
+    final user = (registered ?? User(
       id: 'usr_${trimmedEmail.hashCode.abs()}',
       email: trimmedEmail,
       name: trimmedEmail.split('@').first,
       createdAt: DateTime.now(),
+    )).copyWith(
+      moderatorGrants: grants,
     );
 
     _currentUser = user;

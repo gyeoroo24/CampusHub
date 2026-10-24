@@ -145,6 +145,13 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
               icon: const Icon(Icons.admin_panel_settings_rounded, size: 16),
               label: const Text('Admin Controls'),
               onPressed: () => context.push('/admin'),
+            )
+          else if (currentUser.isModerator)
+            TextButton.icon(
+              style: TextButton.styleFrom(foregroundColor: Colors.blue.shade700),
+              icon: const Icon(Icons.shield_outlined, size: 16),
+              label: const Text('Moderator Panel'),
+              onPressed: () => context.push('/admin'),
             ),
           IconButton(
             tooltip: 'Sign Out',
@@ -235,6 +242,15 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: const Text('ADMIN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red)),
+                            )
+                          else if (user.isModerator)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade100,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text('MODERATOR', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue.shade900)),
                             ),
                           const SizedBox(width: 4),
                           Container(
@@ -315,21 +331,41 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
 
             if (user.moderatorGrants.isNotEmpty) ...[
               const Divider(height: 24),
-              Row(
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  Icon(Icons.shield_outlined, size: 16, color: Colors.blue.shade700),
-                  const SizedBox(width: 6),
-                  const Text('Active Moderation Appointments:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                  const SizedBox(width: 8),
-                  for (final grant in user.moderatorGrants)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: Chip(
-                        label: Text('${grant.module.toUpperCase()} (${grant.scopeType})', style: const TextStyle(fontSize: 11)),
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.shield_outlined, size: 16, color: Colors.blue.shade700),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'Active Moderation Duties:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                       ),
+                    ],
+                  ),
+                  for (final grant in user.moderatorGrants)
+                    Chip(
+                      avatar: const Icon(Icons.verified_user_outlined, size: 14),
+                      label: Text(
+                        '${grant.module.replaceAll('_', ' ').toUpperCase()} (${grant.scopeType})',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
                     ),
+                  FilledButton.tonalIcon(
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    ),
+                    icon: const Icon(Icons.report_gmailerrorred_rounded, size: 14),
+                    label: const Text('Reports Queue', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    onPressed: () => context.push('/admin'),
+                  ),
                 ],
               ),
             ],
