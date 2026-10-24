@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../utils/web_history_support.dart';
 
 /// Compact dialog for selecting a custom price range (Min Price - Max Price) in Buy & Sell.
 class CompactPriceRangePickerDialog extends StatefulWidget {
@@ -74,9 +75,12 @@ class _CompactPriceRangePickerDialogState extends State<CompactPriceRangePickerD
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Container(
+    return ModalHistoryWrapper(
+      child: Dialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
         constraints: const BoxConstraints(maxWidth: 420),
         padding: const EdgeInsets.all(20.0),
         child: Column(
@@ -223,7 +227,7 @@ class _CompactPriceRangePickerDialogState extends State<CompactPriceRangePickerD
           ],
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildPresetChip(String label, double? min, double? max) {

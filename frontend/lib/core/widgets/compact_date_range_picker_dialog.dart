@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/web_history_support.dart';
 
 class CompactDateRangePickerDialog extends StatefulWidget {
   final DateTimeRange? initialDateRange;
@@ -89,9 +90,12 @@ class _CompactDateRangePickerDialogState extends State<CompactDateRangePickerDia
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Container(
+    return ModalHistoryWrapper(
+      child: Dialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
         constraints: const BoxConstraints(maxWidth: 420),
         padding: const EdgeInsets.all(20.0),
         child: Column(
@@ -158,7 +162,7 @@ class _CompactDateRangePickerDialogState extends State<CompactDateRangePickerDia
           ],
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildDateTimeBox(String title, DateTime date, TimeOfDay time, VoidCallback onTapDate, VoidCallback onTapTime, bool isDark) {

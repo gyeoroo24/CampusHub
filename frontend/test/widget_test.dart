@@ -27,9 +27,9 @@ void main() {
     await tester.pumpWidget(const ProviderScope(child: CampusHubApp()));
     await tester.pumpAndSettle();
 
-    // Verify title and Sell button on mobile
-    expect(find.text('CampusHub'), findsWidgets);
-    expect(find.text('Sell'), findsOneWidget);
+    // Verify search bar in AppBar on mobile and Sell FAB
+    expect(find.byType(FloatingActionButton), findsOneWidget);
+    expect(find.text('Sell Item'), findsOneWidget);
 
     // Switch to Lost & Found on bottom nav
     final lnfTab = find.byIcon(Icons.find_in_page_outlined);
@@ -37,8 +37,10 @@ void main() {
     await tester.tap(lnfTab);
     await tester.pumpAndSettle();
 
-    expect(find.text('Lost Items'), findsWidgets);
-    expect(find.text('Found Items'), findsWidgets);
+    // Compact tabs and FABs on mobile
+    expect(find.text('Lost'), findsWidgets);
+    expect(find.text('Found'), findsWidgets);
+    expect(find.byType(FloatingActionButton), findsNWidgets(2));
   });
 
   testWidgets('CampusHub user profile account dialog renders without error', (WidgetTester tester) async {
@@ -158,14 +160,14 @@ void main() {
     expect(find.widgetWithText(FilterChip, 'This Week'), findsOneWidget);
     expect(find.widgetWithText(FilterChip, 'This Month'), findsOneWidget);
 
-    // Toggle view mode to List View
-    final viewModeToggle = find.byTooltip('List View');
+    // Toggle view mode to Compact View
+    final viewModeToggle = find.byTooltip('Compact view');
     expect(viewModeToggle, findsOneWidget);
     await tester.tap(viewModeToggle);
     await tester.pumpAndSettle();
 
-    // Now tooltip changes to Grid View
-    expect(find.byTooltip('Grid View'), findsOneWidget);
+    // Now tooltip changes to Large view
+    expect(find.byTooltip('Large view'), findsOneWidget);
   });
 
   testWidgets('CampusHub mobile list view for both Buy & Sell and Lost & Found renders without overflows', (WidgetTester tester) async {
@@ -176,14 +178,14 @@ void main() {
     await tester.pumpWidget(const ProviderScope(child: CampusHubApp()));
     await tester.pumpAndSettle();
 
-    // In Buy & Sell, switch to List View on mobile
-    final bnsListViewBtn = find.byTooltip('List View');
+    // In Buy & Sell, switch to Compact View on mobile
+    final bnsListViewBtn = find.byTooltip('Compact view');
     expect(bnsListViewBtn, findsOneWidget);
     await tester.tap(bnsListViewBtn);
     await tester.pumpAndSettle();
 
     // Verify it switched without overflow
-    expect(find.byTooltip('Grid View'), findsOneWidget);
+    expect(find.byTooltip('Large view'), findsOneWidget);
 
     // Switch to Lost & Found tab
     final lnfTab = find.byIcon(Icons.find_in_page_outlined);
@@ -191,14 +193,14 @@ void main() {
     await tester.tap(lnfTab);
     await tester.pumpAndSettle();
 
-    // Switch to List View in LnF on mobile
-    final lnfListViewBtn = find.byTooltip('List View');
+    // Switch to Compact View in LnF on mobile
+    final lnfListViewBtn = find.byTooltip('Compact view');
     expect(lnfListViewBtn, findsOneWidget);
     await tester.tap(lnfListViewBtn);
     await tester.pumpAndSettle();
 
     // Verify LnF switched without overflow
-    expect(find.byTooltip('Grid View'), findsOneWidget);
+    expect(find.byTooltip('Large view'), findsOneWidget);
   });
 
   testWidgets('Buy & Sell custom price range dialog opens and applies price filter', (WidgetTester tester) async {

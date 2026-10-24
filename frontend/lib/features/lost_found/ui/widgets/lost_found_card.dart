@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../../core/utils/date_time_formatter.dart';
 import '../../domain/lost_found_item.dart';
 import 'lost_found_detail_dialog.dart';
@@ -77,11 +78,10 @@ class _LostFoundCardState extends State<LostFoundCard> {
           },
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
             children: [
               // Photo with Hero animation and Badges
-              AspectRatio(
-                aspectRatio: 1.25,
+              Expanded(
+                flex: 9,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -171,84 +171,149 @@ class _LostFoundCardState extends State<LostFoundCard> {
               ),
 
               // Item details
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Category Tag
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: badgeColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        item.category.name,
-                        style: TextStyle(
-                          color: badgeColor,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+              Expanded(
+                flex: 12,
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Category Tag right above title
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                        decoration: BoxDecoration(
+                          color: badgeColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          item.category.name,
+                          style: TextStyle(
+                            color: badgeColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      item.displayTitle,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                        height: 1.3,
+                      const SizedBox(height: 6),
+
+                      // Title
+                      Text(
+                        item.displayTitle,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13.5,
+                          height: 1.25,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                      const SizedBox(height: 4),
+
+                      // Description taking remaining white space
+                      Expanded(
+                        child: Text(
+                          item.description.isNotEmpty ? item.description : 'No distinguishing description provided.',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                            height: 1.3,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                    // Reporter and Location row (consistent with BnS: username on top, location under username)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.person_outline_rounded, size: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                                const SizedBox(width: 3),
+                                  Text(
+                                    item.reporter.name,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.location_on_outlined, size: 11, color: Colors.grey.shade500),
+                                const SizedBox(width: 2),
+                                  Text(
+                                    item.location.isNotEmpty ? item.location : 'Campus',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(Icons.location_on_outlined, size: 12, color: Colors.grey.shade500),
-                        const SizedBox(width: 3),
-                        Expanded(
-                          child: Text(
-                            item.location.isNotEmpty ? item.location : 'Campus',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: isDark ? Colors.grey[400] : Colors.grey[600],
+
+                    // Email Contact Copy Button at very bottom
+                    SizedBox(
+                      width: double.infinity,
+                      height: 30,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          final email = item.reporterContact?.email ??
+                              '${item.reporter.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
+                          Clipboard.setData(ClipboardData(text: email));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Copied $email to clipboard'),
+                              duration: const Duration(seconds: 2),
+                              behavior: SnackBarBehavior.floating,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          );
+                        },
+                        icon: Icon(Icons.email_outlined, size: 13, color: badgeColor),
+                        label: Text(
+                          item.reporterContact?.email ?? 'Copy Email',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: badgeColor,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          side: BorderSide(
+                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            item.reporterContact != null
-                                ? '${item.reporter.name} • Verified'
-                                : 'Reporter: ${item.reporter.name}',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.grey.shade500,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Icon(
-                          item.reporterContact != null ? Icons.lock_open_rounded : Icons.lock_outline_rounded,
-                          size: 12,
-                          color: Colors.grey.shade500,
-                        ),
-                      ],
+                      ),
                     ),
                   ],
                 ),
               ),
-            ],
+            ),
+          ],
           ),
         ),
       ),

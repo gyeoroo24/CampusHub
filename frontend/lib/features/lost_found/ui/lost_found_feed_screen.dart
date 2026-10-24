@@ -12,8 +12,42 @@ class LostFoundFeedScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final isDesktop = MediaQuery.of(context).size.width > 750;
+    final isCompactFab = MediaQuery.of(context).size.width < 420;
 
     return Scaffold(
+      floatingActionButton: isDesktop
+          ? null
+          : Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  FloatingActionButton.extended(
+                    heroTag: 'fab_report_lost',
+                    backgroundColor: const Color(0xFFBE185D),
+                    foregroundColor: Colors.white,
+                    onPressed: () => LostFoundFilterBar.handleReport(context, ref, PostType.lost),
+                    icon: const Icon(Icons.search_off_rounded, size: 18),
+                    label: Text(
+                      isCompactFab ? 'Lost' : 'Report Lost',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ),
+                  FloatingActionButton.extended(
+                    heroTag: 'fab_report_found',
+                    backgroundColor: const Color(0xFF0F766E),
+                    foregroundColor: Colors.white,
+                    onPressed: () => LostFoundFilterBar.handleReport(context, ref, PostType.found),
+                    icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                    label: Text(
+                      isCompactFab ? 'Found' : 'Report Found',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       body: Column(
         children: [
           // Filter Bar
@@ -28,31 +62,11 @@ class LostFoundFeedScreen extends ConsumerWidget {
                   ? Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 10, left: 4),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.search_off_rounded, size: 16, color: Color(0xFFBE185D)),
-                                    const SizedBox(width: 6),
-                                    const Text(
-                                      'Lost Items',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFFBE185D)),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Expanded(
-                                child: LostFoundColumn(
-                                  title: 'Lost Items',
-                                  headerColor: Color(0xFFBE185D),
-                                  postType: PostType.lost,
-                                ),
-                              ),
-                            ],
+                        const Expanded(
+                          child: LostFoundColumn(
+                            title: 'Lost Items',
+                            headerColor: Color(0xFFBE185D),
+                            postType: PostType.lost,
                           ),
                         ),
                         const SizedBox(width: 20),
@@ -62,47 +76,59 @@ class LostFoundFeedScreen extends ConsumerWidget {
                           color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
                         ),
                         const SizedBox(width: 20),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 10, left: 4),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.check_circle_outline_rounded, size: 16, color: Color(0xFF0F766E)),
-                                    const SizedBox(width: 6),
-                                    const Text(
-                                      'Found Items',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F766E)),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Expanded(
-                                child: LostFoundColumn(
-                                  title: 'Found Items',
-                                  headerColor: Color(0xFF0F766E),
-                                  postType: PostType.found,
-                                ),
-                              ),
-                            ],
+                        const Expanded(
+                          child: LostFoundColumn(
+                            title: 'Found Items',
+                            headerColor: Color(0xFF0F766E),
+                            postType: PostType.found,
                           ),
                         ),
                       ],
                     )
-                  : const DefaultTabController(
+                  : DefaultTabController(
                       length: 2,
                       child: Column(
                         children: [
-                          TabBar(
-                            tabs: [
-                              Tab(icon: Icon(Icons.search_off_rounded), text: 'Lost Items'),
-                              Tab(icon: Icon(Icons.check_circle_outline_rounded), text: 'Found Items'),
-                            ],
+                          Container(
+                            height: 36,
+                            margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                            child: TabBar(
+                              indicatorSize: TabBarIndicatorSize.tab,
+                              indicator: BoxDecoration(
+                                color: theme.colorScheme.primaryContainer,
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              labelColor: theme.colorScheme.primary,
+                              unselectedLabelColor: Colors.grey.shade600,
+                              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                              tabs: const [
+                                Tab(
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.search_off_rounded, size: 15),
+                                      SizedBox(width: 6),
+                                      Text('Lost'),
+                                    ],
+                                  ),
+                                ),
+                                Tab(
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.check_circle_outline_rounded, size: 15),
+                                      SizedBox(width: 6),
+                                      Text('Found'),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          SizedBox(height: 12),
-                          Expanded(
+                          const SizedBox(height: 8),
+                          const Expanded(
                             child: TabBarView(
                               children: [
                                 LostFoundColumn(

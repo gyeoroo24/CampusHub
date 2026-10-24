@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/utils/date_time_formatter.dart';
+import '../../../../core/utils/web_history_support.dart';
 import '../../../../core/widgets/photo_carousel.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../../../auth/ui/auth_dialog.dart';
@@ -30,16 +31,19 @@ class LostFoundDetailDialog extends ConsumerWidget {
     final isOwner = currentUser != null && currentUser.isOwnerOf(item.reporter.id);
     final canModerate = currentUser != null && (currentUser.canModerateLostFound || currentUser.isAdmin);
 
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 580, maxHeight: screenHeight * 0.85),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    return ModalHistoryWrapper(
+      child: Dialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: 580, maxHeight: screenHeight * 0.85),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               // ── Photo carousel (square) ──────────────────────────────────
               Stack(
                 children: [
@@ -172,8 +176,6 @@ class LostFoundDetailDialog extends ConsumerWidget {
                       ],
                     ),
                     const Divider(height: 28),
-                    const Text('Detailed Description', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
                     Text(
                       item.description.isNotEmpty ? item.description : 'No distinguishing description provided.',
                       style: TextStyle(
@@ -374,7 +376,7 @@ class LostFoundDetailDialog extends ConsumerWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 
   void _confirmModeratorDelete(BuildContext context, WidgetRef ref) {

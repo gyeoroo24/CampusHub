@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/models/category_ref.dart';
 import '../../../../core/models/photo.dart';
 import '../../../../core/models/user_ref.dart';
+import '../../../../core/utils/web_history_support.dart';
 import '../../domain/buy_sell_item.dart';
 import '../../providers/buy_sell_providers.dart';
 
@@ -76,8 +77,11 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Row(
+    return ModalHistoryWrapper(
+      child: AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        title: const Row(
         children: [
           Icon(Icons.storefront_outlined, size: 22),
           SizedBox(width: 8),
@@ -215,7 +219,7 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
           child: const Text('Publish Listing'),
         ),
       ],
-    );
+    ));
   }
 
   Future<void> _handleSubmit() async {

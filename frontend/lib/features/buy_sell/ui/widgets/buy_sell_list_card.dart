@@ -83,109 +83,106 @@ class _BuySellListCardState extends State<BuySellListCard> {
           },
           child: Padding(
             padding: const EdgeInsets.all(12.0),
-            child: Row(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Thumbnail with Hero animation
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Hero(
-                    tag: 'listing_hero_${item.id}',
-                    child: Opacity(
-                      opacity: isSold ? 0.6 : 1.0,
-                      child: Image.network(
-                        item.imageUrl,
-                        width: 120,
-                        height: 100,
-                        fit: BoxFit.cover,
-                        gaplessPlayback: true,
-                        errorBuilder: (_, __, ___) => Container(
-                          width: 120,
-                          height: 100,
-                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                          child: Icon(Icons.shopping_bag_outlined, size: 30, color: Colors.grey.shade400),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-
-                // Content details
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Thumbnail with smaller status badge on top-left of pic
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Stack(
                         children: [
-                          Expanded(
-                            child: Text(
-                              item.title,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color: isSold ? Colors.grey : null,
-                                decoration: isSold ? TextDecoration.lineThrough : null,
+                          Hero(
+                            tag: 'listing_hero_${item.id}',
+                            child: Opacity(
+                              opacity: isSold ? 0.6 : 1.0,
+                              child: Image.network(
+                                item.imageUrl,
+                                width: 105,
+                                height: 85,
+                                fit: BoxFit.cover,
+                                gaplessPlayback: true,
+                                errorBuilder: (_, __, ___) => Container(
+                                  width: 105,
+                                  height: 85,
+                                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                                  child: Icon(Icons.shopping_bag_outlined, size: 28, color: Colors.grey.shade400),
+                                ),
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: statusColor.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: statusColor, width: 1),
-                            ),
-                            child: Text(
-                              statusLabel,
-                              style: TextStyle(
+                          Positioned(
+                            top: 5,
+                            left: 5,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
                                 color: statusColor,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                statusLabel,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.4,
+                                ),
                               ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        item.description,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? Colors.grey[400] : Colors.grey[600],
-                          height: 1.3,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        alignment: WrapAlignment.spaceBetween,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 12,
-                        runSpacing: 6,
+                    ),
+                    const SizedBox(width: 14),
+
+                    // Content details
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 4,
-                            crossAxisAlignment: WrapCrossAlignment.center,
+                          Text(
+                            item.title,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: isSold ? Colors.grey : null,
+                              decoration: isSold ? TextDecoration.lineThrough : null,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            item.description,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: isDark ? Colors.grey[400] : Colors.grey[600],
+                              height: 1.25,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 8),
+
+                          // Price - Category row with spaceBetween
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
                                 '₹${item.price.toStringAsFixed(0)}',
                                 style: TextStyle(
                                   color: isSold ? Colors.grey : Theme.of(context).colorScheme.primary,
                                   fontWeight: FontWeight.w900,
-                                  fontSize: 18,
+                                  fontSize: 16,
                                 ),
                               ),
-                              ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 90),
+                              const SizedBox(width: 6),
+                              Flexible(
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                                   decoration: BoxDecoration(
                                     color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
                                     borderRadius: BorderRadius.circular(6),
@@ -204,46 +201,82 @@ class _BuySellListCardState extends State<BuySellListCard> {
                               ),
                             ],
                           ),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 4,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.location_on_outlined, size: 12, color: Colors.grey.shade500),
-                                  const SizedBox(width: 3),
-                                  ConstrainedBox(
-                                    constraints: const BoxConstraints(maxWidth: 90),
-                                    child: Text(
-                                      item.location.isNotEmpty ? item.location : 'Campus',
-                                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Text('•', style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
-                              ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 80),
-                                child: Text(
-                                  item.seller.name,
-                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              Text('•', style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
-                              Text(
-                                DateTimeFormatter.timeAgo(item.createdAt),
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                              ),
-                            ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 8),
+                Divider(
+                  height: 1,
+                  thickness: 0.5,
+                  color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                ),
+                const SizedBox(height: 6),
+
+                // Bottom Row: Location (bottom left below pic) - User Name (center) - Time (bottom right below description)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Location below pic
+                    Flexible(
+                      flex: 4,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.location_on_outlined, size: 12, color: Colors.grey.shade500),
+                          const SizedBox(width: 3),
+                          Flexible(
+                            child: Text(
+                              item.location.isNotEmpty ? item.location : 'IISc Campus',
+                              style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 4),
+                    // User name in center
+                    Flexible(
+                      flex: 4,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.person_outline_rounded, size: 12, color: Colors.grey.shade500),
+                          const SizedBox(width: 3),
+                          Flexible(
+                            child: Text(
+                              item.seller.name,
+                              style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    // Time below description
+                    Flexible(
+                      flex: 3,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Icon(Icons.access_time_rounded, size: 11, color: Colors.grey.shade500),
+                          const SizedBox(width: 3),
+                          Flexible(
+                            child: Text(
+                              DateTimeFormatter.timeAgo(item.createdAt),
+                              style: TextStyle(fontSize: 10.5, color: Colors.grey.shade500),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

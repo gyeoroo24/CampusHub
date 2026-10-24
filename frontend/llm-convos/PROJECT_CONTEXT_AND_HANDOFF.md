@@ -1,6 +1,6 @@
 # CampusHub: Project Context, Architecture & Session Handoff Guide
 
-**Document Version:** 3.1  
+**Document Version:** 3.2  
 **Last Updated:** 24 October 2026  
 **Project:** CampusHub — Cloud Computing Course Project (DS252), MTech CSA, Indian Institute of Science (IISc), Bangalore.  
 **Repository Branch Context:**
@@ -81,7 +81,10 @@ CampusHub/frontend/lib/
 │   ├── services/
 │   │   └── upload_service.dart        # 3-step S3 presigned PUT service
 │   ├── utils/
-│   │   └── date_time_formatter.dart   # Relative & absolute date formatting
+│   │   ├── date_time_formatter.dart   # Relative & absolute date formatting
+│   │   ├── web_history_support.dart   # Browser back-button modal interception
+│   │   ├── web_history_web.dart       # Web implementation (pushState/popstate)
+│   │   └── web_history_stub.dart      # Non-web no-op stub
 │   └── widgets/
 │       ├── compact_date_range_picker_dialog.dart # Custom date range dialog
 │       ├── compact_price_range_picker_dialog.dart# Custom min/max price dialog
@@ -150,6 +153,19 @@ CampusHub/frontend/lib/
     * Relocated "+ Report Lost" and "+ Report Found" action buttons into the category pills row with spaceBetween in `LostFoundFilterBar`.
     * Removed redundant boxed column header bars from `LostFoundColumn`.
     * Added custom rupee icon (`Icons.currency_rupee_rounded`) in `BuySellFeedScreen` toolbar opening `CompactPriceRangePickerDialog` with quick presets and min/max inputs, matching the LnF custom date range picker.
+  * Iteration 7.4 / Step 8 UI card refinements, mobile enhancements & back-button support:
+    * Removed green ticks and "Verified" text across cards and user modals (authentication is ubiquitous).
+    * Restructured BnS (`BuySellGridCard`) & LnF (`LostFoundCard`) tiles: status badge on top-left of photo, time on top-right, category chip above title, description expands into available whitespace, seller/location row, and pinned full-width contact copy button at card bottom.
+    * Disambiguated LnF title from description by adding an optional `title` field to `LostFoundItem` and `LostFoundReportDto`, updating mock reports with distinct titles and descriptions.
+    * Clean dialog aesthetics: pure white background (`Colors.white`, `surfaceTintColor: Colors.transparent`) across detail dialogs, creation/report dialogs, and custom price/date pickers on both mobile and desktop.
+    * Replaced grid/list icons with Large View (`Icons.view_agenda_outlined`) and Compact View (`Icons.density_medium_rounded`).
+    * Redesigned compact list cards (`BuySellListCard`, `LostFoundListCard`): thumbnail status badge (top-left), space-between price/category row, bottom metadata row (Location - User - Time) with responsive `Flexible` wrapping.
+    * Mobile Layout Revamp:
+      * Embedded `SuperSearchBar` directly into mobile `AppBar`'s `title`, freeing vertical screen space by removing redundant header text and separate body search container.
+      * Replaced inline creation buttons on mobile with Floating Action Buttons: BnS has bottom-right FAB ("Sell"), LnF has dual bottom-left ("Lost") and bottom-right ("Found") FABs with responsive compact labels.
+      * Horizontal left/right tab transition animations matching bottom navigation bar navigation.
+      * Compact TabBar for mobile Lost & Found items (height 36px, horizontal icon + text).
+      * Web history navigation: Implemented `ModalHistoryWrapper` via `dart:html` `window.history.pushState` / `popstate` to intercept browser back-button presses and dismiss active modals without exiting the web application.
 * **Static Analysis:** `flutter analyze` runs with **0 errors, 0 warnings, 0 hints**.
 * **Automated Tests:** `flutter test` executes **23 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`).
 

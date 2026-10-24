@@ -113,10 +113,10 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
     final currentIndex = ref.read(tabIndexProvider);
     if (newIndex == currentIndex) return;
 
-    final bool goingDown = newIndex < currentIndex;
+    final bool goingRight = newIndex > currentIndex;
 
     _slideAnimation = Tween<Offset>(
-      begin: goingDown ? const Offset(0, -0.08) : const Offset(0, 0.08),
+      begin: goingRight ? const Offset(0.12, 0) : const Offset(-0.12, 0),
       end: Offset.zero,
     ).chain(CurveTween(curve: Curves.easeOutCubic)).animate(_animController);
 
@@ -152,49 +152,49 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
             height: 1,
           ),
         ),
-        title: Row(
-          children: [
-            // Campus Logo
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)],
-                ),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.school_rounded, color: Colors.white, size: 20),
-            ),
-            const SizedBox(width: 10),
-            const Text(
-              'CampusHub',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 19, letterSpacing: -0.5),
-            ),
-            if (isDesktop) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text(
-                  'IISc Bangalore',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
-                ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 520),
-                    child: const SuperSearchBar(),
+        title: isDesktop
+            ? Row(
+                children: [
+                  // Campus Logo
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.school_rounded, color: Colors.white, size: 20),
                   ),
-                ),
-              ),
-            ],
-          ],
-        ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'CampusHub',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 19, letterSpacing: -0.5),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      'IISc Bangalore',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
+                    ),
+                  ),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 520),
+                        child: const SuperSearchBar(),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : const SuperSearchBar(),
         actions: [
           const ThemeToggleButton(),
           const SizedBox(width: 8),
@@ -237,10 +237,6 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
                       isGuest ? 'Sign In' : (currentUser.name.isNotEmpty ? currentUser.name : currentUser.email.split('@').first),
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                     ),
-                    if (!isGuest) ...[
-                      const SizedBox(width: 4),
-                      Icon(Icons.verified_rounded, size: 13, color: Colors.teal.shade700),
-                    ],
                   ],
                 ),
               ),
@@ -268,48 +264,34 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
           const SizedBox(width: 16),
         ],
       ),
-      body: Column(
+      body: Row(
         children: [
-          // Mobile Super Search Bar
-          if (!isDesktop)
-            Container(
-              color: theme.cardColor,
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: const SuperSearchBar(),
-            ),
-
-          Expanded(
-            child: Row(
-              children: [
-                // Desktop Navigation Rail with Modern Pill Highlights
-                if (isDesktop)
-                  NavigationRail(
-                    selectedIndex: tabIndex,
-                    onDestinationSelected: _switchTab,
-                    labelType: NavigationRailLabelType.all,
-                    useIndicator: true,
-                    indicatorColor: theme.colorScheme.primaryContainer,
-                    minWidth: 78,
-                    destinations: [
-                      for (final dest in _tabDestinations)
-                        NavigationRailDestination(
-                          icon: Icon(dest.icon),
-                          selectedIcon: Icon(dest.selectedIcon, color: theme.colorScheme.primary),
-                          label: Text(dest.label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11)),
-                        ),
-                    ],
+          // Desktop Navigation Rail with Modern Pill Highlights
+          if (isDesktop)
+            NavigationRail(
+              selectedIndex: tabIndex,
+              onDestinationSelected: _switchTab,
+              labelType: NavigationRailLabelType.all,
+              useIndicator: true,
+              indicatorColor: theme.colorScheme.primaryContainer,
+              minWidth: 78,
+              destinations: [
+                for (final dest in _tabDestinations)
+                  NavigationRailDestination(
+                    icon: Icon(dest.icon),
+                    selectedIcon: Icon(dest.selectedIcon, color: theme.colorScheme.primary),
+                    label: Text(dest.label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11)),
                   ),
-                if (isDesktop)
-                  VerticalDivider(
-                    thickness: 1,
-                    width: 1,
-                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                  ),
-                Expanded(
-                  child: ClipRect(child: content),
-                ),
               ],
             ),
+          if (isDesktop)
+            VerticalDivider(
+              thickness: 1,
+              width: 1,
+              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+            ),
+          Expanded(
+            child: ClipRect(child: content),
           ),
         ],
       ),
@@ -389,7 +371,6 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                   ),
                 ),
-                Icon(Icons.verified, size: 16, color: Colors.teal.shade600),
               ],
             ),
             const SizedBox(height: 12),

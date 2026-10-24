@@ -23,8 +23,9 @@ class MockLostFoundRepository implements ILostFoundRepository {
     // 1 (Lost)
     LostFoundItem(
       id: '1',
+      title: 'IISc Student ID Card (Red Lanyard)',
       kind: PostType.lost,
-      description: 'Lost IISc Student ID Card with red CSA lanyard. Name: Mukund K., Roll No: 24CSE0042. Lost near Physics canteen or Main Library.',
+      description: 'Belongs to Mukund K., Roll No: 24CSE0042. Red CSA lanyard attached with hostel key ring. Misplaced near Physics canteen or library lawn.',
       category: const CategoryRef(id: 1, name: 'ID Cards'),
       occurredAt: DateTime.now().subtract(const Duration(hours: 3)),
       location: 'Physics Department / Library Lawn',
@@ -40,8 +41,9 @@ class MockLostFoundRepository implements ILostFoundRepository {
     // 2 (Lost)
     LostFoundItem(
       id: '2',
+      title: 'Sony WH-1000XM4 Headphones',
       kind: PostType.lost,
-      description: 'Black Sony WH-1000XM4 Noise Cancelling Headphones in case. Left on table near window in the 2nd floor reading room.',
+      description: 'Black noise-cancelling over-ear headphones in original zippered case. Left on table near window in the 2nd floor reading room.',
       category: const CategoryRef(id: 2, name: 'Electronics'),
       occurredAt: DateTime.now().subtract(const Duration(days: 1)),
       location: 'Main Library 2nd Floor Reading Room',
@@ -57,8 +59,9 @@ class MockLostFoundRepository implements ILostFoundRepository {
     // 3 (Found)
     LostFoundItem(
       id: '3',
+      title: 'AirPods Pro Charging Case',
       kind: PostType.found,
-      description: 'Black AirPods Pro charging case (empty inside) found sitting on wooden bench near Nescafe kiosk. Deposited with kiosk manager.',
+      description: 'White charging case (empty inside) found sitting on wooden bench near Nescafe kiosk. Deposited with kiosk manager.',
       category: const CategoryRef(id: 2, name: 'Electronics'),
       occurredAt: DateTime.now().subtract(const Duration(days: 1, hours: 2)),
       location: 'Nescafe Kiosk Outdoor Bench',
@@ -74,8 +77,9 @@ class MockLostFoundRepository implements ILostFoundRepository {
     // 4 (Found)
     LostFoundItem(
       id: '4',
+      title: 'Brass Godrej Door Key',
       kind: PostType.found,
-      description: 'Single brass Godrej door key with blue plastic ring marker. Found on the pathway heading toward Gymkhana ground.',
+      description: 'Single brass door key with blue plastic ring marker. Found on the pathway heading toward Gymkhana ground.',
       category: const CategoryRef(id: 4, name: 'Keys'),
       occurredAt: DateTime.now().subtract(const Duration(hours: 18)),
       location: 'Pathway near Gymkhana Ground',
@@ -91,8 +95,9 @@ class MockLostFoundRepository implements ILostFoundRepository {
     // 5 (Lost)
     LostFoundItem(
       id: '5',
+      title: 'Milton 750ml Thermosteel Flask',
       kind: PostType.lost,
-      description: 'Milton 750ml Stainless Steel thermosteel flask, matte black with "I Love IISc" sticker on side. Left behind in LH-1.',
+      description: 'Matte black stainless steel flask with "I Love IISc" sticker on side. Left behind in LH-1 lecture hall.',
       category: const CategoryRef(id: 3, name: 'Personal Belongings'),
       occurredAt: DateTime.now().subtract(const Duration(hours: 6)),
       location: 'Old Lecture Hall Complex Room 1',
@@ -108,8 +113,9 @@ class MockLostFoundRepository implements ILostFoundRepository {
     // 6 (Found)
     LostFoundItem(
       id: '6',
+      title: 'Casio fx-991EX Calculator',
       kind: PostType.found,
-      description: 'Casio fx-991EX Scientific Calculator with name sticker "Priya N." on back. Found in Department of Mathematics seminar room.',
+      description: 'Scientific calculator with name sticker "Priya N." on back. Found in Department of Mathematics seminar room.',
       category: const CategoryRef(id: 2, name: 'Electronics'),
       occurredAt: DateTime.now().subtract(const Duration(hours: 14)),
       location: 'Dept of Mathematics Seminar Room',
@@ -125,6 +131,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
     // 7 (Lost)
     LostFoundItem(
       id: '7',
+      title: 'Bunch of 4 Keys with Swiss Knife',
       kind: PostType.lost,
       description: 'Bunch of 4 keys including Godrej room key, cycle lock key, and a red Swiss army knife attached. Lost around Sarvam block.',
       category: const CategoryRef(id: 4, name: 'Keys'),
@@ -142,8 +149,9 @@ class MockLostFoundRepository implements ILostFoundRepository {
     // 8 (Found)
     LostFoundItem(
       id: '8',
+      title: 'IISc Student ID Card (Rohan Sharma)',
       kind: PostType.found,
-      description: 'IISc Student ID Card found near Biology Canteen. Name on card: Rohan Sharma (Biological Sciences Dept). Handed over to security guard.',
+      description: 'Student ID card of Rohan Sharma (Biological Sciences Dept) found near Biology Canteen. Handed over to security guard.',
       category: const CategoryRef(id: 1, name: 'ID Cards'),
       occurredAt: DateTime.now().subtract(const Duration(hours: 8)),
       location: 'Biological Sciences Canteen',
@@ -159,8 +167,9 @@ class MockLostFoundRepository implements ILostFoundRepository {
     // 9 (Lost)
     LostFoundItem(
       id: '9',
+      title: 'Ray-Ban Wayfarer Glasses',
       kind: PostType.lost,
-      description: 'Ray-Ban Wayfarer reading glasses in black matte case. Left on study carrel in library first floor.',
+      description: 'Reading glasses in black matte case. Left on study carrel in library first floor.',
       category: const CategoryRef(id: 3, name: 'Personal Belongings'),
       occurredAt: DateTime.now().subtract(const Duration(days: 2, hours: 5)),
       location: 'Main Library 1st Floor Study Carrels',
@@ -176,8 +185,9 @@ class MockLostFoundRepository implements ILostFoundRepository {
     // 10 (Found)
     LostFoundItem(
       id: '10',
+      title: 'Lenovo 65W USB-C Charger',
       kind: PostType.found,
-      description: 'Lenovo 65W USB-C Laptop Charger left plugged into power socket in CDS computer lab room 102. Safe with lab assistant.',
+      description: 'Laptop charger left plugged into power socket in CDS computer lab room 102. Safe with lab assistant.',
       category: const CategoryRef(id: 2, name: 'Electronics'),
       occurredAt: DateTime.now().subtract(const Duration(days: 1, hours: 6)),
       location: 'CDS Dept Computer Lab 102',
@@ -193,8 +203,9 @@ class MockLostFoundRepository implements ILostFoundRepository {
     // 11 (Lost)
     LostFoundItem(
       id: '11',
+      title: 'Blue A4 Clearance Folder',
       kind: PostType.lost,
-      description: 'Blue A4 Folder containing signed hostel clearance form and original fee receipts. Urgent requirement for degree submission.',
+      description: 'Contains signed hostel clearance form and original fee receipts. Urgent requirement for degree submission.',
       category: const CategoryRef(id: 5, name: 'Documents'),
       occurredAt: DateTime.now().subtract(const Duration(days: 3)),
       location: 'Central Administration Building Unit',
@@ -210,8 +221,9 @@ class MockLostFoundRepository implements ILostFoundRepository {
     // 12 (Found)
     LostFoundItem(
       id: '12',
+      title: 'Fastrack Analog Wristwatch',
       kind: PostType.found,
-      description: 'Black Fastrack Analog Wristwatch with silver dial found near Gymkhana badminton court. In working condition.',
+      description: 'Analog wristwatch with silver dial found near Gymkhana badminton court. In working condition.',
       category: const CategoryRef(id: 3, name: 'Personal Belongings'),
       occurredAt: DateTime.now().subtract(const Duration(days: 2, hours: 8)),
       location: 'Gymkhana Badminton Court Side Bench',
@@ -227,8 +239,9 @@ class MockLostFoundRepository implements ILostFoundRepository {
     // 13 (Lost)
     LostFoundItem(
       id: '13',
+      title: 'SanDisk 128GB Type-C Drive',
       kind: PostType.lost,
-      description: 'SanDisk 128GB Dual Drive USB Type-C Flash Drive (Silver metal). Has my MTech dissertation latex files and datasets.',
+      description: 'Silver metal dual drive with dissertation LaTeX files and datasets. Left in Aerospace seminar hall.',
       category: const CategoryRef(id: 2, name: 'Electronics'),
       occurredAt: DateTime.now().subtract(const Duration(days: 3, hours: 4)),
       location: 'Aerospace Dept Seminar Hall',
@@ -244,8 +257,9 @@ class MockLostFoundRepository implements ILostFoundRepository {
     // 14 (Found)
     LostFoundItem(
       id: '14',
+      title: 'Navy Blue Curved Umbrella',
       kind: PostType.found,
-      description: 'Blue umbrella with curved wooden handle left near Main Library entrance umbrella rack after yesterday evening rain.',
+      description: 'Blue umbrella with curved wooden handle left near Main Library entrance umbrella rack after evening rain.',
       category: const CategoryRef(id: 3, name: 'Personal Belongings'),
       occurredAt: DateTime.now().subtract(const Duration(days: 1, hours: 10)),
       location: 'Main Library Entrance Umbrella Stand',
@@ -261,8 +275,9 @@ class MockLostFoundRepository implements ILostFoundRepository {
     // 15 (Lost)
     LostFoundItem(
       id: '15',
+      title: 'Gym Locker Padlock Key (L-42)',
       kind: PostType.lost,
-      description: 'Gym locker padlock key with small green plastic tag "L-42". Dropped near Gymkhana gym weights section.',
+      description: 'Small brass padlock key with green plastic tag "L-42". Dropped near Gymkhana gym weights section.',
       category: const CategoryRef(id: 4, name: 'Keys'),
       occurredAt: DateTime.now().subtract(const Duration(hours: 10)),
       location: 'Gymkhana Fitness Center',
@@ -278,8 +293,9 @@ class MockLostFoundRepository implements ILostFoundRepository {
     // 16 (Found)
     LostFoundItem(
       id: '16',
+      title: 'Deep Learning Lecture Notebook',
       kind: PostType.found,
-      description: 'Spiral-bound notebook titled "Deep Learning Lecture Notes 2026" found in CSA 254 classroom. Has detailed notes.',
+      description: 'Spiral-bound notebook titled "Deep Learning Lecture Notes 2026" found in CSA 254 classroom. Contains detailed diagrams.',
       category: const CategoryRef(id: 5, name: 'Documents'),
       occurredAt: DateTime.now().subtract(const Duration(days: 2, hours: 1)),
       location: 'CSA Department Classroom 254',
@@ -311,6 +327,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
       final matchesType = item.kind == type;
       final q = query.toLowerCase().trim();
       final matchesQuery = q.isEmpty ||
+          (item.title != null && item.title!.toLowerCase().contains(q)) ||
           item.description.toLowerCase().contains(q) ||
           item.location.toLowerCase().contains(q) ||
           item.category.name.toLowerCase().contains(q);
@@ -370,6 +387,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
       final matchesType = type == null || item.kind == type;
       final q = query.toLowerCase().trim();
       final matchesQuery = q.isEmpty ||
+          (item.title != null && item.title!.toLowerCase().contains(q)) ||
           item.description.toLowerCase().contains(q) ||
           item.location.toLowerCase().contains(q) ||
           item.category.name.toLowerCase().contains(q);

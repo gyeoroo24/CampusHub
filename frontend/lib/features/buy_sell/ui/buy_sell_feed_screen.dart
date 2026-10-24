@@ -71,6 +71,14 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
     final isMobile = MediaQuery.of(context).size.width < 750;
 
     return Scaffold(
+      floatingActionButton: isMobile
+          ? FloatingActionButton.extended(
+              onPressed: () => _handleCreateListing(context, ref),
+              icon: const Icon(Icons.add_shopping_cart_rounded),
+              label: const Text('Sell Item', style: TextStyle(fontWeight: FontWeight.bold)),
+            )
+          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: CustomScrollView(
         controller: _scrollController,
         slivers: [
@@ -103,7 +111,7 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                         color: theme.colorScheme.primaryContainer,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(Icons.verified_rounded, color: theme.colorScheme.primary, size: 20),
+                      child: Icon(Icons.security_rounded, color: theme.colorScheme.primary, size: 20),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -116,7 +124,7 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Every listing is posted by an IISc student verified via their IISc email address. Contact the seller to setup a time and place for hassle-free physical handovers.',
+                            'Every listing is posted by an IISc student authenticated via their IISc email address. Contact the seller to setup a time and place for hassle-free physical handovers.',
                             style: TextStyle(fontSize: 11, color: theme.hintColor),
                           ),
                           if (isMobile) ...[
@@ -125,7 +133,7 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                               spacing: 6,
                               runSpacing: 4,
                               children: [
-                                _buildFeaturePill(context, '🛡️ Verified Email'),
+                                _buildFeaturePill(context, '🛡️ IISc Email'),
                                 _buildFeaturePill(context, '🤝 Face-to-Face'),
                               ],
                             ),
@@ -138,7 +146,7 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                       Wrap(
                         spacing: 8,
                         children: [
-                          _buildFeaturePill(context, '🛡️ Verified Email'),
+                          _buildFeaturePill(context, '🛡️ IISc Email'),
                           _buildFeaturePill(context, '🤝 Face-to-Face'),
                         ],
                       ),
@@ -194,43 +202,21 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isMobile ? 12 : 16,
-                        vertical: isMobile ? 8 : 12,
+                  if (!isMobile) ...[
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      onPressed: () => _handleCreateListing(context, ref),
+                      icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
+                      label: const Text(
+                        'Sell Item',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
-                    onPressed: () async {
-                      final signedIn = await AuthDialog.ensureSignedIn(
-                        context,
-                        ref,
-                        title: 'Sign In to Post Listing',
-                        message: 'Only verified IISc students can post items for sale.',
-                      );
-                      if (!signedIn || !context.mounted) return;
-
-                      final user = ref.read(currentUserProvider);
-                      showDialog(
-                        context: context,
-                        builder: (ctx) => CreateListingDialog(
-                          userEmail: user?.email,
-                          userId: user?.id,
-                          onSubmit: (newItem) async {
-                            await ref.read(buySellRepositoryProvider).addListing(newItem);
-                            ref.read(buySellPaginationProvider.notifier).loadInitial();
-                          },
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
-                    label: Text(
-                      isMobile ? 'Sell' : 'Sell Item',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -365,15 +351,15 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                   ),
                   const SizedBox(width: 4),
 
-                  // View Mode Toggle (Grid vs List)
+                  // View Mode Toggle (Large vs Compact)
                   IconButton(
                     iconSize: 20,
                     visualDensity: VisualDensity.compact,
-                    tooltip: filter.viewMode == ViewMode.grid ? 'List View' : 'Grid View',
+                    tooltip: filter.viewMode == ViewMode.grid ? 'Compact view' : 'Large view',
                     icon: Icon(
                       filter.viewMode == ViewMode.grid
-                          ? Icons.view_list_rounded
-                          : Icons.grid_view_rounded,
+                          ? Icons.density_medium_rounded
+                          : Icons.view_agenda_outlined,
                     ),
                     onPressed: () {
                       ref.read(buySellFilterProvider.notifier).update(
@@ -448,17 +434,11 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                 sliver: SliverLayoutBuilder(
                   builder: (context, constraints) {
                     final width = constraints.crossAxisExtent;
-                    final count = width > 1200
-                        ? 4
-                        : width > 800
-                            ? 3
-                            : width > 500
-                                ? 2
-                                : 1;
+                    final count = width > 1200 ? 4 : width > 800 ? 3 : width > 500 ? 2 : 1;
                     return SliverGrid(
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: count,
-                        childAspectRatio: count == 1 ? 1.05 : 0.72,
+                        childAspectRatio: count == 1 ? 0.95 : 0.85,
                         crossAxisSpacing: 16,
                         mainAxisSpacing: 16,
                       ),
@@ -513,7 +493,7 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.check_circle_outline_rounded, size: 14, color: Colors.teal.shade700),
+                              Icon(Icons.done_all_rounded, size: 14, color: Colors.teal.shade700),
                               const SizedBox(width: 6),
                               Text(
                                 "You're all caught up! Showing all ${paginatedState.items.length} items",
@@ -527,6 +507,29 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  static Future<void> _handleCreateListing(BuildContext context, WidgetRef ref) async {
+    final signedIn = await AuthDialog.ensureSignedIn(
+      context,
+      ref,
+      title: 'Sign In to Post Listing',
+      message: 'Only authenticated IISc students can post items for sale.',
+    );
+    if (!signedIn || !context.mounted) return;
+
+    final user = ref.read(currentUserProvider);
+    showDialog(
+      context: context,
+      builder: (ctx) => CreateListingDialog(
+        userEmail: user?.email,
+        userId: user?.id,
+        onSubmit: (newItem) async {
+          await ref.read(buySellRepositoryProvider).addListing(newItem);
+          ref.read(buySellPaginationProvider.notifier).loadInitial();
+        },
       ),
     );
   }

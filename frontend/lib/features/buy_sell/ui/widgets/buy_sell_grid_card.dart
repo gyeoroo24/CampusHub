@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../../core/utils/date_time_formatter.dart';
 import '../../domain/buy_sell_item.dart';
 import 'buy_sell_detail_dialog.dart';
@@ -127,31 +128,10 @@ class _BuySellGridCardState extends State<BuySellGridCard> {
                         ),
                       ),
                     ),
-                    // Category pill on top-left
+                    // Status Pill on top-left
                     Positioned(
                       top: 10,
                       left: 10,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.65),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-                        ),
-                        child: Text(
-                          item.category.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Status Pill on top-right
-                    Positioned(
-                      top: 10,
-                      right: 10,
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
@@ -175,106 +155,145 @@ class _BuySellGridCardState extends State<BuySellGridCard> {
                         ),
                       ),
                     ),
+                    // Time pill on top-right
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.access_time_rounded, size: 11, color: Colors.white70),
+                            const SizedBox(width: 3),
+                            Text(
+                              DateTimeFormatter.timeAgo(item.createdAt),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
 
-              // Item details (Amazon / modern e-commerce format)
+              // Item details
               Expanded(
-                flex: 11,
+                flex: 12,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
+                  padding: const EdgeInsets.all(12.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.title,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                              height: 1.25,
-                              color: isSold ? Colors.grey : null,
-                              decoration: isSold ? TextDecoration.lineThrough : null,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                      // Category Tag right above title
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          item.category.name,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
                           ),
-                          if (item.description.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              item.description,
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                height: 1.3,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              Icon(Icons.location_on_outlined, size: 12, color: Colors.grey.shade500),
-                              const SizedBox(width: 3),
-                              Expanded(
-                                child: Text(
-                                  item.location.isNotEmpty ? item.location : 'IISc Campus',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          // Seller info
-                          Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 8,
-                                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                                child: Text(
-                                  item.seller.name.isNotEmpty ? item.seller.name[0].toUpperCase() : 'U',
-                                  style: TextStyle(
-                                    fontSize: 8.5,
-                                    fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).colorScheme.primary,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 5),
-                              Expanded(
-                                child: Text(
-                                  item.seller.name,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Icon(Icons.verified, size: 12, color: Colors.teal.shade600),
-                            ],
-                          ),
-                        ],
+                        ),
                       ),
+                      const SizedBox(height: 6),
 
-                      // Price and Time row
+                      // Title
+                      Text(
+                        item.title,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          height: 1.25,
+                          color: isSold ? Colors.grey : null,
+                          decoration: isSold ? TextDecoration.lineThrough : null,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+
+                      // Description taking remaining white space
+                      Expanded(
+                        child: Text(
+                          item.description.isNotEmpty ? item.description : 'No additional description provided.',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                            height: 1.3,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Price and Seller Info (Username in place of time, location under username)
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.end,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.person_outline_rounded, size: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                                  const SizedBox(width: 3),
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(maxWidth: 110),
+                                    child: Text(
+                                      item.seller.name,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.location_on_outlined, size: 11, color: Colors.grey.shade500),
+                                  const SizedBox(width: 2),
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(maxWidth: 110),
+                                    child: Text(
+                                      item.location.isNotEmpty ? item.location : 'IISc Campus',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey.shade500,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                           Text(
                             '₹${item.price.toStringAsFixed(0)}',
                             style: TextStyle(
@@ -286,18 +305,45 @@ class _BuySellGridCardState extends State<BuySellGridCard> {
                               letterSpacing: -0.5,
                             ),
                           ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.access_time_rounded, size: 11, color: Colors.grey.shade500),
-                              const SizedBox(width: 3),
-                              Text(
-                                DateTimeFormatter.timeAgo(item.createdAt),
-                                style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-                              ),
-                            ],
-                          ),
                         ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Email Contact Copy Button at very bottom
+                      SizedBox(
+                        width: double.infinity,
+                        height: 30,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            final email = item.sellerContact?.email ??
+                                '${item.seller.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
+                            Clipboard.setData(ClipboardData(text: email));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Copied $email to clipboard'),
+                                duration: const Duration(seconds: 2),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          },
+                          icon: Icon(Icons.email_outlined, size: 13, color: Theme.of(context).colorScheme.primary),
+                          label: Text(
+                            item.sellerContact?.email ?? 'Copy Email',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            side: BorderSide(
+                              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),

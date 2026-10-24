@@ -5,6 +5,7 @@ import '../../../../core/models/category_ref.dart';
 import '../../../../core/models/contact.dart';
 import '../../../../core/models/photo.dart';
 import '../../../../core/models/user_ref.dart';
+import '../../../../core/utils/web_history_support.dart';
 import '../../domain/lost_found_item.dart';
 import '../../providers/lost_found_providers.dart';
 import 'lost_found_detail_dialog.dart';
@@ -149,8 +150,11 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
     final theme = Theme.of(context);
     final primaryColor = isLost ? Colors.pinkAccent.shade700 : Colors.teal.shade700;
 
-    return AlertDialog(
-      title: Row(
+    return ModalHistoryWrapper(
+      child: AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        title: Row(
         children: [
           Icon(
             isLost ? Icons.search_off_rounded : Icons.check_circle_outline_rounded,
@@ -186,7 +190,7 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
                         child: Text(
                           isLost
                               ? 'Provide details of the lost item. We will automatically match it when someone files a found report.'
-                              : 'Found an item? Report it here so the verified owner can claim it.',
+                              : 'Found an item? Report it here so the owner can claim it.',
                           style: TextStyle(fontSize: 12, color: primaryColor),
                         ),
                       ),
@@ -363,7 +367,7 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
               : Text(isLost ? 'Submit Lost Report' : 'Submit Found Report'),
         ),
       ],
-    );
+    ));
   }
 
   Future<void> _handleSubmit() async {

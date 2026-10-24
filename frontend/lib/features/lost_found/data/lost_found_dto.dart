@@ -8,6 +8,7 @@ import '../domain/lost_found_item.dart';
 /// (`ReportSummary` and `ReportDetail`).
 class LostFoundReportDto {
   final String id;
+  final String? title;
   final String kind;
   final String description;
   final CategoryRef category;
@@ -24,6 +25,7 @@ class LostFoundReportDto {
 
   const LostFoundReportDto({
     required this.id,
+    this.title,
     required this.kind,
     required this.description,
     required this.category,
@@ -127,10 +129,9 @@ class LostFoundReportDto {
 
     return LostFoundReportDto(
       id: json['id']?.toString() ?? '',
+      title: json['title']?.toString(),
       kind: rawKind,
-      description: json['description']?.toString() ??
-          json['title']?.toString() ??
-          '',
+      description: json['description']?.toString() ?? '',
       category: parsedCategory,
       occurredAt: parsedOccurredAt,
       location: json['location']?.toString() ??
@@ -155,6 +156,7 @@ class LostFoundReportDto {
   LostFoundItem toDomain() {
     return LostFoundItem(
       id: id,
+      title: title,
       kind: kind.toLowerCase() == 'found' ? PostType.found : PostType.lost,
       description: description,
       category: category,

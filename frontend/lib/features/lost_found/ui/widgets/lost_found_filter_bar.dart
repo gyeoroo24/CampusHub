@@ -23,14 +23,14 @@ class LostFoundFilterBar extends ConsumerWidget {
     'Other': '📦',
   };
 
-  Future<void> _handleReport(BuildContext context, WidgetRef ref, PostType postType) async {
+  static Future<void> handleReport(BuildContext context, WidgetRef ref, PostType postType) async {
     final signedIn = await AuthDialog.ensureSignedIn(
       context,
       ref,
       title: postType == PostType.lost
           ? 'Sign In to Report Lost Item'
           : 'Sign In to Report Found Item',
-      message: 'Only verified IISc students can post lost and found reports.',
+      message: 'Only authenticated IISc students can post lost and found reports.',
     );
     if (!signedIn || !context.mounted) return;
 
@@ -98,42 +98,38 @@ class LostFoundFilterBar extends ConsumerWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFFBE185D), // Deep Rose/Pink
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isMobile ? 10 : 14,
-                    vertical: isMobile ? 8 : 12,
+              if (!isMobile) ...[
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFBE185D), // Deep Rose/Pink
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () => _handleReport(context, ref, PostType.lost),
-                icon: const Icon(Icons.add_rounded, size: 16),
-                label: Text(
-                  isMobile ? 'Lost' : 'Report Lost',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F766E), // Deep Teal
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isMobile ? 10 : 14,
-                    vertical: isMobile ? 8 : 12,
+                  onPressed: () => handleReport(context, ref, PostType.lost),
+                  icon: const Icon(Icons.add_rounded, size: 16),
+                  label: const Text(
+                    'Report Lost',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                   ),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                onPressed: () => _handleReport(context, ref, PostType.found),
-                icon: const Icon(Icons.add_rounded, size: 16),
-                label: Text(
-                  isMobile ? 'Found' : 'Report Found',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F766E), // Deep Teal
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () => handleReport(context, ref, PostType.found),
+                  icon: const Icon(Icons.add_rounded, size: 16),
+                  label: const Text(
+                    'Report Found',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
@@ -255,15 +251,15 @@ class LostFoundFilterBar extends ConsumerWidget {
               ),
               const SizedBox(width: 4),
 
-              // View Mode Toggle (Grid vs List)
+              // View Mode Toggle (Large vs Compact)
               IconButton(
                 iconSize: 20,
                 visualDensity: VisualDensity.compact,
-                tooltip: filter.viewMode == ViewMode.grid ? 'List View' : 'Grid View',
+                tooltip: filter.viewMode == ViewMode.grid ? 'Compact view' : 'Large view',
                 icon: Icon(
                   filter.viewMode == ViewMode.grid
-                      ? Icons.view_list_rounded
-                      : Icons.grid_view_rounded,
+                      ? Icons.density_medium_rounded
+                      : Icons.view_agenda_outlined,
                 ),
                 onPressed: () {
                   ref.read(lostFoundFilterProvider.notifier).update(

@@ -28,6 +28,7 @@ enum ReportStatus {
 /// and [description] (distinguishing marks / details).
 class LostFoundItem {
   final String id;
+  final String? title;
   final PostType kind;
   final String description;
   final CategoryRef category;
@@ -44,6 +45,7 @@ class LostFoundItem {
 
   const LostFoundItem({
     required this.id,
+    this.title,
     required this.kind,
     required this.description,
     required this.category,
@@ -71,8 +73,11 @@ class LostFoundItem {
           : const []);
 
   /// Returns a clean headline or title representing the report for tiles, dialogs, and search.
-  /// Derives the primary subject/headline from the first sentence or first line of the description.
+  /// Derives the primary subject/headline from [title] if present, or first sentence of [description].
   String get displayTitle {
+    if (title != null && title!.trim().isNotEmpty) {
+      return title!.trim();
+    }
     final trimmed = description.trim();
     if (trimmed.isEmpty) {
       return '${kind == PostType.lost ? "Lost" : "Found"} ${category.name}';
@@ -88,6 +93,7 @@ class LostFoundItem {
 
   LostFoundItem copyWith({
     String? id,
+    String? title,
     PostType? kind,
     String? description,
     CategoryRef? category,
@@ -104,6 +110,7 @@ class LostFoundItem {
   }) {
     return LostFoundItem(
       id: id ?? this.id,
+      title: title ?? this.title,
       kind: kind ?? this.kind,
       description: description ?? this.description,
       category: category ?? this.category,
