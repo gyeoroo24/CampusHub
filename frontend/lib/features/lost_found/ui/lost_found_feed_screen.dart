@@ -14,9 +14,6 @@ class LostFoundFeedScreen extends ConsumerWidget {
     final isDesktop = MediaQuery.of(context).size.width > 750;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Lost & Found Portal', style: TextStyle(fontWeight: FontWeight.bold)),
-      ),
       body: Column(
         children: [
           // Filter Bar

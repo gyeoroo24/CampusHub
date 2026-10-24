@@ -72,59 +72,93 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
       body: CustomScrollView(
         controller: _scrollController,
         slivers: [
-          // ── Marketplace Header Bar ──────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                border: Border(
-                  bottom: BorderSide(
-                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+          // ── Amazon-Inspired Spotlight Banner (collapsible/subtle) ───────────
+          if (!isMobile)
+            SliverToBoxAdapter(
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: isDark
+                        ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
+                        : [const Color(0xFFEFF6FF), const Color(0xFFF8FAFC)],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF334155) : const Color(0xFFDBEAFE),
                   ),
                 ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 8,
-                          children: [
-                            Text(
-                              isMobile ? 'Buy & Sell' : 'Buy & Sell Portal',
-                              style: TextStyle(
-                                fontSize: isMobile ? 18 : 22,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                '${paginatedState.items.length}${paginatedState.hasMore ? '+' : ''} Items',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: theme.colorScheme.primary,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (!isMobile)
-                          Text(
-                            'Verified student-to-student marketplace across IISc Bangalore hostels & departments',
-                            style: TextStyle(fontSize: 12, color: theme.hintColor),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.verified_rounded, color: theme.colorScheme.primary, size: 20),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Trusted Campus Exchange',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                           ),
+                          Text(
+                            'Every listing is posted by an IISc student verified via their IISc email address. Contact the seller to setup a time and place for hassle-free physical handovers.',
+                            style: TextStyle(fontSize: 11, color: theme.hintColor),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        _buildFeaturePill(context, '🛡️ Verified Email'),
+                        _buildFeaturePill(context, '🤝 Face-to-Face'),
                       ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // ── Category Pills (Horizontal Scroll with Icons) ───────────────────
+          SliverToBoxAdapter(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              color: theme.cardColor,
+              child: Row(
+                mainAxisAlignment: .spaceBetween, 
+                children: [
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _categoryIcons.entries.map((entry) {
+                        final isSelected = filter.category == entry.key;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: ChoiceChip(
+                            avatar: Text(entry.value, style: const TextStyle(fontSize: 13)),
+                            label: Text(entry.key),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              if (selected) {
+                                ref.read(buySellFilterProvider.notifier).update(
+                                      (s) => s.copyWith(category: entry.key),
+                                    );
+                              }
+                            },
+                            visualDensity: VisualDensity.compact,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          ),
+                        );
+                      }).toList(),
                     ),
                   ),
                   FilledButton.icon(
@@ -164,95 +198,6 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                     ),
                   ),
                 ],
-              ),
-            ),
-          ),
-
-          // ── Amazon-Inspired Spotlight Banner (collapsible/subtle) ───────────
-          if (!isMobile)
-            SliverToBoxAdapter(
-              child: Container(
-                margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: isDark
-                        ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
-                        : [const Color(0xFFEFF6FF), const Color(0xFFF8FAFC)],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: isDark ? const Color(0xFF334155) : const Color(0xFFDBEAFE),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(Icons.verified_rounded, color: theme.colorScheme.primary, size: 20),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Trusted Campus Exchange • Zero Commission',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                          ),
-                          Text(
-                            'Every listing is posted by an IISc student or faculty member. Meet on campus at Nescafe or Library for hassle-free physical handovers.',
-                            style: TextStyle(fontSize: 11, color: theme.hintColor),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        _buildFeaturePill(context, '🛡️ Verified Email'),
-                        _buildFeaturePill(context, '🤝 Face-to-Face'),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          // ── Category Pills (Horizontal Scroll with Icons) ───────────────────
-          SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              color: theme.cardColor,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: _categoryIcons.entries.map((entry) {
-                    final isSelected = filter.category == entry.key;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8.0),
-                      child: ChoiceChip(
-                        avatar: Text(entry.value, style: const TextStyle(fontSize: 13)),
-                        label: Text(entry.key),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          if (selected) {
-                            ref.read(buySellFilterProvider.notifier).update(
-                                  (s) => s.copyWith(category: entry.key),
-                                );
-                          }
-                        },
-                        visualDensity: VisualDensity.compact,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      ),
-                    );
-                  }).toList(),
-                ),
               ),
             ),
           ),
