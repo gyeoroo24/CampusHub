@@ -4,7 +4,22 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:campus_hub/features/auth/domain/user.dart';
 import 'package:campus_hub/features/auth/providers/auth_providers.dart';
+import 'package:campus_hub/features/buy_sell/data/mock_buy_sell_repository.dart';
+import 'package:campus_hub/features/buy_sell/providers/buy_sell_providers.dart';
+import 'package:campus_hub/features/lost_found/data/mock_lost_found_repository.dart';
+import 'package:campus_hub/features/lost_found/providers/lost_found_providers.dart';
 import 'package:campus_hub/main.dart';
+
+Widget createTestApp({List<Override> overrides = const []}) {
+  return ProviderScope(
+    overrides: [
+      buySellRepositoryProvider.overrideWithValue(MockBuySellRepository()),
+      lostFoundRepositoryProvider.overrideWithValue(MockLostFoundRepository()),
+      ...overrides,
+    ],
+    child: const CampusHubApp(),
+  );
+}
 
 void main() {
   testWidgets('CampusHub desktop smoke test', (WidgetTester tester) async {
@@ -12,7 +27,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
 
-    await tester.pumpWidget(const ProviderScope(child: CampusHubApp()));
+    await tester.pumpWidget(createTestApp());
     await tester.pumpAndSettle();
 
     expect(find.text('CampusHub'), findsWidgets);
@@ -24,7 +39,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
 
-    await tester.pumpWidget(const ProviderScope(child: CampusHubApp()));
+    await tester.pumpWidget(createTestApp());
     await tester.pumpAndSettle();
 
     // Verify search bar in AppBar on mobile and Sell FAB
@@ -65,11 +80,10 @@ void main() {
     );
 
     await tester.pumpWidget(
-      ProviderScope(
+      createTestApp(
         overrides: [
           currentUserProvider.overrideWith((ref) => testUser),
         ],
-        child: const CampusHubApp(),
       ),
     );
     await tester.pumpAndSettle();
@@ -103,6 +117,8 @@ void main() {
 
     final container = ProviderContainer(
       overrides: [
+        buySellRepositoryProvider.overrideWithValue(MockBuySellRepository()),
+        lostFoundRepositoryProvider.overrideWithValue(MockLostFoundRepository()),
         showTrustedExchangeBannerProvider.overrideWith((ref) => false),
       ],
     );
@@ -139,11 +155,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
 
-    await tester.pumpWidget(
-      const ProviderScope(
-        child: CampusHubApp(),
-      ),
-    );
+    await tester.pumpWidget(createTestApp());
     await tester.pumpAndSettle();
 
     // Switch to Lost & Found
@@ -175,7 +187,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
 
-    await tester.pumpWidget(const ProviderScope(child: CampusHubApp()));
+    await tester.pumpWidget(createTestApp());
     await tester.pumpAndSettle();
 
     // In Buy & Sell, switch to Compact View on mobile
@@ -208,7 +220,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
 
-    await tester.pumpWidget(const ProviderScope(child: CampusHubApp()));
+    await tester.pumpWidget(createTestApp());
     await tester.pumpAndSettle();
 
     // Verify custom price range button exists
@@ -243,7 +255,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
 
-    await tester.pumpWidget(const ProviderScope(child: CampusHubApp()));
+    await tester.pumpWidget(createTestApp());
     await tester.pumpAndSettle();
 
     // Switch to Lost & Found

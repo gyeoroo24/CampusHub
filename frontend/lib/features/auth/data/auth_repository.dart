@@ -220,8 +220,9 @@ class ApiAuthRepository implements IAuthRepository {
   Future<User?> getCurrentUser() async {
     await _init();
     final hasToken = await tokenStorage.hasToken();
-    // Allow checking user if token exists OR if dev user email header is active
-    if (!hasToken && apiClient.devUserEmail == null) {
+    final savedUser = await tokenStorage.getSavedUser();
+    // Allow checking user if token exists, saved user exists, or dev user email is active
+    if (!hasToken && savedUser == null && apiClient.devUserEmail == null) {
       _cachedUser = null;
       return null;
     }
@@ -300,15 +301,17 @@ class ApiAuthRepository implements IAuthRepository {
 
   @override
   Future<User> verifyOtp(String email, String otp) async {
-    // In local dev, save dev user token and fetch /me
-    await tokenStorage.saveTokens(accessToken: 'dev_token_$email');
+    // In local dev, save dev user email immediately so ApiClient injects X-Dev-User
+    final trimmedEmail = email.trim().toLowerCase();
+    await tokenStorage.saveUser({'email': trimmedEmail, 'name': trimmedEmail.split('@').first});
+    await tokenStorage.saveTokens(accessToken: 'dev_token_$trimmedEmail');
     final user = await getCurrentUser();
     if (user == null) {
       // Create fallback profile if server not running
       final fallback = User(
-        id: 'usr_${email.hashCode.abs()}',
-        email: email,
-        name: email.split('@').first,
+        id: 'usr_${trimmedEmail.hashCode.abs()}',
+        email: trimmedEmail,
+        name: trimmedEmail.split('@').first,
         createdAt: DateTime.now(),
       );
       _cachedUser = fallback;

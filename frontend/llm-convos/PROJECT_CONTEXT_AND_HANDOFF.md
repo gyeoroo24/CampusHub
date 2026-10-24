@@ -1,6 +1,6 @@
 # CampusHub: Project Context, Architecture & Session Handoff Guide
 
-**Document Version:** 3.4  
+**Document Version:** 3.5  
 **Last Updated:** 24 October 2026  
 **Project:** CampusHub — Cloud Computing Course Project (DS252), MTech CSA, Indian Institute of Science (IISc), Bangalore.  
 **Repository Branch Context:**
@@ -182,8 +182,14 @@ CampusHub/frontend/lib/
       4. AWS Cognito Outage Handling: Added `ServiceUnavailableException` (HTTP 503) to `ApiException` hierarchy to support frontend retries when backend Cognito public key fetching temporarily fails.
       5. Deactivated Member Contact Privacy: Verified backend behavior masking contacts (`null`) for deactivated users; frontend models gracefully handle `null` contact info without crashes.
       6. Extended Admin Edit Permissions: Backend now authorizes admins to edit listings/reports and update listing status across modules.
+  * Iteration 7.7 / Step 11 Live FastAPI Backend Integration & LAN Dev Auth:
+    * Switched `AppConfig.useMockData` default to `false`, pointing `AppConfig.apiBaseUrl` to the live backend server at `http://10.217.103.203:8000`.
+    * Implemented team LAN authentication: injected `X-Dev-Key` (`kSH3AyYRCzXn8Czy8xXCZbC9`) and session `X-Dev-User` / `X-Dev-Name` in `ApiClient` interceptors.
+    * Refined `ApiAuthRepository` session caching to synchronize user details from PostgreSQL `/api/v1/me`.
+    * Hardened unit and widget test suites (`widget_test.dart`, `ui_components_test.dart`) with isolated repository provider overrides so automated tests remain offline and fast.
+    * Added comprehensive automated live integration test (`live_backend_integration_test.dart`) verifying categories, guest browsing, user auth, listing lifecycle (create, query, status update, delete), and lost/found feeds directly against the live backend server.
 * **Static Analysis:** `flutter analyze` runs with **0 errors, 0 warnings, 0 hints**.
-* **Automated Tests:** `flutter test` executes **25 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`).
+* **Automated Tests:** `flutter test` executes **30 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`, `live_backend_integration_test.dart`).
 
 ---
 

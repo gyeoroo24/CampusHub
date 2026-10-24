@@ -11,12 +11,14 @@ class ApiClient {
   /// Optional development user email for local FastAPI dev auth (`X-Dev-User`)
   final String? devUserEmail;
   final String? devUserName;
+  final String? devKey;
 
   ApiClient({
     Dio? dioClient,
     ITokenStorage? storage,
     this.devUserEmail,
     this.devUserName,
+    this.devKey,
   })  : dio = dioClient ??
             Dio(
               BaseOptions(
@@ -40,14 +42,23 @@ class ApiClient {
           // Do not attach backend auth headers if uploading directly to external S3 / storage URLs
           final isExternal = options.path.startsWith('http://') || options.path.startsWith('https://');
           if (!isExternal || options.path.startsWith(AppConfig.apiBaseUrl)) {
+            final activeDevKey = devKey ?? AppConfig.devKey;
+            if (activeDevKey.isNotEmpty) {
+              options.headers['X-Dev-Key'] = activeDevKey;
+            }
+
             final token = await tokenStorage.getAccessToken();
-            if (token != null && token.isNotEmpty) {
+            final savedUser = await tokenStorage.getSavedUser();
+            final email = savedUser?['email'] as String? ?? devUserEmail;
+            final name = savedUser?['name'] as String? ?? devUserName;
+
+            if (token != null && token.isNotEmpty && !token.startsWith('dev_token_')) {
               options.headers['Authorization'] = 'Bearer $token';
-            } else if (devUserEmail != null && devUserEmail!.isNotEmpty) {
-              // Local testing headers supported by CampusHub backend
-              options.headers['X-Dev-User'] = devUserEmail;
-              if (devUserName != null && devUserName!.isNotEmpty) {
-                options.headers['X-Dev-Name'] = devUserName;
+            } else if (email != null && email.isNotEmpty) {
+              // Local and LAN testing headers supported by CampusHub backend
+              options.headers['X-Dev-User'] = email;
+              if (name != null && name.isNotEmpty) {
+                options.headers['X-Dev-Name'] = name;
               }
             }
           }

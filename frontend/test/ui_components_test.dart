@@ -9,9 +9,11 @@ import 'package:campus_hub/core/widgets/no_photo_placeholder.dart';
 import 'package:campus_hub/core/widgets/skeleton_loader.dart';
 import 'package:campus_hub/features/auth/domain/user.dart';
 import 'package:campus_hub/features/auth/providers/auth_providers.dart';
+import 'package:campus_hub/features/buy_sell/data/mock_buy_sell_repository.dart';
 import 'package:campus_hub/features/buy_sell/domain/buy_sell_item.dart';
 import 'package:campus_hub/features/buy_sell/providers/buy_sell_providers.dart';
 import 'package:campus_hub/features/buy_sell/ui/widgets/buy_sell_detail_dialog.dart';
+import 'package:campus_hub/features/lost_found/data/mock_lost_found_repository.dart';
 import 'package:campus_hub/features/lost_found/domain/lost_found_item.dart';
 import 'package:campus_hub/features/lost_found/providers/lost_found_providers.dart';
 import 'package:campus_hub/features/lost_found/ui/widgets/lost_found_detail_dialog.dart';
@@ -177,7 +179,11 @@ void main() {
   });
 
   test('BuySellPaginationNotifier loads initial page and supports loadMore()', () async {
-    final container = ProviderContainer();
+    final container = ProviderContainer(
+      overrides: [
+        buySellRepositoryProvider.overrideWithValue(MockBuySellRepository()),
+      ],
+    );
     addTearDown(container.dispose);
 
     // Initial state has isLoadingInitial == true
@@ -203,7 +209,11 @@ void main() {
   });
 
   test('LostFoundPaginationNotifier loads initial reports and supports loadMore()', () async {
-    final container = ProviderContainer();
+    final container = ProviderContainer(
+      overrides: [
+        lostFoundRepositoryProvider.overrideWithValue(MockLostFoundRepository()),
+      ],
+    );
     addTearDown(container.dispose);
 
     // Initial state has isLoadingInitial == true

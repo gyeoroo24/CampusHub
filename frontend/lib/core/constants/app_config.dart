@@ -5,14 +5,21 @@ class AppConfig {
   AppConfig._();
 
   /// Whether to use in-memory mock repositories or real HTTP endpoints.
-  /// Defaults to `true` until backend API is deployed.
-  static const bool useMockData = bool.fromEnvironment('USE_MOCK', defaultValue: true);
+  /// Set to `false` when connecting to live backend server.
+  static const bool useMockData = bool.fromEnvironment('USE_MOCK', defaultValue: false);
 
   /// Base URL of the FastAPI backend.
-  /// Override with `--dart-define=API_BASE_URL=https://api.yourdomain.com`
+  /// Override with `--dart-define=API_BASE_URL=http://...`
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:8000',
+    defaultValue: 'http://10.217.103.203:8000',
+  );
+
+  /// Development authentication security key for team testing across local network.
+  /// Override with `--dart-define=DEV_KEY=...`
+  static const String devKey = String.fromEnvironment(
+    'DEV_KEY',
+    defaultValue: 'kSH3AyYRCzXn8Czy8xXCZbC9',
   );
 
   /// Connect and receive timeouts for Dio network requests.
