@@ -299,6 +299,8 @@ class MockLostFoundRepository implements ILostFoundRepository {
     required PostType type,
     String query = '',
     int? categoryId,
+    DateTimeRange? dateRange,
+    SortOption sortOption = SortOption.newest,
     List<ReportStatus>? statusList,
     String? reporterId,
     int limit = 20,
@@ -316,11 +318,22 @@ class MockLostFoundRepository implements ILostFoundRepository {
       final matchesStatus =
           statusList == null || statusList.isEmpty || statusList.contains(item.status);
       final matchesReporter = reporterId == null || reporterId.isEmpty || item.reporter.id == reporterId;
+      final matchesDate = dateRange == null ||
+          (item.occurredAt.isAfter(dateRange.start.subtract(const Duration(seconds: 1))) &&
+           item.occurredAt.isBefore(dateRange.end.add(const Duration(seconds: 1))));
 
-      return matchesType && matchesQuery && matchesCategory && matchesStatus && matchesReporter;
+      return matchesType && matchesQuery && matchesCategory && matchesStatus && matchesReporter && matchesDate;
     }).toList();
 
-    filtered.sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+    switch (sortOption) {
+      case SortOption.oldest:
+        filtered.sort((a, b) => a.occurredAt.compareTo(b.occurredAt));
+        break;
+      case SortOption.newest:
+      default:
+        filtered.sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+        break;
+    }
 
     if (offset >= filtered.length) {
       return PaginatedResponse(items: [], limit: limit, offset: offset, hasMore: false);

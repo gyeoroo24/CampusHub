@@ -163,10 +163,16 @@ class _BuySellListCardState extends State<BuySellListCard> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 12,
+                        runSpacing: 6,
                         children: [
-                          Row(
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
                               Text(
                                 '₹${item.price.toStringAsFixed(0)}',
@@ -176,42 +182,58 @@ class _BuySellListCardState extends State<BuySellListCard> {
                                   fontSize: 18,
                                 ),
                               ),
-                              const SizedBox(width: 10),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  item.category.name,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: Theme.of(context).colorScheme.primary,
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 90),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    item.category.name,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context).colorScheme.primary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ),
                             ],
                           ),
-                          Row(
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
-                              Icon(Icons.location_on_outlined, size: 12, color: Colors.grey.shade500),
-                              const SizedBox(width: 3),
-                              Text(
-                                item.location.isNotEmpty ? item.location : 'IISc',
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.location_on_outlined, size: 12, color: Colors.grey.shade500),
+                                  const SizedBox(width: 3),
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(maxWidth: 90),
+                                    child: Text(
+                                      item.location.isNotEmpty ? item.location : 'Campus',
+                                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 8),
                               Text('•', style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
-                              const SizedBox(width: 8),
-                              Text(
-                                item.seller.name,
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 80),
+                                child: Text(
+                                  item.seller.name,
+                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                              const SizedBox(width: 8),
                               Text('•', style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
-                              const SizedBox(width: 8),
                               Text(
                                 DateTimeFormatter.timeAgo(item.createdAt),
                                 style: TextStyle(fontSize: 11, color: Colors.grey.shade500),

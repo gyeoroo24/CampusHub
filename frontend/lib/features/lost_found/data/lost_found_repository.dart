@@ -29,6 +29,8 @@ abstract class ILostFoundRepository {
     required PostType type,
     String query = '',
     int? categoryId,
+    DateTimeRange? dateRange,
+    SortOption sortOption = SortOption.newest,
     List<ReportStatus>? statusList,
     String? reporterId,
     int limit = 20,

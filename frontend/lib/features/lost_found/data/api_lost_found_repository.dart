@@ -31,6 +31,8 @@ class ApiLostFoundRepository implements ILostFoundRepository {
     required PostType type,
     String query = '',
     int? categoryId,
+    DateTimeRange? dateRange,
+    SortOption sortOption = SortOption.newest,
     List<ReportStatus>? statusList,
     String? reporterId,
     int limit = 20,
@@ -44,6 +46,15 @@ class ApiLostFoundRepository implements ILostFoundRepository {
     if (query.trim().isNotEmpty) queryParams['q'] = query.trim();
     if (categoryId != null) queryParams['category_id'] = categoryId;
     if (reporterId != null && reporterId.isNotEmpty) queryParams['reporter_id'] = reporterId;
+    if (dateRange != null) {
+      queryParams['from_date'] = dateRange.start.toIso8601String();
+      queryParams['to_date'] = dateRange.end.toIso8601String();
+    }
+    if (sortOption == SortOption.oldest) {
+      queryParams['sort'] = 'oldest';
+    } else {
+      queryParams['sort'] = 'newest';
+    }
     if (statusList != null && statusList.isNotEmpty) {
       queryParams['status'] = statusList.map((s) => s.name).toList();
     }

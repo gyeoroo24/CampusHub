@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/enums/view_mode.dart';
 import '../../../../core/widgets/skeleton_loader.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../../../auth/ui/auth_dialog.dart';
 import '../../domain/lost_found_item.dart';
 import '../../providers/lost_found_providers.dart';
 import 'lost_found_card.dart';
+import 'lost_found_list_card.dart';
 import 'report_item_dialog.dart';
 
 class LostFoundColumn extends ConsumerStatefulWidget {
@@ -168,32 +170,38 @@ class _LostFoundColumnState extends ConsumerState<LostFoundColumn> {
         ),
         const SizedBox(height: 12),
 
-        // Content Feed (Adaptive Grid or Skeletons with Infinite Scroll)
+        // Content Feed (Adaptive Grid, List, or Skeletons with Infinite Scroll)
         Expanded(
           child: paginatedState.isLoadingInitial
-              ? LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isTwoCols = constraints.maxWidth > 440;
-                    if (isTwoCols) {
-                      return GridView.builder(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          childAspectRatio: 0.72,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                        itemCount: 4,
-                        itemBuilder: (_, __) => const ShimmerLoadingCard(isList: false),
-                      );
-                    }
-                    return ListView.builder(
+              ? (ref.watch(lostFoundFilterProvider).viewMode == ViewMode.list
+                  ? ListView.builder(
                       padding: const EdgeInsets.only(bottom: 16),
-                      itemCount: 3,
+                      itemCount: 4,
                       itemBuilder: (_, __) => const ShimmerLoadingCard(isList: true),
-                    );
-                  },
-                )
+                    )
+                  : LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isTwoCols = constraints.maxWidth > 440;
+                        if (isTwoCols) {
+                          return GridView.builder(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              childAspectRatio: 0.72,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                            ),
+                            itemCount: 4,
+                            itemBuilder: (_, __) => const ShimmerLoadingCard(isList: false),
+                          );
+                        }
+                        return ListView.builder(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          itemCount: 3,
+                          itemBuilder: (_, __) => const ShimmerLoadingCard(isList: true),
+                        );
+                      },
+                    ))
               : items.isEmpty
                   ? Center(
                       child: Column(
@@ -208,59 +216,25 @@ class _LostFoundColumnState extends ConsumerState<LostFoundColumn> {
                         ],
                       ),
                     )
-                  : LayoutBuilder(
-                      builder: (context, constraints) {
-                        final isTwoCols = constraints.maxWidth > 440;
+                  : Builder(
+                      builder: (context) {
+                        final filter = ref.watch(lostFoundFilterProvider);
+                        final totalCount = items.length +
+                            (paginatedState.isLoadingMore || (!paginatedState.hasMore && items.isNotEmpty) ? 1 : 0);
 
-                        if (isTwoCols) {
-                          return ListView(
+                        // If user selected List View mode
+                        if (filter.viewMode == ViewMode.list) {
+                          return ListView.builder(
                             controller: _scrollController,
                             padding: const EdgeInsets.only(bottom: 24),
-                            children: [
-                              GridView.builder(
-                                physics: const NeverScrollableScrollPhysics(),
-                                shrinkWrap: true,
-                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  childAspectRatio: 0.72,
-                                  crossAxisSpacing: 12,
-                                  mainAxisSpacing: 12,
-                                ),
-                                itemCount: items.length,
-                                itemBuilder: (context, index) => LostFoundCard(
-                                  item: items[index],
-                                  onStatusChange: (status) {
-                                    if (widget.postType == PostType.lost) {
-                                      ref.read(lostReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
-                                    } else {
-                                      ref.read(foundReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
-                                    }
-                                  },
-                                ),
-                              ),
-                              if (paginatedState.isLoadingMore)
-                                _buildLoadingMoreIndicator(headerColor)
-                              else if (!paginatedState.hasMore && items.isNotEmpty)
-                                _buildAllCaughtUpIndicator(items.length),
-                            ],
-                          );
-                        }
-
-                        // Mobile single-column: uses intrinsic height so cards never overflow
-                        final totalCount = items.length + (paginatedState.isLoadingMore || (!paginatedState.hasMore && items.isNotEmpty) ? 1 : 0);
-                        return ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.only(bottom: 24),
-                          itemCount: totalCount,
-                          itemBuilder: (context, index) {
-                            if (index == items.length) {
-                              return paginatedState.isLoadingMore
-                                  ? _buildLoadingMoreIndicator(headerColor)
-                                  : _buildAllCaughtUpIndicator(items.length);
-                            }
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: LostFoundCard(
+                            itemCount: totalCount,
+                            itemBuilder: (context, index) {
+                              if (index == items.length) {
+                                return paginatedState.isLoadingMore
+                                    ? _buildLoadingMoreIndicator(headerColor)
+                                    : _buildAllCaughtUpIndicator(items.length);
+                              }
+                              return LostFoundListCard(
                                 item: items[index],
                                 onStatusChange: (status) {
                                   if (widget.postType == PostType.lost) {
@@ -269,7 +243,75 @@ class _LostFoundColumnState extends ConsumerState<LostFoundColumn> {
                                     ref.read(foundReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
                                   }
                                 },
-                              ),
+                              );
+                            },
+                          );
+                        }
+
+                        // Otherwise Grid View (2 cols on desktop, 1 col on mobile)
+                        return LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isTwoCols = constraints.maxWidth > 440;
+
+                            if (isTwoCols) {
+                              return ListView(
+                                controller: _scrollController,
+                                padding: const EdgeInsets.only(bottom: 24),
+                                children: [
+                                  GridView.builder(
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    shrinkWrap: true,
+                                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      childAspectRatio: 0.72,
+                                      crossAxisSpacing: 12,
+                                      mainAxisSpacing: 12,
+                                    ),
+                                    itemCount: items.length,
+                                    itemBuilder: (context, index) => LostFoundCard(
+                                      item: items[index],
+                                      onStatusChange: (status) {
+                                        if (widget.postType == PostType.lost) {
+                                          ref.read(lostReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
+                                        } else {
+                                          ref.read(foundReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  if (paginatedState.isLoadingMore)
+                                    _buildLoadingMoreIndicator(headerColor)
+                                  else if (!paginatedState.hasMore && items.isNotEmpty)
+                                    _buildAllCaughtUpIndicator(items.length),
+                                ],
+                              );
+                            }
+
+                            // Mobile single-column: uses intrinsic height so cards never overflow
+                            return ListView.builder(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.only(bottom: 24),
+                              itemCount: totalCount,
+                              itemBuilder: (context, index) {
+                                if (index == items.length) {
+                                  return paginatedState.isLoadingMore
+                                      ? _buildLoadingMoreIndicator(headerColor)
+                                      : _buildAllCaughtUpIndicator(items.length);
+                                }
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: LostFoundCard(
+                                    item: items[index],
+                                    onStatusChange: (status) {
+                                      if (widget.postType == PostType.lost) {
+                                        ref.read(lostReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
+                                      } else {
+                                        ref.read(foundReportsPaginationProvider.notifier).updateItemStatusLocally(items[index].id, status);
+                                      }
+                                    },
+                                  ),
+                                );
+                              },
                             );
                           },
                         );

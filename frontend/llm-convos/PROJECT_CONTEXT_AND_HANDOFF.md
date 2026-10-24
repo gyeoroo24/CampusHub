@@ -1,7 +1,7 @@
 # CampusHub: Project Context, Architecture & Session Handoff Guide
 
-**Document Version:** 3.0  
-**Last Updated:** 23 October 2026  
+**Document Version:** 3.1  
+**Last Updated:** 24 October 2026  
 **Project:** CampusHub — Cloud Computing Course Project (DS252), MTech CSA, Indian Institute of Science (IISc), Bangalore.  
 **Repository Branch Context:**
 * `origin/frontend` (Current local branch: `frontend`): Flutter client codebase.
@@ -69,6 +69,7 @@ CampusHub/frontend/lib/
 │   ├── constants/
 │   │   └── app_config.dart            # useMockData toggle, dev user configs
 │   ├── enums/
+│   │   ├── date_preset.dart           # all, today, yesterday, last3Days, thisWeek, thisMonth
 │   │   ├── sort_option.dart           # newest, oldest, priceLowHigh, priceHighLow
 │   │   └── view_mode.dart             # grid, list
 │   ├── models/
@@ -115,7 +116,8 @@ CampusHub/frontend/lib/
 │           ├── lost_found_feed_screen.dart
 │           └── widgets/
 │               ├── lost_found_column.dart      # Infinite scroll, skeleton loaders, mobile ListView
-│               ├── lost_found_card.dart        # Hero thumbnail, incident time, status pills
+│               ├── lost_found_card.dart        # Grid card with Hero thumbnail, incident time, status pills
+│               ├── lost_found_list_card.dart   # List card with 120x100 thumbnail, status, metadata wrap
 │               ├── lost_found_filter_bar.dart
 │               ├── lost_found_detail_dialog.dart # Status controls, privacy gate, mod actions
 │               └── report_item_dialog.dart       # Titleless, past datetime picker, FR-9 match modal
@@ -137,8 +139,13 @@ CampusHub/frontend/lib/
   * Responsive shimmering skeleton loaders (`ShimmerLoadingCard`, `SkeletonGrid`, `SkeletonList`).
   * Modern marketplace layout: spotlight hero banner, emoji category chips, quick price filters, responsive mobile-friendly layouts (no RenderFlex overflow down to 375px width).
   * Iteration 7.1 visual polish: BnS tiles include description snippet & seller row (no wasted whitespace), unified `displayTitle` for LnF cards and dialogs, and upgraded type-safe user account dialog with role pills.
+  * Iteration 7.2 manual UI alignment & mobile parity:
+    * Integrated commit `5ecead0` manual UI changes (removed redundant banners, merged Sell Item button into category pills row). Wrapped category chips in `Expanded` and adjusted mobile label (`'Sell'`) and padding to ensure 0 overflows.
+    * Added dismissible "x" button to "Trusted Campus Exchange" info bar; banner now only appears when user manually logs in via OTP during the session (`showTrustedExchangeBannerProvider`) and stays dismissed until the next manual login.
+    * Added full LnF filter parity: `DatePresetFilter` chips ("All", "Today", "Yesterday", "Last 3 Days", "This Week", "This Month"), unified sort dropdown matching BnS, and implemented responsive `LostFoundListCard` with list view toggle.
+    * Mobile and desktop split-column layout hardened with `Wrap` and `ConstrainedBox` across both modules to prevent any `RenderFlex` overflows on narrow widths down to 375px.
 * **Static Analysis:** `flutter analyze` runs with **0 errors, 0 warnings, 0 hints**.
-* **Automated Tests:** `flutter test` executes **18 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`).
+* **Automated Tests:** `flutter test` executes **21 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`).
 
 ---
 

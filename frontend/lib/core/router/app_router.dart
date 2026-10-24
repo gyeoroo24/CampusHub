@@ -453,6 +453,7 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
           FilledButton.tonal(
             onPressed: () {
               Navigator.pop(ctx);
+              ref.read(showTrustedExchangeBannerProvider.notifier).state = false;
               ref.read(authRepositoryProvider).signOut();
             },
             child: const Text('Sign Out'),

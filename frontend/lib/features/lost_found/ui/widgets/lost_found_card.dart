@@ -223,17 +223,21 @@ class _LostFoundCardState extends State<LostFoundCard> {
                     ),
                     const SizedBox(height: 6),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          item.reporterContact != null
-                              ? '${item.reporter.name} • Verified'
-                              : 'Reporter: ${item.reporter.name}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey.shade500,
+                        Expanded(
+                          child: Text(
+                            item.reporterContact != null
+                                ? '${item.reporter.name} • Verified'
+                                : 'Reporter: ${item.reporter.name}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey.shade500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        const SizedBox(width: 4),
                         Icon(
                           item.reporterContact != null ? Icons.lock_open_rounded : Icons.lock_outline_rounded,
                           size: 12,

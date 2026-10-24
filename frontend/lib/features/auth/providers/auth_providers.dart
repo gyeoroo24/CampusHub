@@ -41,3 +41,10 @@ final isGuestUserProvider = Provider<bool>((ref) {
   final user = ref.watch(currentUserProvider);
   return user == null || user.isGuest;
 });
+
+/// Tracks whether the "Trusted Campus Exchange" info banner should be shown.
+/// Only shown when the user has just logged in manually during the active session.
+/// Does NOT show on app launch for persisted sessions or for guests.
+/// Dismissible via the 'x' button until next manual login.
+final showTrustedExchangeBannerProvider = StateProvider<bool>((ref) => false);
+

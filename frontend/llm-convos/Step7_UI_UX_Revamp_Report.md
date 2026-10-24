@@ -3,7 +3,7 @@
 **Date:** 23 October 2026  
 **Author:** Pair Programming Assistant (Antigravity) & Mukund Kukreja  
 **Scope:** Modern E-Commerce UI Overhaul, Infinite Scrolling with Riverpod StateNotifier, Search Debounce, Hero Animations, Shimmer Skeleton Loaders, and Test Verification  
-**Status:** Completed & Verified (`flutter analyze`: 0 issues, `flutter test`: 17/17 passing)
+**Status:** Completed & Verified (`flutter analyze`: 0 issues, `flutter test`: 21/21 passing)
 
 ---
 
@@ -189,3 +189,61 @@ Following manual testing and visual review of the Step 7 build, three specific U
 ### Test Metrics:
 * `flutter analyze`: **0 issues** (clean).
 * `flutter test`: **18/18 tests passed** (100% pass rate).
+
+---
+
+## 7. Iteration 7.2 Manual UI Alignment, Mobile Parity, Dismissible Banner & LnF Filter Parity
+
+**Date:** 24 October 2026  
+**Scope:** Integration of manual UI updates (commit `5ecead0`), mobile-desktop layout parity, manual-session-only dismissible banner, and full LnF filter & list-view feature parity.
+
+### 7.1 Manual UI Alignment & Mobile Responsiveness Parity
+* **Redundant Banners Removed:** Both Buy & Sell and Lost & Found redundant top banners were completely removed to maximize vertical screen real estate.
+* **Category Pills + Action Button Row:** The "Sell Item" button was integrated directly into the category pills row.
+  - *Fix:* Wrapped `SingleChildScrollView` of category chips in `Expanded` to prevent a 357px RenderFlex horizontal overflow.
+  - *Mobile Adaptation:* Responsive label (`'Sell'` on mobile, `'Sell Item'` on desktop) and responsive horizontal padding (12px on mobile vs 16px on desktop) ensuring clean single-row presentation on narrow 375px screens.
+
+### 7.2 Session-Specific Dismissible "Trusted Campus Exchange" Banner
+* **Requirement:** The info bar should only appear when a user *manually* logs in via the auth dialog during the session (not on app launch from persisted session or guest browsing), and once dismissed via a close (`x`) button, it stays hidden until the next manual login.
+* **Implementation:**
+  - `showTrustedExchangeBannerProvider = StateProvider<bool>((ref) => false)` in `lib/features/auth/providers/auth_providers.dart` (defaults to `false`).
+  - Upon successful OTP submission and login completion in `AuthDialog`, `showTrustedExchangeBannerProvider.notifier.state = true`.
+  - Added close icon (`x`) `IconButton` to the right of the banner that sets `state = false`.
+  - On user sign-out in `AppRouter`, `showTrustedExchangeBannerProvider` resets to `false`.
+  - Layout is fully responsive: feature pills (`🛡️ Verified Email`, `🤝 Face-to-Face`) render below text on mobile and inline on desktop.
+
+### 7.3 Lost & Found Filter & List-View Parity with Buy & Sell
+* **Date Presets Filter:**
+  - Created `DatePresetFilter` enum (`all`, `today`, `yesterday`, `last3Days`, `thisWeek`, `thisMonth`) in `lib/core/enums/date_preset.dart` with a helper method `toDateTimeRange()`.
+  - Integrated `datePreset` and `viewMode` into `LostFoundFilterState`.
+  - Added horizontal scrollable `FilterChip`s in `LostFoundFilterBar`.
+  - Updated repository signatures (`fetchReportsPage`) and implementations (`MockLostFoundRepository`, `ApiLostFoundRepository`) to filter by date range and sort order.
+* **Unified Sort Dropdown:**
+  - Standardized LnF sort dropdown to match BnS styling (`Icons.sort_rounded`, `Newest First` / `Oldest First`, primary theme color).
+* **List View Implementation:**
+  - Engineered `LostFoundListCard` featuring a 120x100 thumbnail, Hero tag `lf_report_${item.id}`, status badge, `item.displayTitle`, category pill, 2-line description, and metadata row.
+  - Supported view mode toggle (`grid` vs `list`) in `LostFoundFilterBar`.
+  - Updated `LostFoundColumn` to dynamically render `ListView.builder` when `viewMode == ViewMode.list`, complete with `ShimmerLoadingCard(isList: true)` skeleton loaders.
+
+### 7.4 Mobile & Desktop Layout Hardening & Overflow Elimination
+* **Issue 1 (Desktop Split-Column LnF List Overflow):**
+  - In desktop mode, `LostFoundFeedScreen` splits screen into two ~550px columns. Inside `LostFoundListCard`, available width for the right text column is ~324px. Rigid horizontal `Row` with location, time, and reporter caused a 151px overflow.
+  - *Fix:* Replaced single `Row` with a responsive `Wrap` utilizing individual icons and `ConstrainedBox` limits.
+* **Issue 2 (Mobile 375px List View Overflows in Both Modules):**
+  - In 375px mobile view, available text column width is only 181px. Unconstrained `Row` constructs for price/category and title/category exceeded 181px by 8-51px.
+  - *Fix:* In `BuySellListCard`, wrapped price and category in a responsive `Wrap` with constrained category widths. In `LostFoundListCard`, constrained category width to 85px max with text truncation.
+
+### 7.5 Final Test & Analysis Verification
+* **Automated Test Suite:**
+  - `widget_test.dart` expanded to test desktop smoke, mobile responsiveness, account dialog, manual login banner visibility & dismissal, LnF date presets & view mode toggle, and mobile list-view overflow safety.
+  - `data_layer_test.dart` and `ui_components_test.dart` all passing.
+* **Results:**
+  ```bash
+  $ flutter analyze
+  Analyzing frontend...
+  No issues found! (ran in 0.9s)
+
+  $ flutter test
+  00:05 +21: All tests passed!
+  ```
+* **Git Status:** Clean local commit state; **0 pushes to remote**.

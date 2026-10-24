@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_config.dart';
+import '../../../core/enums/date_preset.dart';
 import '../../../core/enums/sort_option.dart';
+import '../../../core/enums/view_mode.dart';
 import '../../../core/models/category_ref.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../buy_sell/providers/buy_sell_providers.dart' show PaginatedFeedState;
@@ -11,33 +13,55 @@ import '../domain/lost_found_item.dart';
 class LostFoundFilterState {
   final String query;
   final String category;
-  final DateTimeRange? dateRange;
+  final DatePresetFilter datePreset;
+  final DateTimeRange? customDateRange;
   final SortOption sortOption;
   final PostType? typeFilter;
+  final ViewMode viewMode;
 
   LostFoundFilterState({
     this.query = '',
     this.category = 'All',
-    this.dateRange,
+    this.datePreset = DatePresetFilter.all,
+    this.customDateRange,
     this.sortOption = SortOption.newest,
     this.typeFilter,
+    this.viewMode = ViewMode.grid,
   });
+
+  /// The active date range computed from custom selection or date preset
+  DateTimeRange? get dateRange => customDateRange ?? datePreset.toDateTimeRange();
+
+  bool get hasActiveFilters =>
+      category != 'All' ||
+      datePreset != DatePresetFilter.all ||
+      customDateRange != null ||
+      query.isNotEmpty ||
+      sortOption != SortOption.newest;
 
   LostFoundFilterState copyWith({
     String? query,
     String? category,
+    DatePresetFilter? datePreset,
+    DateTimeRange? customDateRange,
+    bool clearCustomDateRange = false,
     DateTimeRange? dateRange,
     bool clearDateRange = false,
     SortOption? sortOption,
     PostType? typeFilter,
     bool clearTypeFilter = false,
+    ViewMode? viewMode,
   }) {
     return LostFoundFilterState(
       query: query ?? this.query,
       category: category ?? this.category,
-      dateRange: clearDateRange ? null : (dateRange ?? this.dateRange),
+      datePreset: datePreset ?? this.datePreset,
+      customDateRange: (clearCustomDateRange || clearDateRange)
+          ? null
+          : (customDateRange ?? dateRange ?? this.customDateRange),
       sortOption: sortOption ?? this.sortOption,
       typeFilter: clearTypeFilter ? null : (typeFilter ?? this.typeFilter),
+      viewMode: viewMode ?? this.viewMode,
     );
   }
 }
@@ -82,6 +106,8 @@ class LostFoundPaginationNotifier extends StateNotifier<PaginatedFeedState<LostF
       final paged = await repo.fetchReportsPage(
         type: _kind,
         query: filter.query,
+        dateRange: filter.dateRange,
+        sortOption: filter.sortOption,
         limit: _pageSize,
         offset: 0,
       );
@@ -114,6 +140,8 @@ class LostFoundPaginationNotifier extends StateNotifier<PaginatedFeedState<LostF
       final paged = await repo.fetchReportsPage(
         type: _kind,
         query: filter.query,
+        dateRange: filter.dateRange,
+        sortOption: filter.sortOption,
         limit: _pageSize,
         offset: state.offset,
       );

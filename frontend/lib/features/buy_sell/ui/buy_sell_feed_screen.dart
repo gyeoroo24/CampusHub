@@ -64,6 +64,7 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
   Widget build(BuildContext context) {
     final paginatedState = ref.watch(buySellPaginationProvider);
     final filter = ref.watch(buySellFilterProvider);
+    final showTrustedExchangeBanner = ref.watch(showTrustedExchangeBannerProvider);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final isMobile = MediaQuery.of(context).size.width < 750;
@@ -72,12 +73,15 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
       body: CustomScrollView(
         controller: _scrollController,
         slivers: [
-          // ── Amazon-Inspired Spotlight Banner (collapsible/subtle) ───────────
-          if (!isMobile)
+          // ── Trusted Campus Exchange Banner (Only for manually logged-in users, dismissible via 'x') ──
+          if (showTrustedExchangeBanner)
             SliverToBoxAdapter(
               child: Container(
-                margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                margin: EdgeInsets.fromLTRB(16, isMobile ? 8 : 12, 16, 4),
+                padding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 12 : 18,
+                  vertical: isMobile ? 10 : 12,
+                ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: isDark
@@ -90,6 +94,7 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                   ),
                 ),
                 child: Row(
+                  crossAxisAlignment: isMobile ? CrossAxisAlignment.start : CrossAxisAlignment.center,
                   children: [
                     Container(
                       padding: const EdgeInsets.all(8),
@@ -99,7 +104,7 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                       ),
                       child: Icon(Icons.verified_rounded, color: theme.colorScheme.primary, size: 20),
                     ),
-                    const SizedBox(width: 14),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,63 +113,91 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                             'Trusted Campus Exchange',
                             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                           ),
+                          const SizedBox(height: 2),
                           Text(
                             'Every listing is posted by an IISc student verified via their IISc email address. Contact the seller to setup a time and place for hassle-free physical handovers.',
                             style: TextStyle(fontSize: 11, color: theme.hintColor),
                           ),
+                          if (isMobile) ...[
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: [
+                                _buildFeaturePill(context, '🛡️ Verified Email'),
+                                _buildFeaturePill(context, '🤝 Face-to-Face'),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        _buildFeaturePill(context, '🛡️ Verified Email'),
-                        _buildFeaturePill(context, '🤝 Face-to-Face'),
-                      ],
+                    if (!isMobile) ...[
+                      const SizedBox(width: 12),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          _buildFeaturePill(context, '🛡️ Verified Email'),
+                          _buildFeaturePill(context, '🤝 Face-to-Face'),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(width: 6),
+                    IconButton(
+                      tooltip: 'Dismiss',
+                      iconSize: 18,
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                      icon: Icon(Icons.close_rounded, color: theme.hintColor),
+                      onPressed: () {
+                        ref.read(showTrustedExchangeBannerProvider.notifier).state = false;
+                      },
                     ),
                   ],
                 ),
               ),
             ),
 
-          // ── Category Pills (Horizontal Scroll with Icons) ───────────────────
+          // ── Category Pills (Horizontal Scroll with Icons) & Sell Item Button ──
           SliverToBoxAdapter(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               color: theme.cardColor,
               child: Row(
-                mainAxisAlignment: .spaceBetween, 
                 children: [
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: _categoryIcons.entries.map((entry) {
-                        final isSelected = filter.category == entry.key;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8.0),
-                          child: ChoiceChip(
-                            avatar: Text(entry.value, style: const TextStyle(fontSize: 13)),
-                            label: Text(entry.key),
-                            selected: isSelected,
-                            onSelected: (selected) {
-                              if (selected) {
-                                ref.read(buySellFilterProvider.notifier).update(
-                                      (s) => s.copyWith(category: entry.key),
-                                    );
-                              }
-                            },
-                            visualDensity: VisualDensity.compact,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          ),
-                        );
-                      }).toList(),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: _categoryIcons.entries.map((entry) {
+                          final isSelected = filter.category == entry.key;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8.0),
+                            child: ChoiceChip(
+                              avatar: Text(entry.value, style: const TextStyle(fontSize: 13)),
+                              label: Text(entry.key),
+                              selected: isSelected,
+                              onSelected: (selected) {
+                                if (selected) {
+                                  ref.read(buySellFilterProvider.notifier).update(
+                                        (s) => s.copyWith(category: entry.key),
+                                      );
+                                }
+                              },
+                              visualDensity: VisualDensity.compact,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            ),
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 8),
                   FilledButton.icon(
                     style: FilledButton.styleFrom(
                       padding: EdgeInsets.symmetric(
-                        horizontal: isMobile ? 12 : 18,
+                        horizontal: isMobile ? 12 : 16,
                         vertical: isMobile ? 8 : 12,
                       ),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

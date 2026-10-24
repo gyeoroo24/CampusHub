@@ -100,6 +100,7 @@ class _AuthDialogState extends ConsumerState<AuthDialog> {
       final email = _emailController.text.trim();
       final otp = _otpController.text.trim();
       await ref.read(authRepositoryProvider).verifyOtp(email, otp);
+      ref.read(showTrustedExchangeBannerProvider.notifier).state = true;
 
       if (mounted) {
         Navigator.of(context).pop(true);
