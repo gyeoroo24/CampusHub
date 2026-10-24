@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_client.dart';
-import '../../../core/constants/app_config.dart';
+import '../../../core/config/server_config.dart';
 import '../../../core/storage/token_storage.dart';
 import '../data/auth_repository.dart';
 import '../domain/user.dart';
@@ -11,12 +11,19 @@ final tokenStorageProvider = Provider<ITokenStorage>((ref) {
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   final tokenStorage = ref.watch(tokenStorageProvider);
-  return ApiClient(storage: tokenStorage);
+  final serverConfig = ref.watch(serverConfigProvider);
+  return ApiClient(
+    storage: tokenStorage,
+    baseUrl: serverConfig.apiBaseUrl,
+    devKey: serverConfig.devKey,
+    devUserEmail: serverConfig.devUserEmail,
+  );
 });
 
 final authRepositoryProvider = Provider<IAuthRepository>((ref) {
   final tokenStorage = ref.watch(tokenStorageProvider);
-  if (AppConfig.useMockData) {
+  final serverConfig = ref.watch(serverConfigProvider);
+  if (serverConfig.useMockData) {
     return MockAuthRepository(storage: tokenStorage);
   }
   return ApiAuthRepository(

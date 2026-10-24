@@ -1,7 +1,9 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/config/server_config.dart';
 import '../../../core/models/category_ref.dart';
 import '../../../core/utils/category_emoji_helper.dart';
 import '../../../core/utils/date_time_formatter.dart';
@@ -12,7 +14,8 @@ import '../../lost_found/providers/lost_found_providers.dart';
 import '../providers/admin_providers.dart';
 
 class AdminControlsScreen extends ConsumerStatefulWidget {
-  const AdminControlsScreen({super.key});
+  final int? initialTab;
+  const AdminControlsScreen({super.key, this.initialTab});
 
   @override
   ConsumerState<AdminControlsScreen> createState() => _AdminControlsScreenState();
@@ -38,12 +41,26 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
   String _categoryTarget = 'buy_sell';
   bool _isAddingCategory = false;
 
+  // Live Demo Backend connection form (Admin only)
+  late final TextEditingController _baseUrlController;
+  late final TextEditingController _devKeyController;
+  late final TextEditingController _devUserEmailController;
+  late final TextEditingController _databaseUrlController;
+  bool _useMockMode = true;
+  bool _obscureDevKey = true;
+  bool _isTestingConnection = false;
+  bool _isSavingConnection = false;
+  Map<String, dynamic>? _connectionTestReport;
+
   @override
   void initState() {
     super.initState();
     final user = ref.read(currentUserProvider);
-    final initialIndex = (user != null && !user.isAdmin && user.isModerator) ? 2 : 0;
-    _tabController = TabController(length: 5, vsync: this, initialIndex: initialIndex);
+    final fallbackIndex = (user != null && !user.isAdmin && user.isModerator) ? 2 : 0;
+    final initial = (widget.initialTab != null && widget.initialTab! >= 0 && widget.initialTab! < 5)
+        ? widget.initialTab!
+        : fallbackIndex;
+    _tabController = TabController(length: 5, vsync: this, initialIndex: initial);
 
     // Default category target according to user's permissions
     if (user != null && !user.isAdmin) {
@@ -53,6 +70,16 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
         _categoryTarget = 'buy_sell';
       }
     }
+
+    // Initialize backend demo configuration from active ServerConfig
+    final config = ref.read(serverConfigProvider);
+    _useMockMode = config.useMockData;
+    _baseUrlController = TextEditingController(text: config.apiBaseUrl);
+    _devKeyController = TextEditingController(text: config.devKey);
+    _devUserEmailController = TextEditingController(text: config.devUserEmail);
+    _databaseUrlController = TextEditingController(
+      text: config.databaseUrl ?? 'postgresql://postgres:password@10.217.103.203:5432/campushub',
+    );
   }
 
   @override
@@ -61,6 +88,10 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
     _modEmailController.dispose();
     _userEmailController.dispose();
     _categoryController.dispose();
+    _baseUrlController.dispose();
+    _devKeyController.dispose();
+    _devUserEmailController.dispose();
+    _databaseUrlController.dispose();
     super.dispose();
   }
 
@@ -175,6 +206,30 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
             ),
           ],
         ),
+        actions: [
+          if (currentUser.isAdmin)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilledButton.tonalIcon(
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+                icon: Icon(
+                  _useMockMode ? Icons.settings_ethernet_rounded : Icons.wifi_rounded,
+                  size: 16,
+                  color: _useMockMode ? null : Colors.green.shade700,
+                ),
+                label: Text(
+                  _useMockMode ? 'Connect Live Backend' : 'Live Backend Active',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () {
+                  _tabController.animateTo(4);
+                },
+              ),
+            ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
@@ -188,7 +243,10 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
             const Tab(icon: Icon(Icons.manage_accounts_outlined, size: 18), text: 'User Accounts'),
             const Tab(icon: Icon(Icons.report_gmailerrorred_rounded, size: 18), text: 'Reports Queue'),
             const Tab(icon: Icon(Icons.category_outlined, size: 18), text: 'Categories'),
-            const Tab(icon: Icon(Icons.dns_outlined, size: 18), text: 'System & Health'),
+            Tab(
+              icon: const Icon(Icons.dns_outlined, size: 18),
+              text: currentUser.isAdmin ? 'Backend & Health' : 'System & Health',
+            ),
           ],
         ),
       ),
@@ -1436,10 +1494,11 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
   }
 
   // ---------------------------------------------------------------------------
-  // TAB 5: System Telemetry & Canary Health
+  // TAB 5: Backend & Canary Health
   // ---------------------------------------------------------------------------
   Widget _buildSystemHealthTab(bool isDark, ThemeData theme) {
     final healthAsync = ref.watch(systemHealthProvider);
+    final currentUser = ref.watch(currentUserProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -1449,6 +1508,12 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Live Demo Backend & Database Connection Card (Admin Only)
+              if (currentUser?.isAdmin == true) ...[
+                _buildDemoConnectionCard(isDark, theme),
+                const SizedBox(height: 24),
+              ],
+
               Card(
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -1520,6 +1585,497 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
         ),
       ),
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Demo Backend & Database Connection Controls (Admin Only)
+  // ---------------------------------------------------------------------------
+  Widget _buildDemoConnectionCard(bool isDark, ThemeData theme) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: _useMockMode
+              ? (isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1))
+              : Colors.teal.shade400,
+          width: _useMockMode ? 1 : 1.5,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: _useMockMode
+                        ? (isDark ? const Color(0xFF334155) : Colors.grey.shade200)
+                        : Colors.teal.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    _useMockMode ? Icons.memory_rounded : Icons.wifi_tethering_rounded,
+                    size: 22,
+                    color: _useMockMode
+                        ? (isDark ? Colors.grey.shade300 : Colors.grey.shade700)
+                        : Colors.teal.shade700,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Live Demo Backend & Database Connection',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      Text(
+                        'Connect this frontend to your teammate\'s FastAPI server and live PostgreSQL database for integration demos.',
+                        style: TextStyle(fontSize: 12, color: theme.hintColor),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _useMockMode
+                        ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9))
+                        : (isDark ? const Color(0xFF064E3B) : const Color(0xFFECFDF5)),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _useMockMode ? Colors.grey.shade400 : Colors.teal.shade400,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _useMockMode ? Icons.layers_outlined : Icons.check_circle_rounded,
+                        size: 14,
+                        color: _useMockMode ? Colors.grey.shade600 : Colors.teal.shade700,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _useMockMode ? 'MOCK MODE' : 'LIVE BACKEND',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: _useMockMode
+                              ? (isDark ? Colors.grey.shade400 : Colors.grey.shade700)
+                              : (isDark ? Colors.teal.shade200 : Colors.teal.shade900),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 28),
+
+            // Backend Mode Selector
+            const Text(
+              'Active Backend Mode:',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(
+                  value: true,
+                  icon: Icon(Icons.layers_clear_outlined, size: 16),
+                  label: Text('Mock Data (In-Memory Simulation)'),
+                ),
+                ButtonSegment(
+                  value: false,
+                  icon: Icon(Icons.cable_rounded, size: 16),
+                  label: Text('Live Backend Server (FastAPI + PostgreSQL)'),
+                ),
+              ],
+              selected: {_useMockMode},
+              onSelectionChanged: (set) {
+                setState(() {
+                  _useMockMode = set.first;
+                  _connectionTestReport = null;
+                });
+              },
+            ),
+            const SizedBox(height: 20),
+
+            // Server Base URL field
+            TextField(
+              controller: _baseUrlController,
+              decoration: InputDecoration(
+                labelText: 'FastAPI Server Base URL',
+                hintText: 'e.g. http://10.217.103.203:8000',
+                prefixIcon: const Icon(Icons.dns_rounded, size: 18),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Presets for Base URL
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text('Quick presets:', style: TextStyle(fontSize: 11, color: theme.hintColor)),
+                ActionChip(
+                  label: const Text('Teammate Laptop (10.217.103.203:8000)', style: TextStyle(fontSize: 11)),
+                  avatar: const Icon(Icons.laptop_chromebook_rounded, size: 14),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    setState(() {
+                      _baseUrlController.text = 'http://10.217.103.203:8000';
+                    });
+                  },
+                ),
+                ActionChip(
+                  label: const Text('Localhost (localhost:8000)', style: TextStyle(fontSize: 11)),
+                  avatar: const Icon(Icons.computer_rounded, size: 14),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    setState(() {
+                      _baseUrlController.text = 'http://localhost:8000';
+                    });
+                  },
+                ),
+                ActionChip(
+                  label: const Text('127.0.0.1 (127.0.0.1:8000)', style: TextStyle(fontSize: 11)),
+                  avatar: const Icon(Icons.lan_outlined, size: 14),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    setState(() {
+                      _baseUrlController.text = 'http://127.0.0.1:8000';
+                    });
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Developer Security Key (X-Dev-Key)
+            TextField(
+              controller: _devKeyController,
+              obscureText: _obscureDevKey,
+              decoration: InputDecoration(
+                labelText: 'Developer Security Key / Secret (X-Dev-Key)',
+                hintText: 'e.g. kSH3AyYRCzXn8Czy8xXCZbC9',
+                prefixIcon: const Icon(Icons.vpn_key_rounded, size: 18),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureDevKey ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
+                  tooltip: _obscureDevKey ? 'Show key' : 'Hide key',
+                  onPressed: () => setState(() => _obscureDevKey = !_obscureDevKey),
+                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Dev User Email & Identity (X-Dev-User)
+            TextField(
+              controller: _devUserEmailController,
+              decoration: InputDecoration(
+                labelText: 'Test User Email Identity (X-Dev-User)',
+                hintText: 'e.g. mukund@iisc.ac.in or kmukund@iisc.ac.in',
+                prefixIcon: const Icon(Icons.badge_outlined, size: 18),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                helperText: 'Injected into X-Dev-User header for authentication on the teammate\'s local backend server.',
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text('Dev identities:', style: TextStyle(fontSize: 11, color: theme.hintColor)),
+                ActionChip(
+                  label: const Text('kmukund@iisc.ac.in (Admin)', style: TextStyle(fontSize: 11)),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => setState(() => _devUserEmailController.text = 'kmukund@iisc.ac.in'),
+                ),
+                ActionChip(
+                  label: const Text('mukund@iisc.ac.in', style: TextStyle(fontSize: 11)),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => setState(() => _devUserEmailController.text = 'mukund@iisc.ac.in'),
+                ),
+                ActionChip(
+                  label: const Text('cadithya@iisc.ac.in (Moderator)', style: TextStyle(fontSize: 11)),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => setState(() => _devUserEmailController.text = 'cadithya@iisc.ac.in'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Database Connection URI (Reference for Demo)
+            TextField(
+              controller: _databaseUrlController,
+              decoration: InputDecoration(
+                labelText: 'Database Connection URI (Demo Reference)',
+                hintText: 'postgresql://postgres:password@10.217.103.203:5432/campushub',
+                prefixIcon: const Icon(Icons.storage_rounded, size: 18),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                helperText: 'FastAPI on your teammate\'s laptop connects to this PostgreSQL instance. Testing connection below verifies PostgreSQL via /health.',
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Connection Test Report Box
+            if (_connectionTestReport != null) ...[
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: _connectionTestReport!['success'] == true
+                      ? (isDark ? const Color(0xFF064E3B) : const Color(0xFFECFDF5))
+                      : (isDark ? const Color(0xFF450A0A) : const Color(0xFFFEF2F2)),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _connectionTestReport!['success'] == true
+                        ? Colors.green.shade400
+                        : Colors.red.shade400,
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      _connectionTestReport!['success'] == true
+                          ? Icons.check_circle_rounded
+                          : Icons.error_outline_rounded,
+                      color: _connectionTestReport!['success'] == true
+                          ? Colors.green.shade600
+                          : Colors.red.shade600,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _connectionTestReport!['success'] == true
+                                ? 'Connection Test Passed (${_connectionTestReport!['latencyMs']} ms)'
+                                : 'Connection Test Failed (${_connectionTestReport!['latencyMs']} ms)',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: _connectionTestReport!['success'] == true
+                                  ? (isDark ? Colors.green.shade200 : Colors.green.shade900)
+                                  : (isDark ? Colors.red.shade200 : Colors.red.shade900),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _connectionTestReport!['message'].toString(),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _connectionTestReport!['success'] == true
+                                  ? (isDark ? Colors.green.shade300 : Colors.green.shade800)
+                                  : (isDark ? Colors.red.shade300 : Colors.red.shade800),
+                            ),
+                          ),
+                          if (_connectionTestReport!['categoriesCount'] != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Verified endpoints: /health (PostgreSQL SELECT 1: OK) • /api/v1/buy-sell/categories (${_connectionTestReport!['categoriesCount']} categories found)',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.green.shade300 : Colors.green.shade900,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Action Buttons
+            Wrap(
+              spacing: 12,
+              runSpacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                FilledButton.icon(
+                  onPressed: _isSavingConnection ? null : _handleSaveConnection,
+                  icon: _isSavingConnection
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.cable_rounded, size: 16),
+                  label: const Text('Save & Apply Backend'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _isTestingConnection ? null : _handleTestConnection,
+                  icon: _isTestingConnection
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.speed_rounded, size: 16),
+                  label: const Text('Test Server & Database Connection'),
+                ),
+                TextButton.icon(
+                  onPressed: _handleResetConnection,
+                  icon: const Icon(Icons.restart_alt_rounded, size: 16),
+                  label: const Text('Reset to Default Mock'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleTestConnection() async {
+    final baseUrl = _baseUrlController.text.trim().replaceAll(RegExp(r'/+$'), '');
+    final devKey = _devKeyController.text.trim();
+    final devEmail = _devUserEmailController.text.trim();
+
+    if (baseUrl.isEmpty) {
+      _showToast('Please enter a valid FastAPI base URL.', isError: true);
+      return;
+    }
+
+    setState(() {
+      _isTestingConnection = true;
+      _connectionTestReport = null;
+    });
+
+    final stopwatch = Stopwatch()..start();
+    try {
+      final dio = Dio(
+        BaseOptions(
+          baseUrl: baseUrl,
+          connectTimeout: const Duration(seconds: 5),
+          receiveTimeout: const Duration(seconds: 5),
+          headers: {
+            'Accept': 'application/json',
+            if (devKey.isNotEmpty) 'X-Dev-Key': devKey,
+            if (devEmail.isNotEmpty) 'X-Dev-User': devEmail,
+          },
+        ),
+      );
+
+      // 1. Check /health (executes SELECT 1 on PostgreSQL)
+      final healthRes = await dio.get('/health');
+      stopwatch.stop();
+
+      // 2. Also check /api/v1/buy-sell/categories
+      int categoriesCount = 0;
+      try {
+        final catRes = await dio.get('/api/v1/buy-sell/categories');
+        if (catRes.data is List) {
+          categoriesCount = (catRes.data as List).length;
+        }
+      } catch (_) {}
+
+      setState(() {
+        _connectionTestReport = {
+          'success': true,
+          'latencyMs': stopwatch.elapsedMilliseconds,
+          'statusCode': healthRes.statusCode,
+          'healthData': healthRes.data,
+          'categoriesCount': categoriesCount,
+          'message': 'Connected successfully! FastAPI backend is running and PostgreSQL database responded to SELECT 1.',
+        };
+      });
+      _showToast('Connection test succeeded in ${stopwatch.elapsedMilliseconds} ms!');
+    } catch (e) {
+      stopwatch.stop();
+      setState(() {
+        _connectionTestReport = {
+          'success': false,
+          'latencyMs': stopwatch.elapsedMilliseconds,
+          'message': 'Unable to reach backend at $baseUrl ($e). Ensure your teammate\'s laptop is on the same Wi-Fi/LAN and port 8000 is accepting connections.',
+        };
+      });
+      _showToast('Connection test failed: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _isTestingConnection = false);
+    }
+  }
+
+  Future<void> _handleSaveConnection() async {
+    final baseUrl = _baseUrlController.text.trim().replaceAll(RegExp(r'/+$'), '');
+    final devKey = _devKeyController.text.trim();
+    final devEmail = _devUserEmailController.text.trim();
+    final dbUrl = _databaseUrlController.text.trim();
+
+    setState(() => _isSavingConnection = true);
+    try {
+      await ref.read(serverConfigProvider.notifier).updateConfig(
+            useMockData: _useMockMode,
+            apiBaseUrl: baseUrl.isNotEmpty ? baseUrl : 'http://localhost:8000',
+            devKey: devKey.isNotEmpty ? devKey : 'kSH3AyYRCzXn8Czy8xXCZbC9',
+            devUserEmail: devEmail.isNotEmpty ? devEmail : 'mukund@iisc.ac.in',
+            databaseUrl: dbUrl.isNotEmpty ? dbUrl : null,
+          );
+
+      // Invalidate providers and refetch all data from new backend
+      ref.invalidate(authStateProvider);
+      ref.invalidate(buySellCategoriesProvider);
+      ref.invalidate(lostFoundCategoriesProvider);
+      ref.invalidate(moderatorGrantsProvider);
+      ref.invalidate(registeredUsersProvider);
+      ref.read(buySellPaginationProvider.notifier).loadInitial();
+      ref.read(lostReportsPaginationProvider.notifier).loadInitial();
+      ref.read(foundReportsPaginationProvider.notifier).loadInitial();
+
+      _showToast(
+        _useMockMode
+            ? 'Switched to In-Memory Mock backend simulation.'
+            : 'Connected to live backend at $baseUrl! Refetched all data from database.',
+      );
+    } catch (e) {
+      _showToast('Failed to save connection settings: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _isSavingConnection = false);
+    }
+  }
+
+  Future<void> _handleResetConnection() async {
+    await ref.read(serverConfigProvider.notifier).resetToDefaults();
+    final config = ref.read(serverConfigProvider);
+    setState(() {
+      _useMockMode = config.useMockData;
+      _baseUrlController.text = config.apiBaseUrl;
+      _devKeyController.text = config.devKey;
+      _devUserEmailController.text = config.devUserEmail;
+      _databaseUrlController.text = config.databaseUrl ?? '';
+      _connectionTestReport = null;
+    });
+
+    ref.invalidate(authStateProvider);
+    ref.invalidate(buySellCategoriesProvider);
+    ref.invalidate(lostFoundCategoriesProvider);
+    ref.read(buySellPaginationProvider.notifier).loadInitial();
+    ref.read(lostReportsPaginationProvider.notifier).loadInitial();
+    ref.read(foundReportsPaginationProvider.notifier).loadInitial();
+
+    _showToast('Reset backend connection to default mock configuration.');
   }
 
   void _showToast(String msg, {bool isError = false}) {

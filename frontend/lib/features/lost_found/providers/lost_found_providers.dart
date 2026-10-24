@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/constants/app_config.dart';
+import '../../../core/config/server_config.dart';
 import '../../../core/enums/date_preset.dart';
 import '../../../core/enums/sort_option.dart';
 import '../../../core/enums/view_mode.dart';
@@ -83,7 +83,8 @@ class LostFoundFilterState {
 final lostFoundFilterProvider = StateProvider<LostFoundFilterState>((ref) => LostFoundFilterState());
 
 final lostFoundRepositoryProvider = Provider<ILostFoundRepository>((ref) {
-  if (AppConfig.useMockData) {
+  final serverConfig = ref.watch(serverConfigProvider);
+  if (serverConfig.useMockData) {
     return MockLostFoundRepository();
   }
   return ApiLostFoundRepository(ref.watch(apiClientProvider));

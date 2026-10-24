@@ -19,10 +19,11 @@ class ApiClient {
     this.devUserEmail,
     this.devUserName,
     this.devKey,
+    String? baseUrl,
   })  : dio = dioClient ??
             Dio(
               BaseOptions(
-                baseUrl: AppConfig.apiBaseUrl,
+                baseUrl: baseUrl ?? AppConfig.apiBaseUrl,
                 connectTimeout: AppConfig.connectTimeout,
                 receiveTimeout: AppConfig.receiveTimeout,
                 headers: {
@@ -41,7 +42,8 @@ class ApiClient {
         onRequest: (options, handler) async {
           // Do not attach backend auth headers if uploading directly to external S3 / storage URLs
           final isExternal = options.path.startsWith('http://') || options.path.startsWith('https://');
-          if (!isExternal || options.path.startsWith(AppConfig.apiBaseUrl)) {
+          final activeBase = dio.options.baseUrl;
+          if (!isExternal || (activeBase.isNotEmpty && options.path.startsWith(activeBase))) {
             final activeDevKey = devKey ?? AppConfig.devKey;
             if (activeDevKey.isNotEmpty) {
               options.headers['X-Dev-Key'] = activeDevKey;

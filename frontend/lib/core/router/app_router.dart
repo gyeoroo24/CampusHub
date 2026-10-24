@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../config/server_config.dart';
 import '../theme/app_theme.dart';
 import '../widgets/super_search_bar.dart';
 import '../../features/auth/domain/user.dart';
@@ -70,7 +71,11 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/admin',
-      builder: (context, state) => const AdminControlsScreen(),
+      builder: (context, state) {
+        final tabParam = state.uri.queryParameters['tab'];
+        final initialTab = tabParam != null ? int.tryParse(tabParam) : null;
+        return AdminControlsScreen(initialTab: initialTab);
+      },
     ),
   ],
   errorBuilder: (context, state) => const AppShellLayout(initialTab: 0),
@@ -298,6 +303,7 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
     final tabIndex = ref.watch(tabIndexProvider);
     final isDesktop = MediaQuery.of(context).size.width > 750;
     final currentUser = ref.watch(currentUserProvider);
+    final serverConfig = ref.watch(serverConfigProvider);
     final isGuest = currentUser == null || currentUser.isGuest;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -369,6 +375,61 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
           const SizedBox(width: 4),
           const ThemeToggleButton(),
           const SizedBox(width: 8),
+
+          // Server Connection Mode Badge (Admin only)
+          if (!isGuest && currentUser.isAdmin)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: () => context.push('/admin?tab=4'),
+                child: Tooltip(
+                  message: serverConfig.useMockData
+                      ? 'Mock In-Memory Mode active. Click to configure live teammate backend.'
+                      : 'Live Backend: ${serverConfig.baseUrl}. Click to configure connection.',
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: serverConfig.useMockData
+                          ? (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9))
+                          : const Color(0xFF10B981).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: serverConfig.useMockData
+                            ? (isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1))
+                            : const Color(0xFF10B981),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: serverConfig.useMockData ? Colors.amber : const Color(0xFF10B981),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          serverConfig.useMockData
+                              ? 'Mock Mode'
+                              : 'Live: ${_formatHost(serverConfig.baseUrl)}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: serverConfig.useMockData
+                                ? (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))
+                                : const Color(0xFF10B981),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
           // Admin Controls Quick Access
           if (!isGuest && currentUser.isAdmin)
@@ -905,5 +966,17 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
         ],
       ),
     );
+  }
+
+  String _formatHost(String url) {
+    try {
+      final uri = Uri.parse(url);
+      if (uri.host.isNotEmpty) {
+        return uri.hasPort ? '${uri.host}:${uri.port}' : uri.host;
+      }
+      return url.replaceFirst(RegExp(r'^https?:\/\/'), '');
+    } catch (_) {
+      return url;
+    }
   }
 }

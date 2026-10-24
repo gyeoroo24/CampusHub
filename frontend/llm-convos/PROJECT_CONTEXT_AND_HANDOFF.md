@@ -1,6 +1,6 @@
 # CampusHub: Project Context, Architecture & Session Handoff Guide
 
-**Document Version:** 3.9  
+**Document Version:** 4.0  
 **Last Updated:** 25 October 2026  
 **Project:** CampusHub — Cloud Computing Course Project (DS252), MTech CSA, Indian Institute of Science (IISc), Bangalore.  
 **Repository Branch Context:**
@@ -210,8 +210,18 @@ CampusHub/frontend/lib/
     * Implemented dynamic moderator grant and profile hydration in `MockAuthRepository` (`verifyOtp` and `getCurrentUser`), ensuring appointed moderators (`cadithya@iisc.ac.in`, `dinkylakhani@iisc.ac.in`) receive `UserRole.moderator`, `canModerateBuySell` / `canModerateLostFound`, active moderation scope chips, and `Moderator: Remove Listing` buttons on other users' postings.
     * Extended governance panel `/admin` access to appointed moderators, defaulting to the Reports Queue (FR-10) with responsive action buttons while safeguarding single-admin tasks.
     * Added 'Moderator' dynamic action to the global AppBar and UserProfileScreen.
+  * **Step 17 (Router Overhaul, Moderator Confidentiality & Category Governance):**
+    * Added `usePathUrlStrategy()` via `flutter_web_plugins` and replaced fragile hash-based routing with dedicated `/buy` and `/lost-found` routes, alias redirects (`/`, `/app`, `/app/:subpath`, `/buy-sell`, `/lnf`), and fallback routing without unhandled exceptions.
+    * Enforced moderator confidentiality: non-admin moderators only see the active Campus Administrator contact card (`Admin Contact` tab); other moderators remain completely private.
+    * Scoped category governance: module moderators can add, rename, and delete categories within their moderated module. Display names in the admin panel are clean (no emojis), while feed pills display rich emojis via `CategoryEmojiHelper`.
+    * Removed PRD / FR citations from all user-facing labels and headers.
+  * **Step 18 (Admin Live Demo Backend & Database Connection Fields):**
+    * Created `ServerConfig` and `serverConfigProvider` with SharedPreferences persistence, allowing dynamic runtime backend switching between Mock in-memory data and a teammate's live FastAPI server + PostgreSQL database.
+    * Added comprehensive backend connection inputs in Admin Controls (Tab 5: `Backend & Health`): FastAPI Server Base URL (with quick presets for Teammate Laptop, Localhost, 127.0.0.1), Developer Security Key (`X-Dev-Key`) with visibility toggle, Test User Email Identity (`X-Dev-User`) with presets (`kmukund@iisc.ac.in`, `mukund@iisc.ac.in`, `cadithya@iisc.ac.in`), and Database Connection URI reference.
+    * Built interactive live connectivity tester verifying `<baseUrl>/health` (verifying PostgreSQL via `SELECT 1`) and `<baseUrl>/api/v1/buy-sell/categories`, reporting roundtrip latency and endpoint status codes.
+    * Added live connection status pill in top AppBar (`[Mock Mode]` / `[Live: host:port]`) with direct tap navigation to connection settings (`/admin?tab=4`).
 * **Static Analysis:** `flutter analyze` runs with **0 errors, 0 warnings, 0 hints**.
-* **Automated Tests:** `flutter test` executes **52 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`, `live_backend_integration_test.dart`, `filter_and_seller_actions_test.dart`, `admin_and_profile_test.dart`).
+* **Automated Tests:** `flutter test` executes **54 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`, `live_backend_integration_test.dart`, `filter_and_seller_actions_test.dart`, `admin_and_profile_test.dart`).
 
 ---
 
@@ -233,12 +243,11 @@ flutter test
 flutter run -d chrome
 ```
 
-### 5.4 Step 17: Router Overhaul, Moderator Confidentiality & Category Governance
-* **Clean HTML5 Routing:** Added `usePathUrlStrategy()` via `flutter_web_plugins` and replaced fragile hash-based routing with dedicated `/buy` and `/lost-found` routes, alias redirects (`/`, `/app`, `/app/:subpath`, `/buy-sell`, `/lnf`), and fallback routing without unhandled exceptions.
-* **Moderator Privacy:** Non-admin moderators only see the active Campus Administrator contact card (`Admin Contact` tab); other moderators remain completely private.
-* **Scoped Category Governance:** Module moderators can add, rename, and delete categories within their moderated module. Display names in the admin panel are clean (no emojis), while feed pills display rich emojis via `CategoryEmojiHelper`.
-* **Clean UI:** Removed PRD / FR citations from all user-facing labels and headers.
-* **Test Suite:** 52/52 tests passing with 0 `flutter analyze` issues.
+### 5.4 Step 18: Admin Live Demo Backend & Database Connection Fields
+* **Dynamic Backend Switcher:** Admin can switch instantly between mock mode and live backend without rebuilding.
+* **Connection Tester:** Tests `/health` (PostgreSQL `SELECT 1`) and `/api/v1/buy-sell/categories` on the teammate's machine.
+* **AppBar Pill:** Displays `[Mock Mode]` or `[Live: host:port]` with 1-click tap to configure.
+* **Test Suite:** 54/54 tests passing with 0 `flutter analyze` issues.
 
 ---
 
