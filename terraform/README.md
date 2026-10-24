@@ -130,6 +130,7 @@ Because **Order of Phoenix** is a 4-person team, storing Terraform state remotel
 ```bash
 cd terraform/bootstrap
 terraform init
+terraform plan
 terraform apply
 ```
 This provisions:
@@ -151,7 +152,9 @@ backend "s3" {
 Then initialize the root workspace:
 ```bash
 cd ..
-terraform init
+terraform init -migrate-state
+terraform plan
+terraform apply
 ```
 
 ---
@@ -169,22 +172,8 @@ This tests:
 - Public GET routes across all 5 microservices (`buy-sell`, `lost-found`, `placement`, `academic`, `events`).
 - Unauthenticated POST rejection (`401 Unauthorized` enforcement by API Gateway).
 
-### 2. Frontend Web Deployment & Testing
-1. Build the Flutter Web application:
-   ```bash
-   flutter build web --release
-   ```
-2. Upload the build artifacts to the frontend S3 bucket:
-   ```bash
-   aws s3 sync build/web/ s3://<frontend_s3_bucket>/ --delete
-   ```
-3. Invalidate CloudFront edge cache:
-   ```bash
-   aws cloudfront create-invalidation --distribution-id <distribution_id> --paths "/*"
-   ```
-4. Open `https://<YOUR_CLOUDFRONT_DOMAIN_NAME>` in your browser.
 
-### 3. Cognito User Flow & Authenticated Testing
+### 2. Cognito User Flow & Authenticated Testing
 1. Create a test IISc student user:
    ```bash
    aws cognito-idp sign-up \
@@ -221,8 +210,3 @@ This tests:
    ```
    **Expected Response:** `200 OK` (processed by `buy_and_sell` Lambda).
 
-### 4. PRD Experiment 3: Permission Matrix Validation
-Run the permission matrix test script to validate all 16 role × module permission combinations (FR-2 / NFR-6):
-```bash
-python tests/test_permission_matrix.py https://<YOUR_CLOUDFRONT_DOMAIN_NAME>
-```
