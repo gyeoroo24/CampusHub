@@ -1,11 +1,11 @@
 # CampusHub: Project Context, Architecture & Session Handoff Guide
 
-**Document Version:** 3.3  
+**Document Version:** 3.4  
 **Last Updated:** 24 October 2026  
 **Project:** CampusHub — Cloud Computing Course Project (DS252), MTech CSA, Indian Institute of Science (IISc), Bangalore.  
 **Repository Branch Context:**
 * `origin/frontend` (Current local branch: `frontend`): Flutter client codebase.
-* `origin/add-backend-and-docs`: Complete FastAPI backend, PostgreSQL schema (Revision 5), OpenAPI specs, and system diagrams.
+* `origin/add-backend-and-docs`: Complete FastAPI backend, PostgreSQL schema (Revision 5 + Review Fixes commit `3a7aa05`), OpenAPI specs, and system diagrams.
 
 ---
 
@@ -174,8 +174,16 @@ CampusHub/frontend/lib/
     * Responsive `NoPhotoPlaceholder`: Designed adaptive placeholder that distinguishes deliberate absence of photos from image load failures across grid cards, compact list cards, and modal carousels.
     * Responsive Module Page Transitions: Vertical slide transitions for desktop (`Offset(0, ±0.08)`); horizontal slide transitions for mobile (`Offset(±0.12, 0)`).
     * Restored Dark Mode Modal Backgrounds: Set modal backgrounds to `isDark ? const Color(0xFF1E293B) : Colors.white` with `surfaceTintColor: Colors.transparent` across all custom dialogs and modals.
+  * Iteration 7.6 / Step 10 Backend Review Fixes Sync (Commit `3a7aa05`) & Data Layer Realignment:
+    * Synchronized with backend changes in `origin/add-backend-and-docs`:
+      1. Admin User Management: Added `AccountStatus` model (`id`, `email`, `name`, `isActive`, `isAdmin`) and implemented `updateAccountStatus(userId, {isActive, isAdmin})` in `IAuthRepository`, `ApiAuthRepository` (`PATCH /api/v1/users/{user_id}`), and `MockAuthRepository`.
+      2. User Active State: Extended `User` model with `isActive: bool` flag (default `true`, `false` for guest) and JSON serialization.
+      3. S3 Binary Upload Compliance: Hardened `UploadService` to include explicit `Content-Length` header in presigned `PUT` upload requests, while supporting new backend-supplied `x-amz-tagging: status=pending` headers.
+      4. AWS Cognito Outage Handling: Added `ServiceUnavailableException` (HTTP 503) to `ApiException` hierarchy to support frontend retries when backend Cognito public key fetching temporarily fails.
+      5. Deactivated Member Contact Privacy: Verified backend behavior masking contacts (`null`) for deactivated users; frontend models gracefully handle `null` contact info without crashes.
+      6. Extended Admin Edit Permissions: Backend now authorizes admins to edit listings/reports and update listing status across modules.
 * **Static Analysis:** `flutter analyze` runs with **0 errors, 0 warnings, 0 hints**.
-* **Automated Tests:** `flutter test` executes **24 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`).
+* **Automated Tests:** `flutter test` executes **25 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`).
 
 ---
 

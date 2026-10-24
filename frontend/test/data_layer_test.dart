@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:campus_hub/core/api/api_exception.dart';
 import 'package:campus_hub/core/models/category_ref.dart';
 import 'package:campus_hub/core/models/contact.dart';
 import 'package:campus_hub/core/models/page.dart';
@@ -8,6 +9,7 @@ import 'package:campus_hub/core/models/user_ref.dart';
 import 'package:campus_hub/core/services/upload_service.dart';
 import 'package:campus_hub/core/storage/token_storage.dart';
 import 'package:campus_hub/core/utils/date_time_formatter.dart';
+import 'package:campus_hub/features/auth/domain/account_status.dart';
 import 'package:campus_hub/features/auth/domain/user.dart';
 import 'package:campus_hub/features/auth/data/auth_repository.dart';
 import 'package:campus_hub/features/buy_sell/domain/buy_sell_item.dart';
@@ -78,6 +80,27 @@ void main() {
       final newRepo = MockAuthRepository(storage: storage);
       final restored = await newRepo.getCurrentUser();
       expect(restored?.email, equals('adithyac@iisc.ac.in'));
+      expect(restored?.isActive, isTrue);
+
+      // Admin updateAccountStatus deactivates or changes privileges
+      final updatedStatus = await newRepo.updateAccountStatus(
+        restored!.id,
+        isActive: false,
+        isAdmin: true,
+      );
+      expect(updatedStatus.isActive, isFalse);
+      expect(updatedStatus.isAdmin, isTrue);
+
+      // AccountStatus serialization
+      final parsed = AccountStatus.fromJson(updatedStatus.toJson());
+      expect(parsed.id, equals(updatedStatus.id));
+      expect(parsed.isActive, isFalse);
+      expect(parsed.isAdmin, isTrue);
+    });
+
+    test('ServiceUnavailableException has status 503', () {
+      const ex = ServiceUnavailableException(message: 'Unavailable');
+      expect(ex.statusCode, equals(503));
     });
   });
 

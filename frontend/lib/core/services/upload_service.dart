@@ -113,7 +113,10 @@ class UploadService {
         ticket.uploadUrl,
         data: Stream.fromIterable([fileBytes]),
         options: Options(
-          headers: ticket.headers,
+          headers: {
+            ...ticket.headers,
+            'Content-Length': fileBytes.length.toString(),
+          },
           sendTimeout: const Duration(minutes: 5),
         ),
         onSendProgress: onProgress,

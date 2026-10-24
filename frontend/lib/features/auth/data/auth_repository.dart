@@ -2,6 +2,7 @@ import 'dart:async';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_endpoints.dart';
 import '../../../../core/storage/token_storage.dart';
+import '../domain/account_status.dart';
 import '../domain/user.dart';
 
 abstract class IAuthRepository {
@@ -12,6 +13,12 @@ abstract class IAuthRepository {
     String? departmentId,
     String? programme,
     int? graduationYear,
+  });
+  /// Admin endpoint: deactivate/reactivate account or change admin privileges (`PATCH /api/v1/users/{id}`).
+  Future<AccountStatus> updateAccountStatus(
+    String userId, {
+    bool? isActive,
+    bool? isAdmin,
   });
   Future<void> sendOtp(String email);
   Future<User> verifyOtp(String email, String otp);
@@ -98,6 +105,37 @@ class MockAuthRepository implements IAuthRepository {
     await tokenStorage.saveUser(_currentUser!.toJson());
     _controller.add(_currentUser);
     return _currentUser!;
+  }
+
+  @override
+  Future<AccountStatus> updateAccountStatus(
+    String userId, {
+    bool? isActive,
+    bool? isAdmin,
+  }) async {
+    await _init();
+    if (_currentUser != null && _currentUser!.id == userId) {
+      _currentUser = _currentUser!.copyWith(
+        isActive: isActive ?? _currentUser!.isActive,
+        isAdmin: isAdmin ?? _currentUser!.isAdmin,
+      );
+      await tokenStorage.saveUser(_currentUser!.toJson());
+      _controller.add(_currentUser);
+      return AccountStatus(
+        id: userId,
+        email: _currentUser!.email,
+        name: _currentUser!.name,
+        isActive: _currentUser!.isActive,
+        isAdmin: _currentUser!.isAdmin,
+      );
+    }
+    return AccountStatus(
+      id: userId,
+      email: 'user_$userId@iisc.ac.in',
+      name: 'User $userId',
+      isActive: isActive ?? true,
+      isAdmin: isAdmin ?? false,
+    );
   }
 
   @override
@@ -230,6 +268,25 @@ class ApiAuthRepository implements IAuthRepository {
     await tokenStorage.saveUser(_cachedUser!.toJson());
     _controller.add(_cachedUser);
     return _cachedUser!;
+  }
+
+  @override
+  Future<AccountStatus> updateAccountStatus(
+    String userId, {
+    bool? isActive,
+    bool? isAdmin,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (isActive != null) payload['is_active'] = isActive;
+    if (isAdmin != null) payload['is_admin'] = isAdmin;
+
+    final response = await apiClient.patch(
+      ApiEndpoints.user(userId),
+      data: payload,
+    );
+
+    final data = response.data as Map<String, dynamic>;
+    return AccountStatus.fromJson(data);
   }
 
   @override

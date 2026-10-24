@@ -74,6 +74,7 @@ class User {
   final String? programme;
   final int? graduationYear;
   final bool isAdmin;
+  final bool isActive;
   final List<ModeratorGrant> moderatorGrants;
   final DateTime createdAt;
   final DateTime? updatedAt;
@@ -87,6 +88,7 @@ class User {
     this.programme,
     this.graduationYear,
     this.isAdmin = false,
+    this.isActive = true,
     this.moderatorGrants = const [],
     required this.createdAt,
     this.updatedAt,
@@ -96,6 +98,7 @@ class User {
   static final guest = User(
     id: '',
     email: '',
+    isActive: false,
     createdAt: DateTime.fromMillisecondsSinceEpoch(0),
   );
 
@@ -170,6 +173,7 @@ class User {
       'programme': programme,
       'graduation_year': graduationYear,
       'is_admin': isAdmin,
+      'is_active': isActive,
       'moderator_grants': moderatorGrants.map((g) => g.toJson()).toList(),
       'created_at': createdAt.toIso8601String(),
       if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
@@ -197,6 +201,7 @@ class User {
           ? json['graduation_year'] as int
           : int.tryParse(json['graduation_year']?.toString() ?? ''),
       isAdmin: isAdminFlag,
+      isActive: json['is_active'] != false,
       moderatorGrants: grants,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
@@ -216,6 +221,7 @@ class User {
     String? programme,
     int? graduationYear,
     bool? isAdmin,
+    bool? isActive,
     List<ModeratorGrant>? moderatorGrants,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -229,6 +235,7 @@ class User {
       programme: programme ?? this.programme,
       graduationYear: graduationYear ?? this.graduationYear,
       isAdmin: isAdmin ?? this.isAdmin,
+      isActive: isActive ?? this.isActive,
       moderatorGrants: moderatorGrants ?? this.moderatorGrants,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

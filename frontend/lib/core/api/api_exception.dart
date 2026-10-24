@@ -43,6 +43,8 @@ class ApiException implements Exception {
           return ForbiddenException(message: extractedMsg, details: data);
         } else if (status == 404) {
           return NotFoundException(message: extractedMsg, details: data);
+        } else if (status == 503) {
+          return ServiceUnavailableException(message: extractedMsg, details: data);
         } else if (status != null && status >= 500) {
           return ServerException(message: extractedMsg, statusCode: status, details: data);
         }
@@ -97,4 +99,11 @@ class ServerException extends ApiException {
     super.statusCode,
     super.details,
   });
+}
+
+class ServiceUnavailableException extends ApiException {
+  const ServiceUnavailableException({
+    required super.message,
+    super.details,
+  }) : super(statusCode: 503);
 }
