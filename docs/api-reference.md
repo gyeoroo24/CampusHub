@@ -4,11 +4,12 @@ Last updated 24 Oct 2026. For the exact JSON of every request and response, run 
 
 ## Overview
 
-The CampusHub backend exposes 71 endpoints under `/api/v1`. This page lists each one, who may call it, and the fields it takes and returns, so screens can be designed around real data.
+The CampusHub backend exposes 88 endpoints under `/api/v1`. This page lists each one, who may call it, and the fields it takes and returns, so screens can be designed around real data.
 
 - **Base URL (local):** `http://localhost:8000/api/v1`. The cloud host isn't set up yet; only the host part will change.
 - **Try it live:** `http://localhost:8000/docs` (Swagger) shows the exact JSON for every request and response, and lets you send real calls.
 - **Built so far (Phase 1):** sign-in and profiles, Buy & Sell, Lost & Found, Academic Help, forums, reports and moderation, notifications. Placement Hub and Events come later (last section).
+- **New on 24 Oct 2026 (from "Taking it further"):** saved searches and alerts, Wanted posts, campus services for the landing page, and the course survival guide. Each has its own section below; the backend is done and the app screens aren't built yet.
 
 The **Who** column in every table below uses these roles:
 
@@ -177,6 +178,55 @@ Lost reports and found reports have identical endpoints. Swap `/lost-reports` fo
 - **`matched`** is never set automatically; the reporter chooses it.
 - **Limits:** description 1–2,000 characters, location up to 200, up to 10 photos.
 
+## Wanted posts
+
+A buyer says what they need ("Need a cycle, budget ₹3,000") instead of waiting for it to be listed. Suits a "Wanted" tab in Buy & Sell.
+
+| Method | Path | Who | What it does |
+| --- | --- | --- | --- |
+| GET | `/wanted` | guest | Browse, newest first. Filters: `q` (title and description), `category_id`, `status` (repeatable; default `open` only), `author_id` |
+| POST | `/wanted` | user | Post one: `title`, `category_id` (a Buy & Sell category), `description`, `max_price` (leave out for "open to offers"). The reply includes `possible_matches` |
+| GET | `/wanted/{id}` | guest | One post; `author_contact` for signed-in users |
+| GET | `/wanted/{id}/matches` | guest | Up to 10 available listings that match the post, best first (listing cards) |
+| PATCH | `/wanted/{id}` | owner, admin | Edit `title`, `description`, `category_id`, `max_price` |
+| PATCH | `/wanted/{id}/status` | owner, admin | Set `status`: `open`, `fulfilled` (got it) or `closed` (no longer needed) |
+| DELETE | `/wanted/{id}` | owner, Buy & Sell moderator, admin | Remove. Moderators can add `?reason=` |
+
+**Fields to design with:**
+
+| Object | Fields |
+| --- | --- |
+| Wanted card (in lists) | `id`, `title`, `category` (`id`, `name`), `max_price` (`null` = open to offers), `status`, `author` (`id`, `name`), `created_at` |
+| Wanted detail | Everything on the card, plus `description`, `author_contact` (`null` for guests), `updated_at` |
+| Create reply only | `possible_matches`: listing cards that already match |
+
+- **Matching:** a listing matches when it's available, in the same category, at or under `max_price`, and shares at least one word with the post's title ("Need a Hero cycle" matches "Hero Sprint 26T"). Each new or edited listing that matches sends the author a `wanted_post_match` notification, once per listing.
+- **Sellers** can browse `GET /wanted?category_id=` to see demand before listing.
+- **Limits:** title 1–120 characters, description up to 2,000, up to 10 open posts per person (an 11th returns 409).
+
+## Saved searches and alerts
+
+"Tell me when a cycle under ₹3,000 appears", or "when someone finds an ID card". Put a "Save this search" button on the Buy & Sell and Found-items search screens, and a "Saved searches" list under the profile.
+
+| Method | Path | Who | What it does |
+| --- | --- | --- | --- |
+| GET | `/me/saved-searches` | user | My saved searches, oldest first, each with `new_count` |
+| POST | `/me/saved-searches` | user | Save one: `module`, `name`, and the filters (`q`, `category_id`, `min_price`, `max_price`), plus `alerts_enabled` (default `true`) |
+| PATCH | `/me/saved-searches/{id}` | owner | Change `name`, filters or `alerts_enabled`. Send `null` to clear a filter |
+| POST | `/me/saved-searches/{id}/seen` | owner | The user opened the results: resets `new_count` to 0 |
+| DELETE | `/me/saved-searches/{id}` | owner | Delete it; its alerts stop |
+
+**Fields to design with:**
+
+| Object | Fields |
+| --- | --- |
+| Saved search | `id`, `module` (`buy_sell` or `lost_found`), `name`, `q`, `category_id`, `category_name`, `min_price`, `max_price`, `alerts_enabled`, `new_count`, `last_seen_at`, `created_at`, `updated_at` |
+
+- **`buy_sell` searches watch new listings; `lost_found` searches watch new found reports.** Lost & Found searches have no price filter (422 if sent).
+- **Showing the results:** call `GET /listings` (or `GET /found-reports`) with the same `q`, `category_id`, `min_price` and `max_price`. They mean exactly the same thing there. Then call `/seen`.
+- **Alerts:** a new matching item (or one edited or made available again so it now matches) sends a `saved_search_match` notification, once per item, never for your own posts. Turn alerts off with `alerts_enabled: false`; `new_count` still updates.
+- **Limits:** name 1–80 characters, `q` up to 200, up to 20 saved searches per person (a 21st returns 409).
+
 ## Academic Help
 
 The screens go department → course → materials and feedback. Each course and department also has a forum (next section).
@@ -214,6 +264,25 @@ The screens go department → course → materials and feedback. Each course and
 - **Material types:** `notes`, `slides`, `past_assignment`, `exam_material`, `other` (the default). These suit filter chips.
 - **Who sees upload and edit buttons:** check `moderator_grants` from `GET /me` for this course or its department.
 - **Limits:** department name 1–120 characters, course code 1–20, course name 1–200, material title 1–200, feedback 1–5,000.
+
+### Course survival guide
+
+A one-page summary of a course's feedback, semester by semester, with sentiment over time. It's a read-only page on the course screen; there's nothing to post.
+
+| Method | Path | Who | What it does |
+| --- | --- | --- | --- |
+| GET | `/courses/{id}/survival-guide` | guest | The guide, computed from the course's feedback when requested |
+
+| Object | Fields |
+| --- | --- |
+| Guide | `course` (`id`, `code`, `name`, `department_id`, `department_name`), `feedback_count`, `summary` (a ready-to-show paragraph), `overall` (a Sentiment, `null` with no feedback), `trend` (`improving`, `declining`, `steady`, `not_enough_data`), `themes` (each a Theme), `advice` (up to 5 tips students repeat), `semesters` (oldest first), `method`, `generated_at` |
+| Semester | `term` (e.g. `Aug 2025`), `starts_on`, `in_progress`, `feedback_count`, `sentiment`, `top_themes` (up to 3), `highlights` (`positive`, `negative`: one quoted sentence each, or `null`) |
+| Sentiment | `score` (-1 to +1), `label` (`positive`, `mixed`, `negative`), `positive_share`, `negative_share` (0 to 1) |
+| Theme | `theme` (`workload`, `exams`, `assignments and projects`, `teaching`, `grading`, `prerequisites`, `pace and content`), `mentions`, `score`, `label` |
+
+- **Semesters** come from when the feedback was written, in IST: August–December is the "Aug" semester, January–July the "Jan" one. A line chart of `semesters[].sentiment.score` by `term` shows sentiment over time; mark the `in_progress` one as partial.
+- **Trend** needs at least 3 finished semesters with 3 or more reviews each; otherwise it's `not_enough_data`.
+- **Sentiment** is scored per sentence with a word list built into the backend (`method: "lexicon"`), so it's free and instant. It can later be replaced by Amazon Comprehend or the Ask CampusHub model without changing these fields.
 
 ## Forums
 
@@ -264,7 +333,7 @@ Any signed-in user can flag content. Moderators work through a queue limited to 
 | Report | `id`, `module`, `target_type`, `target_id`, `reason`, `status` (`open`, `actioned`, `dismissed`), `reporter` (moderators only), `created_at`, `handled_at`, `resolution_note` |
 | Resolve reply | `reports_resolved` (how many reports closed), `content_removed` |
 
-- **What can be flagged** (`target_type`): `listing`, `lost_report`, `found_report`, `course_material`, `course_feedback`, `thread`, `comment`. Put a "Report" action on each of these.
+- **What can be flagged** (`target_type`): `listing`, `wanted_post`, `lost_report`, `found_report`, `course_material`, `course_feedback`, `thread`, `comment`. Put a "Report" action on each of these. Wanted posts go to the Buy & Sell queue.
 - **One open report per user per item.** A second one returns 409, so show "You've already reported this".
 - **The queue has no preview.** Show the item by fetching it with `target_type` and `target_id`, e.g. `GET /listings/{target_id}`.
 - **Resolving one report closes every open report on that item.** With `remove_content: true` it also removes the item in the same step. If another moderator resolved it first, you get 409. Removing an item with its DELETE endpoint also closes its reports.
@@ -288,9 +357,29 @@ A notification has `id`, `type`, `payload`, `is_read` and `created_at`. Every `p
 | --- | --- | --- | --- |
 | `forum_reply` | Someone replies in a thread you started or commented in | `thread_id`, `comment_id`, `forum_id` | The thread |
 | `lost_found_match` | Someone files a found report matching your open lost report | `found_report_id`, `lost_report_ids` | The found report |
+| `saved_search_match` | A new item matches one of your saved searches | `saved_search_id`, and `listing_id` or `found_report_id` | The listing or found report |
+| `wanted_post_match` | A new listing matches one of your open Wanted posts | `wanted_post_id`, `listing_id` | The listing |
 
 - **Unread badge:** call with `unread_only=true` and check whether `items` is empty. There's no unread-count endpoint.
 - **Shared devices:** registering a token another account used moves it to the current user.
+
+## Campus services
+
+Health Centre, Wellness Centre, emergency and grievance links for the landing page. The admin manages the list, so links change without an app update.
+
+| Method | Path | Who | What it does |
+| --- | --- | --- | --- |
+| GET | `/campus-services` | guest | Active services, grouped by `category` (health, wellbeing, grievance, safety, other), then `sort_order`. The admin can add `?include_inactive=true` |
+| POST | `/campus-services` | admin | Add one: `name`, `category`, `url` and/or `phone`, `description`, `sort_order`, `is_active` |
+| PATCH | `/campus-services/{id}` | admin | Edit any field. `is_active: false` hides it without deleting |
+| DELETE | `/campus-services/{id}` | admin | Delete it |
+
+| Object | Fields |
+| --- | --- |
+| Campus service | `id`, `name`, `description`, `category`, `url` (`null` if phone only), `phone` (`null` if link only), `sort_order`, `is_active`, `updated_at` |
+
+- **Show `phone` as a tap-to-call button** and `url` as a link. Every service has at least one of them.
+- **Starting list** (from iisc.ac.in, checked 24 Oct 2026): Health Centre, Emergency / Ambulance (080-2293-4444), Wellness Centre, student grievance redressal, ICASH, complaints about caste-based discrimination, anti-ragging.
 
 ## Not available yet
 
@@ -301,6 +390,6 @@ These parts of the app have database tables but no endpoints yet (Phase 2). Desi
 | Placement Hub | Company pages, job descriptions, pre-placement talks, hiring stats (totals only, never individual students), interview experiences, a forum per company, bulk import of placement sheets |
 | Community Events | Events with tags, shown as Past, Present or Upcoming; following tags for alerts |
 | Bookmarks | Saving listings and events. Guests keep bookmarks on the device only |
-| Landing page highlights | Featured items across modules (FR-21) |
+| Landing page highlights | Featured items across modules (FR-21). Campus services links are ready (see Campus services) |
 | Chat | One-to-one messages (stretch goal) |
 | Push delivery | Devices register today, but pushes are only logged; the inbox works |

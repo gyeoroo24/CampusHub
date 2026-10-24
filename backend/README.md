@@ -42,6 +42,39 @@ one request), use SQL; after that, the admin hands the role over with `POST /api
 docker compose exec db psql -U campushub -c "UPDATE users SET base_role = 'admin' WHERE email = 'asha@iisc.ac.in';"
 ```
 
+### Dummy data and keeping the database
+
+The database lives in the Docker volume `campushub_pgdata` and the uploaded files in
+`campushub_s3data`. Both survive `docker compose stop`, `docker compose down`, quitting Docker
+Desktop and restarting the Mac; the containers restart by themselves whenever Docker Desktop
+starts (`restart: unless-stopped`). Only `docker compose down -v` or `docker volume rm` deletes
+the data. For the containers to come back after a reboot without opening Docker yourself, turn on
+Docker Desktop → Settings → General → "Start Docker Desktop when you sign in".
+
+To fill the database with realistic demo data (50 students, the CDS courses from
+cds.iisc.ac.in plus a few CSA / EE / ECE ones, three years of course feedback, materials,
+forums, listings, Wanted posts, saved searches, Lost & Found reports, placement data, events,
+moderation reports, notifications and chats):
+
+```bash
+python scripts/seed_dummy_data.py            # once
+python scripts/seed_dummy_data.py --reset    # remove the dummy data and add it again
+python scripts/seed_dummy_data.py --remove   # remove it, keep everything else
+```
+
+Your own users and posts are left alone. Sign in as any dummy user with their email, e.g.
+`X-Dev-User: ananya.rao@iisc.ac.in` (the list is `SEED_USERS` in the script).
+
+### Upgrading an existing database
+
+`db/schema.sql` only runs when the volume is brand new. A database created before revision 6
+(24 Oct 2026) needs the migration and the campus-services rows once:
+
+```bash
+docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub < db/migrations/006_taking_it_further.sql
+docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub < db/reference-data.sql
+```
+
 ### Share it on your network
 
 To let teammates on the same Wi-Fi use your running backend (no cloud needed):
@@ -164,6 +197,30 @@ takes and returns, written for frontend design, see [docs/api-reference.md](../d
 | PUT /listings/{id}/photos | seller, admin | Replace, reorder or remove photos |
 | DELETE /listings/{id} | seller, Buy & Sell moderator, admin | Soft delete; moderator removals are logged |
 
+New, edited or re-opened listings alert matching saved searches and Wanted posts (`app/alerts.py`).
+
+**Wanted posts**
+
+| Method & path | Who | What |
+|---|---|---|
+| GET /wanted | guest | Browse. Filters: `q`, `category_id`, `status` (default open), `author_id` |
+| POST /wanted | user | Post what you need: `title`, `category_id`, `description`, `max_price`. Response lists `possible_matches`; up to 10 open posts each |
+| GET /wanted/{id} | guest | Detail; author contact for signed-in users |
+| GET /wanted/{id}/matches | guest | Available listings matching the post (same category, within budget, a shared title word) |
+| PATCH /wanted/{id} | author, admin | Edit fields |
+| PATCH /wanted/{id}/status | author, admin | open / fulfilled / closed |
+| DELETE /wanted/{id} | author, Buy & Sell moderator, admin | Soft delete; moderator removals are logged |
+
+**Saved searches and alerts**
+
+| Method & path | Who | What |
+|---|---|---|
+| GET /me/saved-searches | user | Mine, with `new_count` since I last looked |
+| POST /me/saved-searches | user | `module` (`buy_sell` watches listings, `lost_found` watches found reports), `name`, `q`, `category_id`, `min_price`, `max_price`, `alerts_enabled`; up to 20 each |
+| PATCH /me/saved-searches/{id} | owner | Edit, or pause alerts |
+| POST /me/saved-searches/{id}/seen | owner | Reset `new_count` |
+| DELETE /me/saved-searches/{id} | owner | |
+
 **Lost & Found** (same routes for `/found-reports`)
 
 | Method & path | Who | What |
@@ -195,6 +252,7 @@ takes and returns, written for frontend design, see [docs/api-reference.md](../d
 | POST /courses/{id}/feedback | user | |
 | PATCH /feedback/{id} | author, department moderator, admin | Edit |
 | DELETE /feedback/{id} | author, course moderator of that course, department moderator, admin | Remove |
+| GET /courses/{id}/survival-guide | guest | Feedback summary per semester (Aug / Jan, by when it was written) with sentiment, trend, themes, repeated advice and a summary paragraph. Computed on request (`app/sentiment.py`) |
 
 **Forums**
 
@@ -215,7 +273,7 @@ takes and returns, written for frontend design, see [docs/api-reference.md](../d
 
 | Method & path | Who | What |
 |---|---|---|
-| POST /reports | user | Report a listing, lost/found report, material, feedback, thread or comment |
+| POST /reports | user | Report a listing, Wanted post, lost/found report, material, feedback, thread or comment |
 | GET /me/reports | user | Reports I filed |
 | GET /reports | moderator, admin | Queue of reports in my scope (default: open) |
 | POST /reports/{id}/resolve | moderator in scope | `actioned` (optionally `remove_content`) or `dismissed`; closes all open reports on that item. Removing an item any other way also closes its reports |
@@ -224,6 +282,14 @@ takes and returns, written for frontend design, see [docs/api-reference.md](../d
 | POST /me/notifications/read-all | user | Mark all read |
 | POST /me/devices | user | Register a device's push token |
 | DELETE /me/devices | user | Unregister it; body `{"push_token": "..."}` (kept out of the URL and access logs) |
+
+**Campus services** (landing page)
+
+| Method & path | Who | What |
+|---|---|---|
+| GET /campus-services | guest | Health Centre, Wellness Centre, emergency and grievance links, grouped by category |
+| POST /campus-services | admin | Add (`url` and/or `phone` required) |
+| PATCH, DELETE /campus-services/{id} | admin | Edit, hide (`is_active: false`) or delete |
 
 ## Deploying on AWS
 

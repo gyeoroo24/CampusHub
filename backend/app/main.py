@@ -15,7 +15,8 @@ from .auth import optional_user
 from .config import get_settings, in_lambda
 from .db import close_pool
 from .errors import install_error_handlers
-from .routers import academic, categories, forums, listings, lost_found, moderators, notifications, reports, uploads, users
+from .routers import (academic, campus_services, categories, forums, listings, lost_found, moderators, notifications,
+                      reports, saved_searches, survival_guide, uploads, users, wanted)
 
 logging.basicConfig(level=logging.INFO)
 # Lambda installs its own root handler before our code runs, which makes basicConfig a no-op.
@@ -87,7 +88,8 @@ def create_app() -> FastAPI:
     # Every route checks the caller's token, even ones guests can use, so a bad or expired token
     # always gets 401. Routes that need the user reuse the same (cached) result.
     checked = [Depends(optional_user)]
-    for module in (users, moderators, uploads, categories, listings, academic, forums, reports, notifications):
+    for module in (users, moderators, uploads, categories, listings, wanted, academic, survival_guide, forums, reports,
+                   notifications, saved_searches, campus_services):
         app.include_router(module.router, prefix=settings.api_prefix, dependencies=checked)
     app.include_router(lost_found.lost_router, prefix=settings.api_prefix, dependencies=checked)
     app.include_router(lost_found.found_router, prefix=settings.api_prefix, dependencies=checked)

@@ -1,10 +1,21 @@
 -- ============================================================================
--- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 5
+-- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 6
 -- DS252 Introduction to Cloud Computing — Team "Order of Phoenix"
 --
 -- Permission modules (FR-2, NFR-6): buy_sell, lost_found, academic_help,
 -- placement_hub. Community Events is a feature, not a permission module:
 -- it has no module moderators (creator + admins manage events).
+--
+-- Changes from rev. 5 ("Taking it further" features, 24 Oct 2026):
+--   1. saved_searches: a saved Buy & Sell or Lost & Found search; new
+--      matching listings / found reports send a saved_search_match alert.
+--   2. wanted_posts: buyers post what they need; new matching listings send
+--      a wanted_post_match alert. Reportable (reports.wanted_post_id).
+--   3. campus_services: Health Centre, Wellness Centre and grievance links
+--      for the landing page, managed by the admin.
+--   4. No table for the course survival guide: it is computed from
+--      course_feedback when requested.
+--   An existing database is upgraded with db/migrations/006_taking_it_further.sql.
 --
 -- Changes from rev. 4 (team review, 23 Oct 2026):
 --   1. Multiple photos: listing_photos, lost_report_photos and
@@ -64,9 +75,13 @@ CREATE TYPE material_type        AS ENUM ('notes', 'slides', 'past_assignment', 
 CREATE TYPE forum_scope_type     AS ENUM ('course', 'department', 'company');
 CREATE TYPE bookmark_target_type AS ENUM ('listing', 'event');
 CREATE TYPE notification_type    AS ENUM ('lost_found_match', 'forum_reply', 'listing_status_change',
-                                          'bookmarked_event_update', 'followed_tag_event', 'moderation_action');
+                                          'bookmarked_event_update', 'followed_tag_event', 'moderation_action',
+                                          'saved_search_match', 'wanted_post_match');
 CREATE TYPE report_target_type   AS ENUM ('listing', 'lost_report', 'found_report', 'course_material',
-                                          'course_feedback', 'thread', 'comment', 'interview_experience');
+                                          'course_feedback', 'thread', 'comment', 'interview_experience',
+                                          'wanted_post');
+CREATE TYPE wanted_status        AS ENUM ('open', 'fulfilled', 'closed');
+CREATE TYPE campus_service_category AS ENUM ('health', 'wellbeing', 'grievance', 'safety', 'other');
 CREATE TYPE report_status        AS ENUM ('open', 'actioned', 'dismissed');
 CREATE TYPE device_platform      AS ENUM ('android', 'ios', 'web', 'desktop');
 
@@ -260,6 +275,31 @@ CREATE TABLE listing_photos (
     CONSTRAINT listing_photos_order_uq UNIQUE (listing_id, sort_order) DEFERRABLE INITIALLY DEFERRED
 );
 
+-- "Wanted" posts (rev 6): a buyer says what they need instead of waiting for
+-- it to be listed. When a new listing is in the same category, within budget
+-- and shares a word with the title, the author gets a wanted_post_match alert.
+CREATE TABLE wanted_posts (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    author_id     UUID NOT NULL REFERENCES users(id),
+    title         TEXT NOT NULL CHECK (char_length(btrim(title)) BETWEEN 1 AND 120),
+    description   TEXT,
+    category_id   INT NOT NULL REFERENCES bs_categories(id),
+    max_price     NUMERIC(10,2) CHECK (max_price >= 0),        -- budget; NULL = open to offers
+    status        wanted_status NOT NULL DEFAULT 'open',
+    search_vector TSVECTOR GENERATED ALWAYS AS (
+                      to_tsvector('english', coalesce(title,'') || ' ' || coalesce(description,''))
+                  ) STORED,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_at    TIMESTAMPTZ,
+    deleted_by    UUID REFERENCES users(id),
+    CONSTRAINT wanted_deleted_pair_chk CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))
+);
+CREATE INDEX idx_wanted_feed   ON wanted_posts(created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX idx_wanted_match  ON wanted_posts(category_id) WHERE deleted_at IS NULL AND status = 'open';
+CREATE INDEX idx_wanted_search ON wanted_posts USING GIN(search_vector);
+CREATE INDEX idx_wanted_author ON wanted_posts(author_id, created_at DESC);
+
 -- ============================================================================
 -- PHASE 1 — LOST & FOUND  (FR-7, FR-8, FR-9, FR-10)
 -- FR-9 matching: when a found report is created, notify every open lost
@@ -324,6 +364,37 @@ CREATE TABLE found_report_photos (          -- same rules as listing_photos
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT found_report_photos_order_uq UNIQUE (found_report_id, sort_order) DEFERRABLE INITIALLY DEFERRED
 );
+
+-- ============================================================================
+-- SAVED SEARCHES AND ALERTS (rev 6)
+-- "Tell me when a cycle under ₹3,000 appears" (buy_sell: watches new
+-- listings) or "when someone finds an ID card" (lost_found: watches new found
+-- reports). Filters mirror GET /listings and GET /found-reports. A matching
+-- item sends one saved_search_match notification per user per item; the
+-- notification payload (listing_id / found_report_id) is the dedupe key, as
+-- with FR-9. last_seen_at drives the "N new" badge.
+-- ============================================================================
+CREATE TABLE saved_searches (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    module         module_name NOT NULL CHECK (module IN ('buy_sell', 'lost_found')),
+    name           TEXT NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 80),
+    query          TEXT CHECK (char_length(query) <= 200),     -- keywords; NULL = any
+    bs_category_id INT REFERENCES bs_categories(id),           -- buy_sell only
+    lf_category_id INT REFERENCES lf_categories(id),           -- lost_found only
+    min_price      NUMERIC(10,2) CHECK (min_price >= 0),       -- buy_sell only
+    max_price      NUMERIC(10,2) CHECK (max_price >= 0),
+    alerts_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    last_seen_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT saved_search_shape_chk CHECK (
+        (module = 'buy_sell'   AND lf_category_id IS NULL) OR
+        (module = 'lost_found' AND bs_category_id IS NULL AND min_price IS NULL AND max_price IS NULL)),
+    CONSTRAINT saved_search_price_chk CHECK (min_price IS NULL OR max_price IS NULL OR min_price <= max_price)
+);
+CREATE INDEX idx_saved_searches_user   ON saved_searches(user_id, created_at);
+CREATE INDEX idx_saved_searches_alerts ON saved_searches(module) WHERE alerts_enabled;
 
 -- ============================================================================
 -- PHASE 1 — ACADEMIC HELP CONTENT  (FR-11, FR-12, FR-13)
@@ -598,9 +669,11 @@ CREATE TABLE reports (
     thread_id               UUID REFERENCES threads(id)               ON DELETE CASCADE,
     comment_id              UUID REFERENCES comments(id)              ON DELETE CASCADE,
     interview_experience_id UUID REFERENCES interview_experiences(id) ON DELETE CASCADE,
+    wanted_post_id          UUID REFERENCES wanted_posts(id)          ON DELETE CASCADE,
     target_id               UUID GENERATED ALWAYS AS (coalesce(
                                 listing_id, lost_report_id, found_report_id, course_material_id,
-                                course_feedback_id, thread_id, comment_id, interview_experience_id)) STORED,
+                                course_feedback_id, thread_id, comment_id, interview_experience_id,
+                                wanted_post_id)) STORED,
     reason                  TEXT NOT NULL CHECK (char_length(btrim(reason)) BETWEEN 1 AND 1000),
     status                  report_status NOT NULL DEFAULT 'open',
     handled_by              UUID REFERENCES users(id),
@@ -610,7 +683,7 @@ CREATE TABLE reports (
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT reports_one_target_chk CHECK (num_nonnulls(
         listing_id, lost_report_id, found_report_id, course_material_id,
-        course_feedback_id, thread_id, comment_id, interview_experience_id) = 1),
+        course_feedback_id, thread_id, comment_id, interview_experience_id, wanted_post_id) = 1),
     CONSTRAINT reports_target_type_chk CHECK (CASE target_type
         WHEN 'listing'              THEN listing_id IS NOT NULL
         WHEN 'lost_report'          THEN lost_report_id IS NOT NULL
@@ -619,11 +692,12 @@ CREATE TABLE reports (
         WHEN 'course_feedback'      THEN course_feedback_id IS NOT NULL
         WHEN 'thread'               THEN thread_id IS NOT NULL
         WHEN 'comment'              THEN comment_id IS NOT NULL
-        WHEN 'interview_experience' THEN interview_experience_id IS NOT NULL END),
+        WHEN 'interview_experience' THEN interview_experience_id IS NOT NULL
+        WHEN 'wanted_post'          THEN wanted_post_id IS NOT NULL END),
     -- module must fit the target (thread/comment: academic_help for course/department
     -- forums, placement_hub for company forums — the API sets it from the forum)
     CONSTRAINT reports_module_chk CHECK (
-        (target_type = 'listing'                              AND module = 'buy_sell') OR
+        (target_type IN ('listing', 'wanted_post')            AND module = 'buy_sell') OR
         (target_type IN ('lost_report', 'found_report')       AND module = 'lost_found') OR
         (target_type IN ('course_material', 'course_feedback') AND module = 'academic_help') OR
         (target_type = 'interview_experience'                 AND module = 'placement_hub') OR
@@ -767,6 +841,25 @@ CREATE INDEX idx_chat_thread ON chat_messages(least(sender_id, receiver_id), gre
 CREATE INDEX idx_chat_inbox  ON chat_messages(receiver_id, sent_at DESC);
 
 -- ============================================================================
+-- CAMPUS SERVICES (rev 6) — Health Centre, Wellness Centre, grievance portals
+-- on the landing page. Managed by the admin, so a changed link or phone number
+-- needs no app release. Initial rows: db/reference-data.sql.
+-- ============================================================================
+CREATE TABLE campus_services (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        TEXT NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 80),
+    description TEXT,
+    category    campus_service_category NOT NULL,
+    url         TEXT CHECK (url ~ '^https?://'),
+    phone       TEXT CHECK (phone ~ '^\+?[0-9 -]{3,20}$'),
+    sort_order  SMALLINT NOT NULL DEFAULT 100,               -- lower first, within a category
+    is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT campus_service_contact_chk CHECK (url IS NOT NULL OR phone IS NOT NULL)
+);
+
+-- ============================================================================
 -- updated_at TRIGGERS — one per table that has an updated_at column
 -- ============================================================================
 CREATE TRIGGER trg_departments_updated_at           BEFORE UPDATE ON departments           FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -787,3 +880,6 @@ CREATE TRIGGER trg_comments_updated_at              BEFORE UPDATE ON comments   
 CREATE TRIGGER trg_reports_updated_at               BEFORE UPDATE ON reports               FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_events_updated_at                BEFORE UPDATE ON events                FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_push_devices_updated_at          BEFORE UPDATE ON push_devices          FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_wanted_posts_updated_at          BEFORE UPDATE ON wanted_posts          FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_saved_searches_updated_at        BEFORE UPDATE ON saved_searches        FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_campus_services_updated_at       BEFORE UPDATE ON campus_services       FOR EACH ROW EXECUTE FUNCTION set_updated_at();

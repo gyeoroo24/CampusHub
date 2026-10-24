@@ -27,7 +27,7 @@ from ..permissions import log_moderation
 router = APIRouter(tags=["Reports & moderation"])
 
 TargetType = Literal["listing", "lost_report", "found_report", "course_material", "course_feedback",
-                     "thread", "comment", "interview_experience"]
+                     "thread", "comment", "interview_experience", "wanted_post"]
 Module = Literal["buy_sell", "lost_found", "academic_help", "placement_hub"]
 
 # target_type -> (table, column in reports)
@@ -40,10 +40,11 @@ TARGETS: dict[str, tuple[str, str]] = {
     "thread": ("threads", "thread_id"),
     "comment": ("comments", "comment_id"),
     "interview_experience": ("interview_experiences", "interview_experience_id"),
+    "wanted_post": ("wanted_posts", "wanted_post_id"),
 }
 FIXED_MODULE = {"listing": "buy_sell", "lost_report": "lost_found", "found_report": "lost_found",
                 "course_material": "academic_help", "course_feedback": "academic_help",
-                "interview_experience": "placement_hub"}
+                "interview_experience": "placement_hub", "wanted_post": "buy_sell"}
 FORUM_MODULE = {"course": "academic_help", "department": "academic_help", "company": "placement_hub"}
 
 

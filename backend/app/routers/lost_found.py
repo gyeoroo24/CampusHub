@@ -7,7 +7,8 @@ Matching (FR-9): the category says what the item is ("ID card"). When someone fi
 found report, every open lost report in the same category, lost no later than the
 item was found, by someone else, gets an in-app notification plus a push. Matching runs
 again when a found report's category or time is edited, or it is reopened; nobody is told
-twice about the same found report.
+twice about the same found report. A found report also alerts matching saved Lost & Found
+searches (app/alerts.py).
 """
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -18,6 +19,7 @@ import asyncpg
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from pydantic import AfterValidator, BaseModel, Field
 
+from ..alerts import found_report_alerts, push_alerts
 from ..auth import CurrentUser, current_user, optional_user
 from ..common import (MAX_INT_ID, CategoryId, CategoryRef, Contact, Page, PageParams, Photo, UserRef, forbidden,
                       make_page, not_found, page_params, search_text, set_clause, text)
@@ -188,7 +190,7 @@ def build_router(kind: Kind) -> APIRouter:
         return row
 
     async def rematch(conn: asyncpg.Connection, report_id: UUID, background: BackgroundTasks) -> None:
-        """Run FR-9 matching again for a found report whose category, time or status changed."""
+        """Run FR-9 matching and saved-search alerts again for a found report that changed or reopened."""
         r = await conn.fetchrow(
             f"""SELECT category_id, {kind.when} AS occurred_at, reporter_id FROM {kind.table}
                 WHERE id = $1 AND status = 'open' AND deleted_at IS NULL""", report_id)
@@ -199,6 +201,7 @@ def build_router(kind: Kind) -> APIRouter:
         if notified:
             background.add_task(deliver_push, notified, "lost_found_match",
                                 {"found_report_id": str(report_id), "message": message})
+        push_alerts(background, await found_report_alerts(conn, report_id))
 
     async def insert_photos(conn: asyncpg.Connection, report_id: UUID, keys: list[str]) -> None:
         await conn.executemany(
@@ -250,6 +253,7 @@ def build_router(kind: Kind) -> APIRouter:
         await verify_own_uploads(body.photo_keys, kind.upload_kind, user.id)
         notified: list[UUID] = []
         message = None
+        pushes = []
         async with conn.transaction():
             report_id = await conn.fetchval(
                 f"""INSERT INTO {kind.table} (reporter_id, description, category_id, {kind.when}, location)
@@ -260,10 +264,12 @@ def build_router(kind: Kind) -> APIRouter:
                 # FR-9: tell everyone who lost this kind of item.
                 notified, message = await notify_lost_reporters(conn, report_id, body.category_id,
                                                                 body.occurred_at, user.id)
+                pushes = await found_report_alerts(conn, report_id)
         await mark_attached(body.photo_keys)
         if notified:
             background.add_task(deliver_push, notified, "lost_found_match",
                                 {"found_report_id": str(report_id), "message": message})
+        push_alerts(background, pushes)
         result = await detail(conn, report_id, user)
         result.possible_matches = await possible_matches(conn, body.category_id, body.occurred_at, user.id)
         return result
@@ -276,9 +282,11 @@ def build_router(kind: Kind) -> APIRouter:
         for required in ("description", "category_id", "occurred_at"):
             if required in changes and changes[required] is None:
                 raise HTTPException(422, f"{required} can't be empty.")
+        # A new description can match saved keyword searches too (each person is still told once).
         rematch_needed = kind is FOUND and (
             changes.get("category_id", before["category_id"]) != before["category_id"]
-            or changes.get("occurred_at", before["occurred_at"]) != before["occurred_at"])
+            or changes.get("occurred_at", before["occurred_at"]) != before["occurred_at"]
+            or "description" in changes)
         if "occurred_at" in changes:
             changes[kind.when] = changes.pop("occurred_at")
         sql, values = set_clause(changes, start=2)

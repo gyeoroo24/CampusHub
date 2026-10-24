@@ -1,4 +1,8 @@
-"""Buy & Sell listings (FR-4, FR-5, FR-6, FR-10)."""
+"""Buy & Sell listings (FR-4, FR-5, FR-6, FR-10).
+
+A new listing, or one edited or made available again, alerts matching saved searches and
+Wanted posts (app/alerts.py).
+"""
 from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal
@@ -8,6 +12,7 @@ import asyncpg
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from pydantic import AfterValidator, BaseModel, Field
 
+from ..alerts import listing_alerts, push_alerts
 from ..auth import CurrentUser, current_user, optional_user
 from ..common import (MAX_INT_ID, CategoryId, CategoryRef, Contact, Page, PageParams, Photo, UserRef, forbidden,
                       make_page, not_found, page_params, search_text, set_clause, text)
@@ -164,7 +169,7 @@ async def get_listing(listing_id: UUID, viewer: CurrentUser | None = Depends(opt
 
 
 @router.post("", response_model=ListingDetail, status_code=201, summary="Create a listing")
-async def create_listing(body: ListingCreate, user: CurrentUser = Depends(current_user),
+async def create_listing(body: ListingCreate, background: BackgroundTasks, user: CurrentUser = Depends(current_user),
                          conn: asyncpg.Connection = Depends(get_conn)):
     await verify_own_uploads(body.photo_keys, "listing_photo", user.id)
     async with conn.transaction():
@@ -173,13 +178,15 @@ async def create_listing(body: ListingCreate, user: CurrentUser = Depends(curren
                VALUES ($1, $2, $3, $4, $5, $6) RETURNING id""",
             user.id, body.title, body.description, body.price, body.category_id, body.location)
         await _insert_photos(conn, listing_id, body.photo_keys)
+        pushes = await listing_alerts(conn, listing_id)
     await mark_attached(body.photo_keys)
+    push_alerts(background, pushes)
     return await _detail(conn, listing_id, user)
 
 
 @router.patch("/{listing_id}", response_model=ListingDetail, summary="Edit a listing (seller or admin)")
-async def update_listing(listing_id: UUID, body: ListingUpdate, user: CurrentUser = Depends(current_user),
-                         conn: asyncpg.Connection = Depends(get_conn)):
+async def update_listing(listing_id: UUID, body: ListingUpdate, background: BackgroundTasks,
+                         user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
     by_admin = await _editable_listing(conn, listing_id, user)
     changes = body.model_dump(exclude_unset=True)
     for required in ("title", "price", "category_id"):
@@ -190,18 +197,24 @@ async def update_listing(listing_id: UUID, body: ListingUpdate, user: CurrentUse
         await conn.execute(f"UPDATE listings SET {sql} WHERE id = $1", listing_id, *values)
         if by_admin:
             await log_moderation(conn, user.id, "edit_listing", "listing", listing_id)
+        # A lower price or new words can match searches it didn't before.
+        pushes = await listing_alerts(conn, listing_id) if changes.keys() - {"location"} else []
+    push_alerts(background, pushes)
     return await _detail(conn, listing_id, user)
 
 
 @router.patch("/{listing_id}/status", response_model=ListingDetail,
               summary="Mark available / reserved / sold (seller or admin, FR-5)")
-async def update_status(listing_id: UUID, body: StatusUpdate, user: CurrentUser = Depends(current_user),
-                        conn: asyncpg.Connection = Depends(get_conn)):
+async def update_status(listing_id: UUID, body: StatusUpdate, background: BackgroundTasks,
+                        user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
     by_admin = await _editable_listing(conn, listing_id, user)
     async with conn.transaction():
         await conn.execute("UPDATE listings SET status = $2 WHERE id = $1", listing_id, body.status)
         if by_admin:
             await log_moderation(conn, user.id, "change_listing_status", "listing", listing_id, body.status)
+        # Back on sale (e.g. a reservation fell through): alert anyone not told yet.
+        pushes = await listing_alerts(conn, listing_id) if body.status == "available" else []
+    push_alerts(background, pushes)
     return await _detail(conn, listing_id, user)
 
 
