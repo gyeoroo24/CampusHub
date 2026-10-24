@@ -1,6 +1,6 @@
 # CampusHub: Project Context, Architecture & Session Handoff Guide
 
-**Document Version:** 3.6  
+**Document Version:** 3.7  
 **Last Updated:** 24 October 2026  
 **Project:** CampusHub — Cloud Computing Course Project (DS252), MTech CSA, Indian Institute of Science (IISc), Bangalore.  
 **Repository Branch Context:**
@@ -193,8 +193,13 @@ CampusHub/frontend/lib/
     * Added administrative controls inside user profile dialog (deactivate/activate account and transfer single admin role).
     * Updated `BuySellDetailDialog` and `LostFoundDetailDialog` to display deactivated poster notices for inactive accounts, and enabled status change/moderation actions for administrators.
     * Added friendly retry handling for transient AWS Cognito 503 errors in `AuthDialog`.
+  * **Step 13 (Filter Overhaul, Dynamic Categories, Seller Edit/Delete, Phone Contacts):**
+    * Overhauled Buy & Sell toolbar: "All" chip, vertical dividers, toggle price presets (`Under ₹500`, `₹500 - ₹2,000`, `₹2,000+`), custom price range active chip, and multi-select toggle status chips (`Available`, `Reserved`, `Sold Out`).
+    * Refactored category scrollbars across both modules to dynamically watch backend categories (`buySellCategoriesProvider` and `lostFoundCategoriesProvider`) with immediate reflection upon creation via "+ Add New Category...".
+    * Added Seller & Moderator Edit and Delete flows: created `EditListingDialog` and `EditReportDialog` with feed refreshes; wired deletion confirmation dialogs.
+    * Integrated dual contact buttons (Email and Phone copy/call) across `BuySellGridCard`, `LostFoundCard`, and detail dialogs whenever a phone number is provided.
 * **Static Analysis:** `flutter analyze` runs with **0 errors, 0 warnings, 0 hints**.
-* **Automated Tests:** `flutter test` executes **30 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`, `live_backend_integration_test.dart`).
+* **Automated Tests:** `flutter test` executes **39 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`, `live_backend_integration_test.dart`, `filter_and_seller_actions_test.dart`).
 
 ---
 

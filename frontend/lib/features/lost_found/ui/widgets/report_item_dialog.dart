@@ -383,6 +383,7 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
           cat = await ref.read(lostFoundRepositoryProvider).createCategory(
                 _customCategoryController.text.trim(),
               );
+          ref.invalidate(lostFoundCategoriesProvider);
         } catch (_) {
           cat = CategoryRef(id: 99, name: _customCategoryController.text.trim());
         }

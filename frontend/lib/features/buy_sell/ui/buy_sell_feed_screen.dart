@@ -6,6 +6,7 @@ import '../../../core/widgets/compact_price_range_picker_dialog.dart';
 import '../../../core/widgets/skeleton_loader.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../auth/ui/auth_dialog.dart';
+import '../domain/buy_sell_item.dart';
 import '../providers/buy_sell_providers.dart';
 import 'widgets/buy_sell_grid_card.dart';
 import 'widgets/buy_sell_list_card.dart';
@@ -21,18 +22,21 @@ class BuySellFeedScreen extends ConsumerStatefulWidget {
 class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
   final ScrollController _scrollController = ScrollController();
 
-  static const _categoryIcons = {
-    'All': '🌟',
-    'Books': '📚',
-    'Cycles': '🚲',
-    'Electronics': '💻',
-    'Furniture': '🛋️',
-    'Lab Equipment': '🔬',
-    'Others': '🎒',
-  };
+  static String _categoryIconFor(String category) {
+    final lower = category.toLowerCase();
+    if (lower == 'all') return '🌟';
+    if (lower.contains('book')) return '📚';
+    if (lower.contains('cycle') || lower.contains('bike')) return '🚲';
+    if (lower.contains('elect') || lower.contains('laptop') || lower.contains('phone')) return '💻';
+    if (lower.contains('furn') || lower.contains('chair') || lower.contains('table') || lower.contains('bed')) return '🛋️';
+    if (lower.contains('lab') || lower.contains('equip')) return '🔬';
+    if (lower.contains('cloth') || lower.contains('wear')) return '👕';
+    if (lower.contains('music') || lower.contains('guitar')) return '🎸';
+    if (lower.contains('sport') || lower.contains('game')) return '🏸';
+    return '🎒';
+  }
 
-  static const _priceFilters = [
-    (label: 'All Prices', min: null, max: null),
+  static const _pricePresets = [
     (label: 'Under ₹500', min: null, max: 500.0),
     (label: '₹500 - ₹2,000', min: 500.0, max: 2000.0),
     (label: '₹2,000+', min: 2000.0, max: null),
@@ -66,6 +70,27 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
     final paginatedState = ref.watch(buySellPaginationProvider);
     final filter = ref.watch(buySellFilterProvider);
     final showTrustedExchangeBanner = ref.watch(showTrustedExchangeBannerProvider);
+    final categoriesAsync = ref.watch(buySellCategoriesProvider);
+    final categoryList = categoriesAsync.maybeWhen(
+      data: (cats) => ['All', ...cats.map((c) => c.name)],
+      orElse: () => const [
+        'All',
+        'Books',
+        'Cycles',
+        'Electronics',
+        'Furniture',
+        'Lab Equipment',
+        'Others',
+      ],
+    );
+
+    final isAllSelected = filter.minPrice == null &&
+        filter.maxPrice == null &&
+        filter.selectedStatuses.length == 3;
+
+    final isCustomPriceActive = (filter.minPrice != null || filter.maxPrice != null) &&
+        !_pricePresets.any((p) => filter.minPrice == p.min && filter.maxPrice == p.max);
+
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final isMobile = MediaQuery.of(context).size.width < 750;
@@ -168,7 +193,7 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
               ),
             ),
 
-          // ── Category Pills (Horizontal Scroll with Icons) & Sell Item Button ──
+          // ── Category Pills (Horizontal Scroll with Dynamic Categories) & Sell Item Button ──
           SliverToBoxAdapter(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -179,18 +204,18 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
-                        children: _categoryIcons.entries.map((entry) {
-                          final isSelected = filter.category == entry.key;
+                        children: categoryList.map((catName) {
+                          final isSelected = filter.category == catName;
                           return Padding(
                             padding: const EdgeInsets.only(right: 8.0),
                             child: ChoiceChip(
-                              avatar: Text(entry.value, style: const TextStyle(fontSize: 13)),
-                              label: Text(entry.key),
+                              avatar: Text(_categoryIconFor(catName), style: const TextStyle(fontSize: 13)),
+                              label: Text(catName),
                               selected: isSelected,
                               onSelected: (selected) {
                                 if (selected) {
                                   ref.read(buySellFilterProvider.notifier).update(
-                                        (s) => s.copyWith(category: entry.key),
+                                        (s) => s.copyWith(category: catName),
                                       );
                                 }
                               },
@@ -222,7 +247,7 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
             ),
           ),
 
-          // ── Quick Filter Toolbar (Sort, Price chips, View mode) ─────────────
+          // ── Quick Filter Toolbar (All | Price Presets + Custom | Status Chips | Sort | Custom Range | View mode) ─────────────
           SliverToBoxAdapter(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -236,34 +261,144 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
               ),
               child: Row(
                 children: [
-                  // Price Filter Chips (Single selection)
+                  // Quick Filter Chips: All | Price Presets + Custom | Status Chips
                   Expanded(
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
-                        children: _priceFilters.map((p) {
-                          final isSelected = filter.minPrice == p.min && filter.maxPrice == p.max;
-                          return Padding(
+                        children: [
+                          // "All" Chip
+                          Padding(
                             padding: const EdgeInsets.only(right: 6.0),
                             child: FilterChip(
-                              label: Text(p.label, style: const TextStyle(fontSize: 11)),
-                              selected: isSelected,
+                              label: const Text('All', style: TextStyle(fontSize: 11)),
+                              selected: isAllSelected,
                               showCheckmark: false,
                               visualDensity: VisualDensity.compact,
                               padding: const EdgeInsets.symmetric(horizontal: 4),
                               onSelected: (_) {
                                 ref.read(buySellFilterProvider.notifier).update(
                                       (s) => s.copyWith(
-                                        minPrice: p.min,
-                                        clearMinPrice: p.min == null,
-                                        maxPrice: p.max,
-                                        clearMaxPrice: p.max == null,
+                                        clearMinPrice: true,
+                                        clearMaxPrice: true,
+                                        selectedStatuses: {
+                                          ListingStatus.available,
+                                          ListingStatus.reserved,
+                                          ListingStatus.sold,
+                                        },
                                       ),
                                     );
                               },
                             ),
-                          );
-                        }).toList(),
+                          ),
+
+                          // Vertical Divider
+                          Container(
+                            height: 18,
+                            width: 1,
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                          ),
+                          const SizedBox(width: 4),
+
+                          // Price Preset Chips (Toggle: single or none)
+                          ..._pricePresets.map((p) {
+                            final isSelected = filter.minPrice == p.min && filter.maxPrice == p.max;
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 6.0),
+                              child: FilterChip(
+                                label: Text(p.label, style: const TextStyle(fontSize: 11)),
+                                selected: isSelected,
+                                showCheckmark: false,
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                onSelected: (_) {
+                                  if (isSelected) {
+                                    ref.read(buySellFilterProvider.notifier).update(
+                                          (s) => s.copyWith(
+                                            clearMinPrice: true,
+                                            clearMaxPrice: true,
+                                          ),
+                                        );
+                                  } else {
+                                    ref.read(buySellFilterProvider.notifier).update(
+                                          (s) => s.copyWith(
+                                            minPrice: p.min,
+                                            clearMinPrice: p.min == null,
+                                            maxPrice: p.max,
+                                            clearMaxPrice: p.max == null,
+                                          ),
+                                        );
+                                  }
+                                },
+                              ),
+                            );
+                          }),
+
+                          // Custom Price Range Chip (if active and not matching presets)
+                          if (isCustomPriceActive)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 6.0),
+                              child: FilterChip(
+                                label: Text(
+                                  '₹${filter.minPrice?.toStringAsFixed(0) ?? "0"} - ₹${filter.maxPrice?.toStringAsFixed(0) ?? "Any"}',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                selected: true,
+                                showCheckmark: false,
+                                avatar: const Icon(Icons.close_rounded, size: 14),
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                onSelected: (_) {
+                                  ref.read(buySellFilterProvider.notifier).update(
+                                        (s) => s.copyWith(
+                                          clearMinPrice: true,
+                                          clearMaxPrice: true,
+                                        ),
+                                      );
+                                },
+                              ),
+                            ),
+
+                          // Vertical Divider
+                          Container(
+                            height: 18,
+                            width: 1,
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                          ),
+                          const SizedBox(width: 4),
+
+                          // Status Filter Chips (Toggles: multiple can be active)
+                          ...[
+                            (label: 'Available', status: ListingStatus.available),
+                            (label: 'Reserved', status: ListingStatus.reserved),
+                            (label: 'Sold Out', status: ListingStatus.sold),
+                          ].map((st) {
+                            final isSelected = filter.selectedStatuses.contains(st.status);
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 6.0),
+                              child: FilterChip(
+                                label: Text(st.label, style: const TextStyle(fontSize: 11)),
+                                selected: isSelected,
+                                showCheckmark: false,
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                onSelected: (selected) {
+                                  final newStatuses = Set<ListingStatus>.from(filter.selectedStatuses);
+                                  if (selected) {
+                                    newStatuses.add(st.status);
+                                  } else {
+                                    newStatuses.remove(st.status);
+                                  }
+                                  ref.read(buySellFilterProvider.notifier).update(
+                                        (s) => s.copyWith(selectedStatuses: newStatuses),
+                                      );
+                                },
+                              ),
+                            );
+                          }),
+                        ],
                       ),
                     ),
                   ),
@@ -528,6 +663,7 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
         userId: user?.id,
         onSubmit: (newItem) async {
           await ref.read(buySellRepositoryProvider).addListing(newItem);
+          ref.invalidate(buySellCategoriesProvider);
           ref.read(buySellPaginationProvider.notifier).loadInitial();
         },
       ),

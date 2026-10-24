@@ -8,6 +8,7 @@ import '../../../auth/providers/auth_providers.dart';
 import '../../../auth/ui/auth_dialog.dart';
 import '../../domain/lost_found_item.dart';
 import '../../providers/lost_found_providers.dart';
+import 'edit_report_dialog.dart';
 
 class LostFoundDetailDialog extends ConsumerWidget {
   final LostFoundItem item;
@@ -199,9 +200,39 @@ class LostFoundDetailDialog extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              isOwner ? 'Report Status Controls' : 'Admin Report Controls',
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  isOwner ? 'Report Owner Controls' : 'Admin Report Controls',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    TextButton.icon(
+                                      style: TextButton.styleFrom(
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      ),
+                                      icon: const Icon(Icons.edit_outlined, size: 14),
+                                      label: const Text('Edit', style: TextStyle(fontSize: 12)),
+                                      onPressed: () => _openEditDialog(context, ref),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    TextButton.icon(
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.red.shade700,
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      ),
+                                      icon: const Icon(Icons.delete_outline_rounded, size: 14),
+                                      label: const Text('Delete', style: TextStyle(fontSize: 12)),
+                                      onPressed: () => _confirmOwnerDelete(context, ref),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 8),
                             Wrap(
@@ -294,21 +325,46 @@ class LostFoundDetailDialog extends ConsumerWidget {
                                     ],
                                   ),
                                 ),
-                                ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: themeColor,
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  onPressed: () {
-                                    Clipboard.setData(ClipboardData(text: item.reporterContact!.email));
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Copied email: ${item.reporterContact!.email}'),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: themeColor,
+                                        foregroundColor: Colors.white,
                                       ),
-                                    );
-                                  },
-                                  icon: const Icon(Icons.copy_rounded, size: 14),
-                                  label: const Text('Contact'),
+                                      onPressed: () {
+                                        Clipboard.setData(ClipboardData(text: item.reporterContact!.email));
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Copied email: ${item.reporterContact!.email}'),
+                                          ),
+                                        );
+                                      },
+                                      icon: const Icon(Icons.email_outlined, size: 14),
+                                      label: const Text('Email'),
+                                    ),
+                                    if (item.reporterContact!.phone != null &&
+                                        item.reporterContact!.phone!.trim().isNotEmpty) ...[
+                                      const SizedBox(width: 8),
+                                      ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: themeColor,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                        onPressed: () {
+                                          Clipboard.setData(ClipboardData(text: item.reporterContact!.phone!));
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Copied phone: ${item.reporterContact!.phone}'),
+                                            ),
+                                          );
+                                        },
+                                        icon: const Icon(Icons.phone_outlined, size: 14),
+                                        label: const Text('Call'),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ],
                             )
@@ -401,6 +457,56 @@ class LostFoundDetailDialog extends ConsumerWidget {
         ),
       ),
     ));
+  }
+
+  Future<void> _openEditDialog(BuildContext context, WidgetRef ref) async {
+    final updated = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => EditReportDialog(item: item),
+    );
+    if (updated == true && context.mounted) {
+      Navigator.pop(context);
+    }
+  }
+
+  void _confirmOwnerDelete(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete ${item.kind == PostType.lost ? "Lost" : "Found"} Report',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text(
+          'Are you sure you want to delete this report? It will be permanently removed from the lost and found board.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+              await ref.read(lostFoundRepositoryProvider).deleteReport(item.id, item.kind);
+              ref.invalidate(lostReportsProvider);
+              ref.invalidate(foundReportsProvider);
+              ref.read(lostReportsPaginationProvider.notifier).loadInitial();
+              ref.read(foundReportsPaginationProvider.notifier).loadInitial();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Report deleted successfully.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _confirmModeratorDelete(BuildContext context, WidgetRef ref) {

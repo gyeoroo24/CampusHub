@@ -9,7 +9,7 @@ import 'buy_sell_repository.dart';
 
 /// In-memory mock repository for Buy & Sell.
 class MockBuySellRepository implements IBuySellRepository {
-  final List<CategoryRef> _categories = [
+  static final List<CategoryRef> _categories = [
     const CategoryRef(id: 1, name: 'Books'),
     const CategoryRef(id: 2, name: 'Cycles'),
     const CategoryRef(id: 3, name: 'Electronics'),
@@ -18,7 +18,7 @@ class MockBuySellRepository implements IBuySellRepository {
     const CategoryRef(id: 6, name: 'Others'),
   ];
 
-  late final List<ListingItem> _mockData = [
+  static final List<ListingItem> _mockData = [
     // 1
     ListingItem(
       id: '1',
@@ -466,7 +466,7 @@ class MockBuySellRepository implements IBuySellRepository {
           item.description.toLowerCase().contains(query.toLowerCase()) ||
           item.location.toLowerCase().contains(query.toLowerCase());
       final matchesCategory = categoryId == null || item.category.id == categoryId;
-      final matchesStatus = statusList == null || statusList.isEmpty || statusList.contains(item.status);
+      final matchesStatus = statusList == null ? true : statusList.contains(item.status);
       final matchesMinPrice = minPrice == null || item.price >= minPrice;
       final matchesMaxPrice = maxPrice == null || item.price <= maxPrice;
       final matchesSeller = sellerId == null || sellerId.isEmpty || item.seller.id == sellerId;

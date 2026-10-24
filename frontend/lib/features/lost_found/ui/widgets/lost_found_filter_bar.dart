@@ -13,15 +13,17 @@ import 'report_item_dialog.dart';
 class LostFoundFilterBar extends ConsumerWidget {
   const LostFoundFilterBar({super.key});
 
-  static const Map<String, String> _categoryIcons = {
-    'All': '📋',
-    'ID Cards': '🪪',
-    'Electronics': '💻',
-    'Personal Belongings': '🎒',
-    'Keys': '🔑',
-    'Documents': '📄',
-    'Other': '📦',
-  };
+  static String _categoryIconFor(String category) {
+    final lower = category.toLowerCase();
+    if (lower == 'all') return '📋';
+    if (lower.contains('id') || lower.contains('card')) return '🪪';
+    if (lower.contains('elect') || lower.contains('phone') || lower.contains('laptop')) return '💻';
+    if (lower.contains('bag') || lower.contains('backpack')) return '🎒';
+    if (lower.contains('key')) return '🔑';
+    if (lower.contains('doc') || lower.contains('paper')) return '📄';
+    if (lower.contains('belong') || lower.contains('personal')) return '🧳';
+    return '📦';
+  }
 
   static Future<void> handleReport(BuildContext context, WidgetRef ref, PostType postType) async {
     final signedIn = await AuthDialog.ensureSignedIn(
@@ -44,6 +46,7 @@ class LostFoundFilterBar extends ConsumerWidget {
         userName: user?.name,
         onSubmit: (report) async {
           final created = await ref.read(lostFoundRepositoryProvider).submitReport(report);
+          ref.invalidate(lostFoundCategoriesProvider);
           if (postType == PostType.lost) {
             ref.read(lostReportsPaginationProvider.notifier).loadInitial();
           } else {
@@ -58,6 +61,19 @@ class LostFoundFilterBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(lostFoundFilterProvider);
+    final categoriesAsync = ref.watch(lostFoundCategoriesProvider);
+    final categoryList = categoriesAsync.maybeWhen(
+      data: (cats) => ['All', ...cats.map((c) => c.name)],
+      orElse: () => const [
+        'All',
+        'ID Cards',
+        'Electronics',
+        'Personal Belongings',
+        'Bags',
+        'Keys',
+        'Others',
+      ],
+    );
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final isMobile = MediaQuery.of(context).size.width <= 750;
@@ -75,18 +91,18 @@ class LostFoundFilterBar extends ConsumerWidget {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: _categoryIcons.entries.map((entry) {
-                      final isSelected = filter.category == entry.key;
+                    children: categoryList.map((catName) {
+                      final isSelected = filter.category == catName;
                       return Padding(
                         padding: const EdgeInsets.only(right: 8.0),
                         child: ChoiceChip(
-                          avatar: Text(entry.value, style: const TextStyle(fontSize: 13)),
-                          label: Text(entry.key),
+                          avatar: Text(_categoryIconFor(catName), style: const TextStyle(fontSize: 13)),
+                          label: Text(catName),
                           selected: isSelected,
                           onSelected: (selected) {
                             if (selected) {
                               ref.read(lostFoundFilterProvider.notifier).update(
-                                    (s) => s.copyWith(category: entry.key),
+                                    (s) => s.copyWith(category: catName),
                                   );
                             }
                           },

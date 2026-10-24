@@ -33,7 +33,7 @@ class BuySellFilterState {
   final String query;
   final String category;
   final SortOption sortOption;
-  final ListingStatus? statusFilter;
+  final Set<ListingStatus> selectedStatuses;
   final double? minPrice;
   final double? maxPrice;
   final DateDurationFilter dateDuration;
@@ -43,22 +43,29 @@ class BuySellFilterState {
     this.query = '',
     this.category = 'All',
     this.sortOption = SortOption.newest,
-    this.statusFilter,
+    Set<ListingStatus>? selectedStatuses,
+    ListingStatus? statusFilter,
     this.minPrice,
     this.maxPrice,
     this.dateDuration = DateDurationFilter.allTime,
     this.viewMode = ViewMode.grid,
-  });
+  }) : selectedStatuses = selectedStatuses ??
+            (statusFilter != null
+                ? {statusFilter}
+                : {ListingStatus.available, ListingStatus.reserved, ListingStatus.sold});
+
+  ListingStatus? get statusFilter =>
+      selectedStatuses.length == 1 ? selectedStatuses.first : null;
 
   bool get hasActiveCustomFilters =>
-      statusFilter != null ||
+      (selectedStatuses.isNotEmpty && selectedStatuses.length < 3) ||
       minPrice != null ||
       maxPrice != null ||
       dateDuration != DateDurationFilter.allTime;
 
   int get activeFiltersCount {
     int count = 0;
-    if (statusFilter != null) count++;
+    if (selectedStatuses.isNotEmpty && selectedStatuses.length < 3) count++;
     if (minPrice != null || maxPrice != null) count++;
     if (dateDuration != DateDurationFilter.allTime) count++;
     return count;
@@ -68,6 +75,7 @@ class BuySellFilterState {
     String? query,
     String? category,
     SortOption? sortOption,
+    Set<ListingStatus>? selectedStatuses,
     ListingStatus? statusFilter,
     bool clearStatusFilter = false,
     double? minPrice,
@@ -81,7 +89,10 @@ class BuySellFilterState {
       query: query ?? this.query,
       category: category ?? this.category,
       sortOption: sortOption ?? this.sortOption,
-      statusFilter: clearStatusFilter ? null : (statusFilter ?? this.statusFilter),
+      selectedStatuses: clearStatusFilter
+          ? {ListingStatus.available, ListingStatus.reserved, ListingStatus.sold}
+          : (selectedStatuses ??
+              (statusFilter != null ? {statusFilter} : this.selectedStatuses)),
       minPrice: clearMinPrice ? null : (minPrice ?? this.minPrice),
       maxPrice: clearMaxPrice ? null : (maxPrice ?? this.maxPrice),
       dateDuration: dateDuration ?? this.dateDuration,
@@ -159,11 +170,14 @@ class BuySellPaginationNotifier extends StateNotifier<PaginatedFeedState<Listing
       final repo = _ref.read(buySellRepositoryProvider);
       final filter = _ref.read(buySellFilterProvider);
 
+      final statusList = (filter.selectedStatuses.isEmpty || filter.selectedStatuses.length == 3)
+          ? null
+          : filter.selectedStatuses.toList();
       final paged = await repo.fetchListingsPage(
         query: filter.query,
         minPrice: filter.minPrice,
         maxPrice: filter.maxPrice,
-        statusList: filter.statusFilter != null ? [filter.statusFilter!] : null,
+        statusList: statusList,
         limit: _pageSize,
         offset: 0,
       );
@@ -193,11 +207,14 @@ class BuySellPaginationNotifier extends StateNotifier<PaginatedFeedState<Listing
       final repo = _ref.read(buySellRepositoryProvider);
       final filter = _ref.read(buySellFilterProvider);
 
+      final statusList = (filter.selectedStatuses.isEmpty || filter.selectedStatuses.length == 3)
+          ? null
+          : filter.selectedStatuses.toList();
       final paged = await repo.fetchListingsPage(
         query: filter.query,
         minPrice: filter.minPrice,
         maxPrice: filter.maxPrice,
-        statusList: filter.statusFilter != null ? [filter.statusFilter!] : null,
+        statusList: statusList,
         limit: _pageSize,
         offset: state.offset,
       );

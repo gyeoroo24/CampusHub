@@ -234,6 +234,7 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
         cat = await ref.read(buySellRepositoryProvider).createCategory(
               _customCategoryController.text.trim(),
             );
+        ref.invalidate(buySellCategoriesProvider);
       } catch (_) {
         cat = CategoryRef(id: 99, name: _customCategoryController.text.trim());
       }

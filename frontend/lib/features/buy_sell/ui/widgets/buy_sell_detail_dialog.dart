@@ -8,6 +8,7 @@ import '../../../auth/providers/auth_providers.dart';
 import '../../../auth/ui/auth_dialog.dart';
 import '../../domain/buy_sell_item.dart';
 import '../../providers/buy_sell_providers.dart';
+import 'edit_listing_dialog.dart';
 
 class BuySellDetailDialog extends ConsumerWidget {
   final ListingItem item;
@@ -200,7 +201,7 @@ class BuySellDetailDialog extends ConsumerWidget {
 
                     const SizedBox(height: 20),
 
-                    // ── Status Controls (Owner or Admin) ─────────────────────────
+                    // ── Status & Owner Controls (Owner or Admin) ─────────────────────────
                     if (isOwner || (currentUser?.isAdmin ?? false)) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -212,9 +213,39 @@ class BuySellDetailDialog extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              isOwner ? 'Listing Owner Controls' : 'Admin Status Controls',
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  isOwner ? 'Listing Owner Controls' : 'Admin Status Controls',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    TextButton.icon(
+                                      style: TextButton.styleFrom(
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      ),
+                                      icon: const Icon(Icons.edit_outlined, size: 14),
+                                      label: const Text('Edit', style: TextStyle(fontSize: 12)),
+                                      onPressed: () => _openEditDialog(context, ref),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    TextButton.icon(
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.red.shade700,
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      ),
+                                      icon: const Icon(Icons.delete_outline_rounded, size: 14),
+                                      label: const Text('Delete', style: TextStyle(fontSize: 12)),
+                                      onPressed: () => _confirmOwnerDelete(context, ref),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 8),
                             Wrap(
@@ -283,15 +314,34 @@ class BuySellDetailDialog extends ConsumerWidget {
                                     ],
                                   ),
                                 ),
-                                ElevatedButton.icon(
-                                  onPressed: () {
-                                    Clipboard.setData(ClipboardData(text: item.sellerContact!.email));
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Copied email: ${item.sellerContact!.email}')),
-                                    );
-                                  },
-                                  icon: const Icon(Icons.copy_rounded, size: 14),
-                                  label: const Text('Contact'),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: () {
+                                        Clipboard.setData(ClipboardData(text: item.sellerContact!.email));
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Copied email: ${item.sellerContact!.email}')),
+                                        );
+                                      },
+                                      icon: const Icon(Icons.email_outlined, size: 14),
+                                      label: const Text('Email'),
+                                    ),
+                                    if (item.sellerContact!.phone != null &&
+                                        item.sellerContact!.phone!.trim().isNotEmpty) ...[
+                                      const SizedBox(width: 8),
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          Clipboard.setData(ClipboardData(text: item.sellerContact!.phone!));
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Copied phone: ${item.sellerContact!.phone}')),
+                                          );
+                                        },
+                                        icon: const Icon(Icons.phone_outlined, size: 14),
+                                        label: const Text('Call'),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ],
                             )
@@ -403,6 +453,53 @@ class BuySellDetailDialog extends ConsumerWidget {
         ),
       ),
     ));
+  }
+
+  Future<void> _openEditDialog(BuildContext context, WidgetRef ref) async {
+    final updated = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => EditListingDialog(item: item),
+    );
+    if (updated == true && context.mounted) {
+      Navigator.pop(context);
+    }
+  }
+
+  void _confirmOwnerDelete(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Listing', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text(
+          'Are you sure you want to delete this listing? It will be permanently removed from the marketplace.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+              await ref.read(buySellRepositoryProvider).deleteListing(item.id);
+              ref.invalidate(buySellListingsProvider);
+              ref.read(buySellPaginationProvider.notifier).loadInitial();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Listing deleted successfully.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _confirmModeratorDelete(BuildContext context, WidgetRef ref) {

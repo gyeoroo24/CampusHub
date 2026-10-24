@@ -10,7 +10,7 @@ import 'lost_found_repository.dart';
 
 /// In-memory mock repository for Lost & Found reports.
 class MockLostFoundRepository implements ILostFoundRepository {
-  final List<CategoryRef> _categories = [
+  static final List<CategoryRef> _categories = [
     const CategoryRef(id: 1, name: 'ID Cards'),
     const CategoryRef(id: 2, name: 'Electronics'),
     const CategoryRef(id: 3, name: 'Personal Belongings'),
@@ -19,7 +19,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
     const CategoryRef(id: 6, name: 'Others'),
   ];
 
-  late final List<LostFoundItem> _mockReports = [
+  static final List<LostFoundItem> _mockReports = [
     // 1 (Lost)
     LostFoundItem(
       id: '1',

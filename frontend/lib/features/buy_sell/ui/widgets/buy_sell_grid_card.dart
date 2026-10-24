@@ -325,42 +325,118 @@ class _BuySellGridCardState extends State<BuySellGridCard> {
                       ),
                       const SizedBox(height: 8),
 
-                      // Email Contact Copy Button at very bottom
-                      SizedBox(
-                        width: double.infinity,
-                        height: 30,
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            final email = item.sellerContact?.email ??
-                                '${item.seller.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
-                            Clipboard.setData(ClipboardData(text: email));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Copied $email to clipboard'),
-                                duration: const Duration(seconds: 2),
-                                behavior: SnackBarBehavior.floating,
+                      // Contact Button(s) at very bottom (Email + Phone if available)
+                      if (item.sellerContact?.phone != null && item.sellerContact!.phone!.trim().isNotEmpty) ...[
+                        SizedBox(
+                          height: 30,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () {
+                                    final email = item.sellerContact?.email ??
+                                        '${item.seller.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
+                                    Clipboard.setData(ClipboardData(text: email));
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Copied $email to clipboard'),
+                                        duration: const Duration(seconds: 2),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  },
+                                  icon: Icon(Icons.email_outlined, size: 13, color: Theme.of(context).colorScheme.primary),
+                                  label: Text(
+                                    item.sellerContact?.email ?? 'Email',
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context).colorScheme.primary,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    side: BorderSide(
+                                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                                    ),
+                                  ),
+                                ),
                               ),
-                            );
-                          },
-                          icon: Icon(Icons.email_outlined, size: 13, color: Theme.of(context).colorScheme.primary),
-                          label: Text(
-                            item.sellerContact?.email ?? 'Copy Email',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () {
+                                    final phone = item.sellerContact!.phone!;
+                                    Clipboard.setData(ClipboardData(text: phone));
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Copied $phone to clipboard'),
+                                        duration: const Duration(seconds: 2),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  },
+                                  icon: Icon(Icons.phone_outlined, size: 13, color: Theme.of(context).colorScheme.primary),
+                                  label: Text(
+                                    item.sellerContact!.phone!,
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context).colorScheme.primary,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    side: BorderSide(
+                                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            side: BorderSide(
-                              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                        ),
+                      ] else ...[
+                        SizedBox(
+                          width: double.infinity,
+                          height: 30,
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              final email = item.sellerContact?.email ??
+                                  '${item.seller.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
+                              Clipboard.setData(ClipboardData(text: email));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Copied $email to clipboard'),
+                                  duration: const Duration(seconds: 2),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            },
+                            icon: Icon(Icons.email_outlined, size: 13, color: Theme.of(context).colorScheme.primary),
+                            label: Text(
+                              item.sellerContact?.email ?? 'Copy Email',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              side: BorderSide(
+                                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),

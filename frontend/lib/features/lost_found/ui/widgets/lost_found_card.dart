@@ -297,42 +297,118 @@ class _LostFoundCardState extends State<LostFoundCard> {
                     ),
                     const SizedBox(height: 6),
 
-                    // Email Contact Copy Button at very bottom
-                    SizedBox(
-                      width: double.infinity,
-                      height: 30,
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          final email = item.reporterContact?.email ??
-                              '${item.reporter.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
-                          Clipboard.setData(ClipboardData(text: email));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Copied $email to clipboard'),
-                              duration: const Duration(seconds: 2),
-                              behavior: SnackBarBehavior.floating,
+                    // Contact Button(s) at very bottom (Email + Phone if available)
+                    if (item.reporterContact?.phone != null && item.reporterContact!.phone!.trim().isNotEmpty) ...[
+                      SizedBox(
+                        height: 30,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  final email = item.reporterContact?.email ??
+                                      '${item.reporter.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
+                                  Clipboard.setData(ClipboardData(text: email));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Copied $email to clipboard'),
+                                      duration: const Duration(seconds: 2),
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                },
+                                icon: Icon(Icons.email_outlined, size: 13, color: badgeColor),
+                                label: Text(
+                                  item.reporterContact?.email ?? 'Email',
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: badgeColor,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  side: BorderSide(
+                                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                              ),
                             ),
-                          );
-                        },
-                        icon: Icon(Icons.email_outlined, size: 13, color: badgeColor),
-                        label: Text(
-                          item.reporterContact?.email ?? 'Copy Email',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: badgeColor,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  final phone = item.reporterContact!.phone!;
+                                  Clipboard.setData(ClipboardData(text: phone));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Copied $phone to clipboard'),
+                                      duration: const Duration(seconds: 2),
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                },
+                                icon: Icon(Icons.phone_outlined, size: 13, color: badgeColor),
+                                label: Text(
+                                  item.reporterContact!.phone!,
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: badgeColor,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  side: BorderSide(
+                                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          side: BorderSide(
-                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                      ),
+                    ] else ...[
+                      SizedBox(
+                        width: double.infinity,
+                        height: 30,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            final email = item.reporterContact?.email ??
+                                '${item.reporter.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
+                            Clipboard.setData(ClipboardData(text: email));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Copied $email to clipboard'),
+                                duration: const Duration(seconds: 2),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          },
+                          icon: Icon(Icons.email_outlined, size: 13, color: badgeColor),
+                          label: Text(
+                            item.reporterContact?.email ?? 'Copy Email',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: badgeColor,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            side: BorderSide(
+                              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
