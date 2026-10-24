@@ -319,13 +319,12 @@ class _LostFoundCardState extends State<LostFoundCard> {
                                 },
                                 icon: Icon(Icons.email_outlined, size: 13, color: badgeColor),
                                 label: Text(
-                                  item.reporterContact?.email ?? 'Email',
+                                  'Email',
                                   style: TextStyle(
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w600,
                                     color: badgeColor,
                                   ),
-                                  overflow: TextOverflow.ellipsis,
                                 ),
                                 style: OutlinedButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -352,13 +351,12 @@ class _LostFoundCardState extends State<LostFoundCard> {
                                 },
                                 icon: Icon(Icons.phone_outlined, size: 13, color: badgeColor),
                                 label: Text(
-                                  item.reporterContact!.phone!,
+                                  'Call',
                                   style: TextStyle(
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w600,
                                     color: badgeColor,
                                   ),
-                                  overflow: TextOverflow.ellipsis,
                                 ),
                                 style: OutlinedButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -391,13 +389,12 @@ class _LostFoundCardState extends State<LostFoundCard> {
                           },
                           icon: Icon(Icons.email_outlined, size: 13, color: badgeColor),
                           label: Text(
-                            item.reporterContact?.email ?? 'Copy Email',
+                            'Email',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: badgeColor,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(horizontal: 8),

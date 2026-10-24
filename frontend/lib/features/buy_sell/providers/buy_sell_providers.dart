@@ -91,8 +91,10 @@ class BuySellFilterState {
       sortOption: sortOption ?? this.sortOption,
       selectedStatuses: clearStatusFilter
           ? {ListingStatus.available, ListingStatus.reserved, ListingStatus.sold}
-          : (selectedStatuses ??
-              (statusFilter != null ? {statusFilter} : this.selectedStatuses)),
+          : ((selectedStatuses != null && selectedStatuses.isEmpty)
+              ? {ListingStatus.available}
+              : (selectedStatuses ??
+                  (statusFilter != null ? {statusFilter} : this.selectedStatuses))),
       minPrice: clearMinPrice ? null : (minPrice ?? this.minPrice),
       maxPrice: clearMaxPrice ? null : (maxPrice ?? this.maxPrice),
       dateDuration: dateDuration ?? this.dateDuration,

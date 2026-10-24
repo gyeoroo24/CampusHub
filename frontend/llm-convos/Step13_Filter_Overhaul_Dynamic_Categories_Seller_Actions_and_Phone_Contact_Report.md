@@ -52,7 +52,18 @@
 
 ---
 
-## 2. Test Verification
+### 1.5 Authorization & UI Privacy Refinements
+* **Strict Author-Only Permissions**:
+  * Admins and moderators are strictly prevented from editing post contents or changing statuses. Only the original author (`isOwner`) has access to edit contents (title, price, category, location, description) and update statuses (`Available`, `Reserved`, `Sold` / `Open`, `Matched`, `Closed`).
+  * Non-owner moderators/admins are only shown the audit-reasoned removal action ("Moderator: Remove Listing / Report").
+* **Privacy-Safe Tile Contact Buttons**:
+  * Contact buttons in tiles (`BuySellGridCard`, `LostFoundCard`) no longer display raw email addresses or phone numbers as button text.
+  * They display clear action labels ("Email" / "Call"). The actual contact information is revealed inside the detail modal and copied to clipboard on tap.
+* **Status Filter Fallback**:
+  * If a user deselects the last active status chip, the filter automatically selects "Available" to guarantee only available posts are displayed rather than an empty query.
+* **Category Pill Ordering & Emoji Rules**:
+  * Preset categories (`Books`, `Cycles`, `Electronics`, `Furniture`, `Lab Equipment`, `Others`) always appear first with their official emojis.
+  * User-added categories from the database come after the presets and have no emoji (`avatar: null`).
 
 * **Unit & Widget Test Suite**:
   * Added 9 targeted tests in `test/filter_and_seller_actions_test.dart` covering filter toggle behaviors, dynamic category creation, seller update/delete, and phone contact rendering.

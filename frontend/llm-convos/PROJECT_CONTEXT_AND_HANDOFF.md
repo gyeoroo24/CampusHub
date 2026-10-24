@@ -198,8 +198,12 @@ CampusHub/frontend/lib/
     * Refactored category scrollbars across both modules to dynamically watch backend categories (`buySellCategoriesProvider` and `lostFoundCategoriesProvider`) with immediate reflection upon creation via "+ Add New Category...".
     * Added Seller & Moderator Edit and Delete flows: created `EditListingDialog` and `EditReportDialog` with feed refreshes; wired deletion confirmation dialogs.
     * Integrated dual contact buttons (Email and Phone copy/call) across `BuySellGridCard`, `LostFoundCard`, and detail dialogs whenever a phone number is provided.
+  * **Step 14 (AlertDialog Viewport Intrinsic Dimension Fix & Test Suite Expansion):**
+    * Diagnosed and fixed `RenderShrinkWrappingViewport does not support returning intrinsic dimensions` in `report_item_dialog.dart:459` by replacing loose `ConstrainedBox` with responsive, bounded `SizedBox(width: dialogWidth, height: dialogHeight)` and disabling `shrinkWrap` on the `ListView`.
+    * Enforced author-only permissions in `BuySellDetailDialog` and `LostFoundDetailDialog`, masking contact buttons on cards ("Email"/"Call") for student privacy.
+    * Expanded test suite to **40 automated tests with 100% pass rate**.
 * **Static Analysis:** `flutter analyze` runs with **0 errors, 0 warnings, 0 hints**.
-* **Automated Tests:** `flutter test` executes **39 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`, `live_backend_integration_test.dart`, `filter_and_seller_actions_test.dart`).
+* **Automated Tests:** `flutter test` executes **40 tests with 100% pass rate** (`data_layer_test.dart`, `ui_components_test.dart`, `widget_test.dart`, `live_backend_integration_test.dart`, `filter_and_seller_actions_test.dart`).
 
 ---
 

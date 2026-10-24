@@ -17,6 +17,7 @@ import 'package:campus_hub/features/lost_found/data/mock_lost_found_repository.d
 import 'package:campus_hub/features/lost_found/domain/lost_found_item.dart';
 import 'package:campus_hub/features/lost_found/providers/lost_found_providers.dart';
 import 'package:campus_hub/features/lost_found/ui/widgets/lost_found_detail_dialog.dart';
+import 'package:campus_hub/features/lost_found/ui/widgets/report_item_dialog.dart';
 
 void main() {
   final sampleListing = ListingItem(
@@ -237,5 +238,83 @@ void main() {
     expect(state2.isLoadingMore, isFalse);
     expect(state2.items.length, 8); // 6 initial + 2 remaining mock reports = 8
     expect(state2.hasMore, isFalse);
+  });
+
+  testWidgets('ReportItemDialog possible matches dialog renders properly without viewport intrinsic dimension errors', (WidgetTester tester) async {
+    final sampleWithMatches = LostFoundItem(
+      id: 'rep_match_1',
+      kind: PostType.lost,
+      description: 'Lost Backpack with laptop',
+      category: const CategoryRef(id: 1, name: 'Bags'),
+      occurredAt: DateTime.now(),
+      location: 'Gymkhana Grounds',
+      status: ReportStatus.open,
+      reporter: const UserRef(id: 'usr_rep_1', name: 'Tester'),
+      photos: const [],
+      createdAt: DateTime.now(),
+      possibleMatches: [
+        LostFoundItem(
+          id: 'rep_match_2',
+          kind: PostType.found,
+          description: 'Found Black Laptop Bag',
+          category: const CategoryRef(id: 1, name: 'Bags'),
+          occurredAt: DateTime.now(),
+          location: 'Library 1st floor',
+          status: ReportStatus.open,
+          reporter: const UserRef(id: 'usr_rep_2', name: 'Finder Frank'),
+          photos: const [],
+          createdAt: DateTime.now(),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          lostFoundRepositoryProvider.overrideWithValue(MockLostFoundRepository()),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (ctx) => ElevatedButton(
+                onPressed: () {
+                  showDialog(
+                    context: ctx,
+                    builder: (dCtx) => ReportItemDialog(
+                      postType: PostType.lost,
+                      onSubmit: (item) async {
+                        return sampleWithMatches;
+                      },
+                    ),
+                  );
+                },
+                child: const Text('Open Dialog'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open Dialog'));
+    await tester.pumpAndSettle();
+
+    // Fill form
+    await tester.enterText(find.byType(TextFormField).first, 'Lost Backpack with laptop');
+    await tester.enterText(find.byType(TextFormField).at(1), 'Gymkhana Grounds');
+
+    // Submit
+    await tester.tap(find.text('Submit Lost Report'));
+    await tester.pumpAndSettle();
+
+    // Verify Possible Matches Found modal rendered and displays matches without intrinsic dimension error
+    expect(find.text('Possible Matches Found!'), findsOneWidget);
+    expect(find.text('Found Black Laptop Bag'), findsOneWidget);
+    expect(find.text('Close'), findsOneWidget);
+
+    // Close matches modal
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+    expect(find.text('Possible Matches Found!'), findsNothing);
   });
 }

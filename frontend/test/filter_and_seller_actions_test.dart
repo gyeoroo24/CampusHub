@@ -45,6 +45,11 @@ void main() {
       expect(state.selectedStatuses.length, 1);
       expect(state.statusFilter, ListingStatus.available);
 
+      // Attempting to deselect all 3 statuses automatically selects Available
+      state = state.copyWith(selectedStatuses: {});
+      expect(state.selectedStatuses, {ListingStatus.available});
+      expect(state.statusFilter, ListingStatus.available);
+
       // Reset to All
       state = state.copyWith(
         clearStatusFilter: true,
@@ -175,13 +180,15 @@ void main() {
         ),
       );
 
-      expect(find.text('rohanv@iisc.ac.in'), findsOneWidget);
-      expect(find.text('+919876543210'), findsOneWidget);
+      expect(find.text('Email'), findsOneWidget);
+      expect(find.text('Call'), findsOneWidget);
+      expect(find.text('rohanv@iisc.ac.in'), findsNothing);
+      expect(find.text('+919876543210'), findsNothing);
       expect(find.byIcon(Icons.phone_outlined), findsOneWidget);
       expect(find.byIcon(Icons.email_outlined), findsOneWidget);
     });
 
-    testWidgets('LostFoundCard renders both Email and Phone buttons when phone is provided', (tester) async {
+    testWidgets('LostFoundCard renders Email and Call buttons without raw contact info in tile', (tester) async {
       final itemWithPhone = LostFoundItem(
         id: 'lf_phone_test_1',
         title: 'Lost Blue Casio Watch',
@@ -210,8 +217,10 @@ void main() {
         ),
       );
 
-      expect(find.text('ananyas@iisc.ac.in'), findsOneWidget);
-      expect(find.text('+919123456789'), findsOneWidget);
+      expect(find.text('Email'), findsOneWidget);
+      expect(find.text('Call'), findsOneWidget);
+      expect(find.text('ananyas@iisc.ac.in'), findsNothing);
+      expect(find.text('+919123456789'), findsNothing);
       expect(find.byIcon(Icons.phone_outlined), findsOneWidget);
       expect(find.byIcon(Icons.email_outlined), findsOneWidget);
     });

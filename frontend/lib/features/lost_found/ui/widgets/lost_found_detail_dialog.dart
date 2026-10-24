@@ -187,9 +187,8 @@ class LostFoundDetailDialog extends ConsumerWidget {
                     ),
                     const Divider(height: 28),
 
-                    // ── Owner Controls (Change Status: Open / Matched / Closed) ─
-                    // ── Status Controls (Reporter or Admin) ─────────────────────────
-                    if (isOwner || (currentUser?.isAdmin ?? false)) ...[
+                    // ── Status & Owner Controls (Original Reporter Only) ───────────────
+                    if (isOwner) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -203,9 +202,9 @@ class LostFoundDetailDialog extends ConsumerWidget {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  isOwner ? 'Report Owner Controls' : 'Admin Report Controls',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                const Text(
+                                  'Report Owner Controls',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                                 ),
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -436,8 +435,8 @@ class LostFoundDetailDialog extends ConsumerWidget {
                             ),
                     ),
 
-                    // ── Moderator Removal (FR-10) ──────────────────────────────
-                    if (canModerate) ...[
+                    // ── Moderator Removal (FR-10, for non-owners) ───────────────────
+                    if (canModerate && !isOwner) ...[
                       const SizedBox(height: 16),
                       Align(
                         alignment: Alignment.centerRight,

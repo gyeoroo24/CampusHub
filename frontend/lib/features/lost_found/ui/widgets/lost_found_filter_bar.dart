@@ -13,17 +13,24 @@ import 'report_item_dialog.dart';
 class LostFoundFilterBar extends ConsumerWidget {
   const LostFoundFilterBar({super.key});
 
-  static String _categoryIconFor(String category) {
-    final lower = category.toLowerCase();
-    if (lower == 'all') return '📋';
-    if (lower.contains('id') || lower.contains('card')) return '🪪';
-    if (lower.contains('elect') || lower.contains('phone') || lower.contains('laptop')) return '💻';
-    if (lower.contains('bag') || lower.contains('backpack')) return '🎒';
-    if (lower.contains('key')) return '🔑';
-    if (lower.contains('doc') || lower.contains('paper')) return '📄';
-    if (lower.contains('belong') || lower.contains('personal')) return '🧳';
-    return '📦';
-  }
+  static const _presetCategoryIcons = {
+    'All': '📋',
+    'ID Cards': '🪪',
+    'Electronics': '💻',
+    'Personal Belongings': '🎒',
+    'Bags': '🧳',
+    'Keys': '🔑',
+    'Others': '📦',
+  };
+
+  static const _presetCategoryOrder = [
+    'ID Cards',
+    'Electronics',
+    'Personal Belongings',
+    'Bags',
+    'Keys',
+    'Others',
+  ];
 
   static Future<void> handleReport(BuildContext context, WidgetRef ref, PostType postType) async {
     final signedIn = await AuthDialog.ensureSignedIn(
@@ -62,18 +69,24 @@ class LostFoundFilterBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(lostFoundFilterProvider);
     final categoriesAsync = ref.watch(lostFoundCategoriesProvider);
-    final categoryList = categoriesAsync.maybeWhen(
-      data: (cats) => ['All', ...cats.map((c) => c.name)],
-      orElse: () => const [
-        'All',
-        'ID Cards',
-        'Electronics',
-        'Personal Belongings',
-        'Bags',
-        'Keys',
-        'Others',
-      ],
+    final categoryPills = <({String name, String? icon})>[
+      (name: 'All', icon: _presetCategoryIcons['All']),
+    ];
+    for (final p in _presetCategoryOrder) {
+      categoryPills.add((name: p, icon: _presetCategoryIcons[p]));
+    }
+    final remoteCats = categoriesAsync.maybeWhen(
+      data: (cats) => cats.map((c) => c.name.trim()).toList(),
+      orElse: () => <String>[],
     );
+    final userAdded = remoteCats.where((name) {
+      final lower = name.toLowerCase();
+      if (lower == 'all') return false;
+      return !_presetCategoryOrder.any((p) => p.toLowerCase() == lower);
+    }).toList();
+    for (final customName in userAdded) {
+      categoryPills.add((name: customName, icon: null));
+    }
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final isMobile = MediaQuery.of(context).size.width <= 750;
@@ -91,18 +104,20 @@ class LostFoundFilterBar extends ConsumerWidget {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: categoryList.map((catName) {
-                      final isSelected = filter.category == catName;
+                    children: categoryPills.map((pill) {
+                      final isSelected = filter.category == pill.name;
                       return Padding(
                         padding: const EdgeInsets.only(right: 8.0),
                         child: ChoiceChip(
-                          avatar: Text(_categoryIconFor(catName), style: const TextStyle(fontSize: 13)),
-                          label: Text(catName),
+                          avatar: pill.icon != null
+                              ? Text(pill.icon!, style: const TextStyle(fontSize: 13))
+                              : null,
+                          label: Text(pill.name),
                           selected: isSelected,
                           onSelected: (selected) {
                             if (selected) {
                               ref.read(lostFoundFilterProvider.notifier).update(
-                                    (s) => s.copyWith(category: catName),
+                                    (s) => s.copyWith(category: pill.name),
                                   );
                             }
                           },

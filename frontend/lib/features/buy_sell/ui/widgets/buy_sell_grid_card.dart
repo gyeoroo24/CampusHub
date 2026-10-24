@@ -89,7 +89,7 @@ class _BuySellGridCardState extends State<BuySellGridCard> {
             children: [
               // Image container with Hero animation & Badges
               Expanded(
-                flex: 9,
+                flex: 11,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -347,13 +347,12 @@ class _BuySellGridCardState extends State<BuySellGridCard> {
                                   },
                                   icon: Icon(Icons.email_outlined, size: 13, color: Theme.of(context).colorScheme.primary),
                                   label: Text(
-                                    item.sellerContact?.email ?? 'Email',
+                                    'Email',
                                     style: TextStyle(
                                       fontSize: 10.5,
                                       fontWeight: FontWeight.w600,
                                       color: Theme.of(context).colorScheme.primary,
                                     ),
-                                    overflow: TextOverflow.ellipsis,
                                   ),
                                   style: OutlinedButton.styleFrom(
                                     padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -380,13 +379,12 @@ class _BuySellGridCardState extends State<BuySellGridCard> {
                                   },
                                   icon: Icon(Icons.phone_outlined, size: 13, color: Theme.of(context).colorScheme.primary),
                                   label: Text(
-                                    item.sellerContact!.phone!,
+                                    'Call',
                                     style: TextStyle(
                                       fontSize: 10.5,
                                       fontWeight: FontWeight.w600,
                                       color: Theme.of(context).colorScheme.primary,
                                     ),
-                                    overflow: TextOverflow.ellipsis,
                                   ),
                                   style: OutlinedButton.styleFrom(
                                     padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -419,13 +417,12 @@ class _BuySellGridCardState extends State<BuySellGridCard> {
                             },
                             icon: Icon(Icons.email_outlined, size: 13, color: Theme.of(context).colorScheme.primary),
                             label: Text(
-                              item.sellerContact?.email ?? 'Copy Email',
+                              'Email',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
                                 color: Theme.of(context).colorScheme.primary,
                               ),
-                              overflow: TextOverflow.ellipsis,
                             ),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(horizontal: 8),

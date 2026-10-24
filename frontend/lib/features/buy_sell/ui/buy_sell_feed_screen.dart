@@ -22,19 +22,24 @@ class BuySellFeedScreen extends ConsumerStatefulWidget {
 class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
   final ScrollController _scrollController = ScrollController();
 
-  static String _categoryIconFor(String category) {
-    final lower = category.toLowerCase();
-    if (lower == 'all') return '🌟';
-    if (lower.contains('book')) return '📚';
-    if (lower.contains('cycle') || lower.contains('bike')) return '🚲';
-    if (lower.contains('elect') || lower.contains('laptop') || lower.contains('phone')) return '💻';
-    if (lower.contains('furn') || lower.contains('chair') || lower.contains('table') || lower.contains('bed')) return '🛋️';
-    if (lower.contains('lab') || lower.contains('equip')) return '🔬';
-    if (lower.contains('cloth') || lower.contains('wear')) return '👕';
-    if (lower.contains('music') || lower.contains('guitar')) return '🎸';
-    if (lower.contains('sport') || lower.contains('game')) return '🏸';
-    return '🎒';
-  }
+  static const _presetCategoryIcons = {
+    'All': '🌟',
+    'Books': '📚',
+    'Cycles': '🚲',
+    'Electronics': '💻',
+    'Furniture': '🛋️',
+    'Lab Equipment': '🔬',
+    'Others': '🎒',
+  };
+
+  static const _presetCategoryOrder = [
+    'Books',
+    'Cycles',
+    'Electronics',
+    'Furniture',
+    'Lab Equipment',
+    'Others',
+  ];
 
   static const _pricePresets = [
     (label: 'Under ₹500', min: null, max: 500.0),
@@ -71,18 +76,24 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
     final filter = ref.watch(buySellFilterProvider);
     final showTrustedExchangeBanner = ref.watch(showTrustedExchangeBannerProvider);
     final categoriesAsync = ref.watch(buySellCategoriesProvider);
-    final categoryList = categoriesAsync.maybeWhen(
-      data: (cats) => ['All', ...cats.map((c) => c.name)],
-      orElse: () => const [
-        'All',
-        'Books',
-        'Cycles',
-        'Electronics',
-        'Furniture',
-        'Lab Equipment',
-        'Others',
-      ],
+    final categoryPills = <({String name, String? icon})>[
+      (name: 'All', icon: _presetCategoryIcons['All']),
+    ];
+    for (final p in _presetCategoryOrder) {
+      categoryPills.add((name: p, icon: _presetCategoryIcons[p]));
+    }
+    final remoteCats = categoriesAsync.maybeWhen(
+      data: (cats) => cats.map((c) => c.name.trim()).toList(),
+      orElse: () => <String>[],
     );
+    final userAdded = remoteCats.where((name) {
+      final lower = name.toLowerCase();
+      if (lower == 'all') return false;
+      return !_presetCategoryOrder.any((p) => p.toLowerCase() == lower);
+    }).toList();
+    for (final customName in userAdded) {
+      categoryPills.add((name: customName, icon: null));
+    }
 
     final isAllSelected = filter.minPrice == null &&
         filter.maxPrice == null &&
@@ -204,18 +215,20 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
-                        children: categoryList.map((catName) {
-                          final isSelected = filter.category == catName;
+                        children: categoryPills.map((pill) {
+                          final isSelected = filter.category == pill.name;
                           return Padding(
                             padding: const EdgeInsets.only(right: 8.0),
                             child: ChoiceChip(
-                              avatar: Text(_categoryIconFor(catName), style: const TextStyle(fontSize: 13)),
-                              label: Text(catName),
+                              avatar: pill.icon != null
+                                  ? Text(pill.icon!, style: const TextStyle(fontSize: 13))
+                                  : null,
+                              label: Text(pill.name),
                               selected: isSelected,
                               onSelected: (selected) {
                                 if (selected) {
                                   ref.read(buySellFilterProvider.notifier).update(
-                                        (s) => s.copyWith(category: catName),
+                                        (s) => s.copyWith(category: pill.name),
                                       );
                                 }
                               },
@@ -390,6 +403,9 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                                     newStatuses.add(st.status);
                                   } else {
                                     newStatuses.remove(st.status);
+                                  }
+                                  if (newStatuses.isEmpty) {
+                                    newStatuses.add(ListingStatus.available);
                                   }
                                   ref.read(buySellFilterProvider.notifier).update(
                                         (s) => s.copyWith(selectedStatuses: newStatuses),

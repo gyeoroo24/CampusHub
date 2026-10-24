@@ -201,8 +201,8 @@ class BuySellDetailDialog extends ConsumerWidget {
 
                     const SizedBox(height: 20),
 
-                    // ── Status & Owner Controls (Owner or Admin) ─────────────────────────
-                    if (isOwner || (currentUser?.isAdmin ?? false)) ...[
+                    // ── Status & Owner Controls (Original Author Only) ─────────────────────────
+                    if (isOwner) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -216,9 +216,9 @@ class BuySellDetailDialog extends ConsumerWidget {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  isOwner ? 'Listing Owner Controls' : 'Admin Status Controls',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                const Text(
+                                  'Listing Owner Controls',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                                 ),
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -412,8 +412,8 @@ class BuySellDetailDialog extends ConsumerWidget {
                                 ),
                     ),
 
-                    // ── Moderator Removal (FR-10) ──────────────────────────────
-                    if (canModerate) ...[
+                    // ── Moderator Removal (FR-10, for non-owners) ───────────────────
+                    if (canModerate && !isOwner) ...[
                       const SizedBox(height: 16),
                       Align(
                         alignment: Alignment.centerRight,
