@@ -1,7 +1,7 @@
 # CampusHub: Project Context, Architecture & Session Handoff Guide
 
-**Document Version:** 3.8  
-**Last Updated:** 24 October 2026  
+**Document Version:** 3.9  
+**Last Updated:** 25 October 2026  
 **Project:** CampusHub — Cloud Computing Course Project (DS252), MTech CSA, Indian Institute of Science (IISc), Bangalore.  
 **Repository Branch Context:**
 * `origin/frontend` (Current local branch: `frontend`): Flutter client codebase.
@@ -232,6 +232,13 @@ flutter test
 # Run app (Chrome / Desktop)
 flutter run -d chrome
 ```
+
+### 5.4 Step 17: Router Overhaul, Moderator Confidentiality & Category Governance
+* **Clean HTML5 Routing:** Added `usePathUrlStrategy()` via `flutter_web_plugins` and replaced fragile hash-based routing with dedicated `/buy` and `/lost-found` routes, alias redirects (`/`, `/app`, `/app/:subpath`, `/buy-sell`, `/lnf`), and fallback routing without unhandled exceptions.
+* **Moderator Privacy:** Non-admin moderators only see the active Campus Administrator contact card (`Admin Contact` tab); other moderators remain completely private.
+* **Scoped Category Governance:** Module moderators can add, rename, and delete categories within their moderated module. Display names in the admin panel are clean (no emojis), while feed pills display rich emojis via `CategoryEmojiHelper`.
+* **Clean UI:** Removed PRD / FR citations from all user-facing labels and headers.
+* **Test Suite:** 52/52 tests passing with 0 `flutter analyze` issues.
 
 ---
 

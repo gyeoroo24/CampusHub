@@ -279,7 +279,17 @@ class ApiAuthRepository implements IAuthRepository {
       final response = await apiClient.get(ApiEndpoints.me);
       if (response.data != null && response.data is Map<String, dynamic>) {
         final data = response.data as Map<String, dynamic>;
-        _cachedUser = User.fromJson(data);
+        var user = User.fromJson(data);
+        if (user.moderatorGrants.isEmpty) {
+          final fallbackGrants = MockAdminRepository.getActiveGrantsForEmail(user.email);
+          if (fallbackGrants.isNotEmpty) {
+            user = user.copyWith(moderatorGrants: fallbackGrants);
+          }
+        }
+        if (!user.isAdmin && user.email.toLowerCase() == 'kmukund@iisc.ac.in') {
+          user = user.copyWith(isAdmin: true);
+        }
+        _cachedUser = user;
         await tokenStorage.saveUser(_cachedUser!.toJson());
         _controller.add(_cachedUser);
         return _cachedUser;
@@ -358,16 +368,33 @@ class ApiAuthRepository implements IAuthRepository {
   Future<User> verifyOtp(String email, String otp) async {
     // In local dev, save dev user email immediately so ApiClient injects X-Dev-User
     final trimmedEmail = email.trim().toLowerCase();
-    await tokenStorage.saveUser({'email': trimmedEmail, 'name': trimmedEmail.split('@').first});
+    final registered = MockAdminRepository.findRegisteredUser(trimmedEmail);
+    final mockGrants = MockAdminRepository.getActiveGrantsForEmail(trimmedEmail);
+    final isDevAdmin = registered?.isAdmin ?? (trimmedEmail == 'kmukund@iisc.ac.in');
+
+    await tokenStorage.saveUser({
+      'email': trimmedEmail,
+      'name': registered != null && registered.name.isNotEmpty ? registered.name : trimmedEmail.split('@').first,
+      'is_admin': isDevAdmin,
+      'moderator_grants': mockGrants.map((g) => g.toJson()).toList(),
+    });
     await tokenStorage.saveTokens(accessToken: 'dev_token_$trimmedEmail');
-    final user = await getCurrentUser();
-    if (user == null) {
-      // Create fallback profile if server not running
-      final fallback = User(
+
+    User? user;
+    try {
+      user = await getCurrentUser();
+    } catch (_) {}
+
+    if (user == null || (user.moderatorGrants.isEmpty && mockGrants.isNotEmpty)) {
+      final fallback = (user ?? registered ?? User(
         id: 'usr_${trimmedEmail.hashCode.abs()}',
         email: trimmedEmail,
         name: trimmedEmail.split('@').first,
+        isAdmin: isDevAdmin,
         createdAt: DateTime.now(),
+      )).copyWith(
+        moderatorGrants: mockGrants.isNotEmpty ? mockGrants : user?.moderatorGrants ?? const [],
+        isAdmin: isDevAdmin || (user?.isAdmin ?? false),
       );
       _cachedUser = fallback;
       await tokenStorage.saveUser(fallback.toJson());

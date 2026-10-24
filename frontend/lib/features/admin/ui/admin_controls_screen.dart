@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/models/category_ref.dart';
+import '../../../core/utils/category_emoji_helper.dart';
 import '../../../core/utils/date_time_formatter.dart';
 import '../../auth/domain/user.dart';
 import '../../auth/providers/auth_providers.dart';
@@ -41,6 +44,15 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
     final user = ref.read(currentUserProvider);
     final initialIndex = (user != null && !user.isAdmin && user.isModerator) ? 2 : 0;
     _tabController = TabController(length: 5, vsync: this, initialIndex: initialIndex);
+
+    // Default category target according to user's permissions
+    if (user != null && !user.isAdmin) {
+      if (user.canModerateLostFound && !user.canModerateBuySell) {
+        _categoryTarget = 'lost_found';
+      } else {
+        _categoryTarget = 'buy_sell';
+      }
+    }
   }
 
   @override
@@ -50,6 +62,11 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
     _userEmailController.dispose();
     _categoryController.dispose();
     super.dispose();
+  }
+
+  void _copyToClipboard(String text, String feedback) {
+    Clipboard.setData(ClipboardData(text: text));
+    _showToast(feedback);
   }
 
   @override
@@ -64,7 +81,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.go('/app'),
+            onPressed: () => context.go('/buy'),
           ),
           title: const Text('Access Restricted'),
         ),
@@ -97,7 +114,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
                     ),
                     const SizedBox(height: 24),
                     FilledButton.icon(
-                      onPressed: () => context.go('/app'),
+                      onPressed: () => context.go('/buy'),
                       icon: const Icon(Icons.arrow_back, size: 16),
                       label: const Text('Back to Home'),
                     ),
@@ -121,7 +138,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
             if (Navigator.of(context).canPop()) {
               Navigator.of(context).pop();
             } else {
-              context.go('/app');
+              context.go('/buy');
             }
           },
         ),
@@ -150,8 +167,8 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
                 ),
                 Text(
                   currentUser.isAdmin
-                      ? 'Single-Admin Architecture • PRD §3.1 & FR-3'
-                      : 'Module Moderation • PRD §3.1 & FR-10',
+                      ? 'Single-Admin Governance'
+                      : 'Module Moderation & Content Review',
                   style: const TextStyle(fontSize: 11, color: Colors.grey),
                 ),
               ],
@@ -163,12 +180,15 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
           isScrollable: true,
           tabAlignment: TabAlignment.start,
           indicatorColor: theme.colorScheme.primary,
-          tabs: const [
-            Tab(icon: Icon(Icons.shield_outlined, size: 18), text: 'Moderators (FR-3)'),
-            Tab(icon: Icon(Icons.manage_accounts_outlined, size: 18), text: 'User Accounts'),
-            Tab(icon: Icon(Icons.report_gmailerrorred_rounded, size: 18), text: 'Reports Queue (FR-10)'),
-            Tab(icon: Icon(Icons.category_outlined, size: 18), text: 'Categories'),
-            Tab(icon: Icon(Icons.dns_outlined, size: 18), text: 'System & Health'),
+          tabs: [
+            Tab(
+              icon: const Icon(Icons.shield_outlined, size: 18),
+              text: currentUser.isAdmin ? 'Moderators' : 'Admin Contact',
+            ),
+            const Tab(icon: Icon(Icons.manage_accounts_outlined, size: 18), text: 'User Accounts'),
+            const Tab(icon: Icon(Icons.report_gmailerrorred_rounded, size: 18), text: 'Reports Queue'),
+            const Tab(icon: Icon(Icons.category_outlined, size: 18), text: 'Categories'),
+            const Tab(icon: Icon(Icons.dns_outlined, size: 18), text: 'System & Health'),
           ],
         ),
       ),
@@ -186,12 +206,166 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
   }
 
   // ---------------------------------------------------------------------------
-  // TAB 1: Roles & Moderators (FR-3)
+  // TAB 1: Roles & Moderators
   // ---------------------------------------------------------------------------
   Widget _buildModeratorsTab(bool isDark, ThemeData theme) {
-    final grantsAsync = ref.watch(moderatorGrantsProvider);
     final currentUser = ref.watch(currentUserProvider);
     final isUserAdmin = currentUser?.isAdmin ?? false;
+
+    // Moderator view: Hide all other moderators, show only Campus Administrator contact card
+    if (!isUserAdmin) {
+      final usersAsync = ref.watch(registeredUsersProvider);
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 880),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                usersAsync.when(
+                  data: (users) {
+                    final adminUser = users.firstWhere(
+                      (u) => u.isAdmin,
+                      orElse: () => User(
+                        id: 'admin',
+                        email: 'kmukund@iisc.ac.in',
+                        name: 'Mukund Kukreja',
+                        phone: '+919876543210',
+                        isAdmin: true,
+                        isActive: true,
+                        createdAt: DateTime.now(),
+                      ),
+                    );
+
+                    return Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                          color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 26,
+                                  backgroundColor: Colors.red.shade100,
+                                  child: Icon(Icons.admin_panel_settings_rounded,
+                                      color: Colors.red.shade900, size: 28),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Campus Administrator',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Single-admin governance: contact the active administrator for permissions or escalations.',
+                                        style: TextStyle(fontSize: 12, color: theme.hintColor),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 32),
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: CircleAvatar(
+                                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                                child: Text(
+                                  adminUser.initials.isNotEmpty ? adminUser.initials : 'A',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                              title: Text(
+                                adminUser.name.isNotEmpty ? adminUser.name : 'Administrator',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              subtitle: Text(
+                                '${adminUser.email}${adminUser.phone != null ? " • ${adminUser.phone}" : ""}',
+                                style: TextStyle(fontSize: 13, color: theme.hintColor),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 10,
+                              children: [
+                                FilledButton.icon(
+                                  onPressed: () {
+                                    _copyToClipboard(adminUser.email, 'Administrator email copied to clipboard.');
+                                  },
+                                  icon: const Icon(Icons.email_outlined, size: 16),
+                                  label: const Text('Copy Email Address'),
+                                ),
+                                if (adminUser.phone != null && adminUser.phone!.isNotEmpty)
+                                  OutlinedButton.icon(
+                                    onPressed: () {
+                                      _copyToClipboard(adminUser.phone!, 'Administrator phone number copied to clipboard.');
+                                    },
+                                    icon: const Icon(Icons.phone_outlined, size: 16),
+                                    label: const Text('Copy Phone Number'),
+                                  ),
+                                FilledButton.tonalIcon(
+                                  onPressed: () => _tabController.animateTo(2),
+                                  icon: const Icon(Icons.report_gmailerrorred_rounded, size: 16),
+                                  label: const Text('Go to Reports Queue'),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 24),
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.shield_outlined, size: 20, color: Colors.blue.shade600),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      'Moderator Confidentiality Notice: Appointed moderators only have access to view and contact the active Administrator. Other moderator profiles remain private. You can manage categories and review reports for your assigned module.',
+                                      style: TextStyle(fontSize: 12, color: theme.hintColor, height: 1.4),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => Text('Error loading admin details: $e'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final grantsAsync = ref.watch(moderatorGrantsProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -201,138 +375,107 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Promote form card (Admin only) or Informative card (Moderator)
-              if (isUserAdmin)
-                Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(
-                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                    ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.person_add_alt_1_rounded, size: 20, color: theme.colorScheme.primary),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'Promote User to Moderator by IISc Email',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Admins can grant module-scoped review authority to any IISc student or faculty by their email address.',
-                          style: TextStyle(fontSize: 12, color: theme.hintColor),
-                        ),
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: _modEmailController,
-                          decoration: InputDecoration(
-                            labelText: 'IISc Email Address',
-                            hintText: 'e.g. cadithya@iisc.ac.in',
-                            prefixIcon: const Icon(Icons.email_outlined, size: 18),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                initialValue: _selectedModule,
-                                decoration: InputDecoration(
-                                  labelText: 'Target Module',
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                ),
-                                items: const [
-                                  DropdownMenuItem(value: 'buy_sell', child: Text('Buy & Sell')),
-                                  DropdownMenuItem(value: 'lost_found', child: Text('Lost & Found')),
-                                  DropdownMenuItem(value: 'academic_help', child: Text('Academic Help')),
-                                  DropdownMenuItem(value: 'placement_hub', child: Text('Placement Hub')),
-                                ],
-                                onChanged: (val) {
-                                  if (val != null) setState(() => _selectedModule = val);
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                initialValue: _selectedScope,
-                                decoration: InputDecoration(
-                                  labelText: 'Scope Type',
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                ),
-                                items: const [
-                                  DropdownMenuItem(value: 'module', child: Text('Module-wide')),
-                                  DropdownMenuItem(value: 'department', child: Text('Department-scoped')),
-                                  DropdownMenuItem(value: 'course', child: Text('Course-scoped')),
-                                ],
-                                onChanged: (val) {
-                                  if (val != null) setState(() => _selectedScope = val);
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: FilledButton.icon(
-                            onPressed: _isPromotingMod ? null : _handlePromoteModerator,
-                            icon: _isPromotingMod
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                  )
-                                : const Icon(Icons.shield_outlined, size: 16),
-                            label: const Text('Promote to Moderator'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              else
-                Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(color: Colors.blue.shade200),
-                  ),
-                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Icon(Icons.shield_outlined, color: Colors.blue.shade700, size: 24),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Moderator View: Only the Administrator can assign or demote moderators. To review and action reported content, switch to Reports Queue.',
-                            style: TextStyle(fontSize: 13, color: isDark ? Colors.blue.shade200 : Colors.blue.shade900),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton.tonal(
-                          onPressed: () => _tabController.animateTo(2),
-                          child: const Text('Reports Queue'),
-                        ),
-                      ],
-                    ),
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
                   ),
                 ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.person_add_alt_1_rounded, size: 20, color: theme.colorScheme.primary),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Promote User to Moderator by IISc Email',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Admins can grant module-scoped review authority to any IISc student or faculty by their email address.',
+                        style: TextStyle(fontSize: 12, color: theme.hintColor),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _modEmailController,
+                        decoration: InputDecoration(
+                          labelText: 'IISc Email Address',
+                          hintText: 'e.g. cadithya@iisc.ac.in',
+                          prefixIcon: const Icon(Icons.email_outlined, size: 18),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: _selectedModule,
+                              decoration: InputDecoration(
+                                labelText: 'Target Module',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: 'buy_sell', child: Text('Buy & Sell')),
+                                DropdownMenuItem(value: 'lost_found', child: Text('Lost & Found')),
+                                DropdownMenuItem(value: 'academic_help', child: Text('Academic Help')),
+                                DropdownMenuItem(value: 'placement_hub', child: Text('Placement Hub')),
+                              ],
+                              onChanged: (val) {
+                                if (val != null) setState(() => _selectedModule = val);
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: _selectedScope,
+                              decoration: InputDecoration(
+                                labelText: 'Scope Type',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: 'module', child: Text('Module-wide')),
+                                DropdownMenuItem(value: 'department', child: Text('Department-scoped')),
+                                DropdownMenuItem(value: 'course', child: Text('Course-scoped')),
+                              ],
+                              onChanged: (val) {
+                                if (val != null) setState(() => _selectedScope = val);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton.icon(
+                          onPressed: _isPromotingMod ? null : _handlePromoteModerator,
+                          icon: _isPromotingMod
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.shield_outlined, size: 16),
+                          label: const Text('Promote to Moderator'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
               const SizedBox(height: 24),
               const Text(
@@ -565,7 +708,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Under the single-admin model (PRD & backend), there is exactly one active administrator. Naming your successor will automatically downgrade your account to a standard student role in the same transaction.',
+                        'Under the single-admin governance model, there is exactly one active administrator. Naming your successor will transfer all administrative authorities and automatically adjust your account to a standard student role in the same transaction.',
                         style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.red.shade900),
                       ),
                       const SizedBox(height: 14),
@@ -739,7 +882,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
         ref.invalidate(registeredUsersProvider);
         ref.invalidate(currentUserProvider);
         _showToast('Administrator role transferred successfully to $email.');
-        if (mounted) context.go('/app');
+        if (mounted) context.go('/buy');
       } catch (e) {
         _showToast('Transfer failed: $e', isError: true);
       } finally {
@@ -992,6 +1135,18 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
   Widget _buildCategoriesTab(bool isDark, ThemeData theme) {
     final bsCategories = ref.watch(buySellCategoriesProvider);
     final lfCategories = ref.watch(lostFoundCategoriesProvider);
+    final currentUser = ref.watch(currentUserProvider);
+
+    final canManageBuySell = currentUser?.isAdmin == true || (currentUser?.canModerateBuySell ?? false);
+    final canManageLostFound = currentUser?.isAdmin == true || (currentUser?.canModerateLostFound ?? false);
+    final canManageAny = canManageBuySell || canManageLostFound;
+
+    // Ensure _categoryTarget is pointing to a permitted module
+    if (!canManageBuySell && canManageLostFound && _categoryTarget != 'lost_found') {
+      _categoryTarget = 'lost_found';
+    } else if (canManageBuySell && !canManageLostFound && _categoryTarget != 'buy_sell') {
+      _categoryTarget = 'buy_sell';
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -1001,103 +1156,171 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(
-                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+              if (canManageAny)
+                Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                    ),
                   ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.add_circle_outline_rounded, size: 20, color: theme.colorScheme.primary),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Add Official Campus Category',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Categories added here immediately populate the feed filter scrollbars and create-listing modals across the entire app.',
-                        style: TextStyle(fontSize: 12, color: theme.hintColor),
-                      ),
-                      const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _categoryController,
-                              decoration: InputDecoration(
-                                labelText: 'Category Name',
-                                hintText: 'e.g. Sports Gear, Musical Instruments',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.add_circle_outline_rounded, size: 20, color: theme.colorScheme.primary),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Add Official Campus Category',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Authorized moderators and admins can add, rename, or remove categories. Changes immediately reflect in feed filter pills and posting dialogs.',
+                          style: TextStyle(fontSize: 12, color: theme.hintColor),
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _categoryController,
+                                decoration: InputDecoration(
+                                  labelText: 'Category Name',
+                                  hintText: 'e.g. Sports Gear, Musical Instruments',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                ),
                               ),
                             ),
+                            const SizedBox(width: 12),
+                            DropdownButton<String>(
+                              value: _categoryTarget,
+                              items: [
+                                if (canManageBuySell)
+                                  const DropdownMenuItem(value: 'buy_sell', child: Text('Buy & Sell')),
+                                if (canManageLostFound)
+                                  const DropdownMenuItem(value: 'lost_found', child: Text('Lost & Found')),
+                              ],
+                              onChanged: (val) {
+                                if (val != null) setState(() => _categoryTarget = val);
+                              },
+                            ),
+                            const SizedBox(width: 12),
+                            FilledButton.icon(
+                              onPressed: _isAddingCategory ? null : _handleAddCategory,
+                              icon: const Icon(Icons.add, size: 16),
+                              label: const Text('Add Category'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(color: Colors.orange.shade300),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.orange.shade800, size: 20),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'You do not have moderator authority to modify categories for Buy & Sell or Lost & Found.',
+                            style: TextStyle(fontSize: 13),
                           ),
-                          const SizedBox(width: 12),
-                          DropdownButton<String>(
-                            value: _categoryTarget,
-                            items: const [
-                              DropdownMenuItem(value: 'buy_sell', child: Text('Buy & Sell')),
-                              DropdownMenuItem(value: 'lost_found', child: Text('Lost & Found')),
-                            ],
-                            onChanged: (val) {
-                              if (val != null) setState(() => _categoryTarget = val);
-                            },
-                          ),
-                          const SizedBox(width: 12),
-                          FilledButton.icon(
-                            onPressed: _isAddingCategory ? null : _handleAddCategory,
-                            icon: const Icon(Icons.add, size: 16),
-                            label: const Text('Add Category'),
-                          ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
 
               const SizedBox(height: 24),
-              const Text('Active Buy & Sell Categories', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              Row(
+                children: [
+                  const Text('Active Buy & Sell Categories', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  const SizedBox(width: 8),
+                  if (canManageBuySell)
+                    Text('(tap chip to rename, ✕ to delete)', style: TextStyle(fontSize: 11, color: theme.hintColor))
+                  else
+                    Text('(read-only for non-moderators)', style: TextStyle(fontSize: 11, color: theme.hintColor)),
+                ],
+              ),
               const SizedBox(height: 8),
               bsCategories.when(
                 data: (cats) => Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: cats
-                      .map((c) => Chip(
-                            label: Text(c.name),
-                            avatar: const Icon(Icons.label_outline, size: 16),
-                          ))
-                      .toList(),
+                  children: cats.map((c) {
+                    final cleanTitle = CategoryEmojiHelper.cleanName(c.name);
+                    if (canManageBuySell) {
+                      return InputChip(
+                        label: Text(cleanTitle),
+                        avatar: const Icon(Icons.edit_outlined, size: 14),
+                        tooltip: 'Tap to rename "$cleanTitle", click ✕ to delete',
+                        onPressed: () => _showEditCategoryDialog('buy_sell', c),
+                        onDeleted: () => _confirmDeleteCategory('buy_sell', c),
+                        deleteIcon: const Icon(Icons.close, size: 14),
+                        deleteButtonTooltipMessage: 'Delete "$cleanTitle"',
+                      );
+                    }
+                    return Chip(
+                      label: Text(cleanTitle),
+                      avatar: const Icon(Icons.label_outline, size: 14),
+                    );
+                  }).toList(),
                 ),
                 loading: () => const CircularProgressIndicator(),
                 error: (e, _) => Text('Error: $e'),
               ),
 
-              const SizedBox(height: 24),
-              const Text('Active Lost & Found Categories', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  const Text('Active Lost & Found Categories', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  const SizedBox(width: 8),
+                  if (canManageLostFound)
+                    Text('(tap chip to rename, ✕ to delete)', style: TextStyle(fontSize: 11, color: theme.hintColor))
+                  else
+                    Text('(read-only for non-moderators)', style: TextStyle(fontSize: 11, color: theme.hintColor)),
+                ],
+              ),
               const SizedBox(height: 8),
               lfCategories.when(
                 data: (cats) => Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: cats
-                      .map((c) => Chip(
-                            label: Text(c.name),
-                            avatar: const Icon(Icons.label_outline, size: 16),
-                          ))
-                      .toList(),
+                  children: cats.map((c) {
+                    final cleanTitle = CategoryEmojiHelper.cleanName(c.name);
+                    if (canManageLostFound) {
+                      return InputChip(
+                        label: Text(cleanTitle),
+                        avatar: const Icon(Icons.edit_outlined, size: 14),
+                        tooltip: 'Tap to rename "$cleanTitle", click ✕ to delete',
+                        onPressed: () => _showEditCategoryDialog('lost_found', c),
+                        onDeleted: () => _confirmDeleteCategory('lost_found', c),
+                        deleteIcon: const Icon(Icons.close, size: 14),
+                        deleteButtonTooltipMessage: 'Delete "$cleanTitle"',
+                      );
+                    }
+                    return Chip(
+                      label: Text(cleanTitle),
+                      avatar: const Icon(Icons.label_outline, size: 14),
+                    );
+                  }).toList(),
                 ),
                 loading: () => const CircularProgressIndicator(),
                 error: (e, _) => Text('Error: $e'),
@@ -1110,11 +1333,12 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
   }
 
   Future<void> _handleAddCategory() async {
-    final name = _categoryController.text.trim();
-    if (name.isEmpty) {
+    final rawName = _categoryController.text.trim();
+    if (rawName.isEmpty) {
       _showToast('Enter category name.');
       return;
     }
+    final name = CategoryEmojiHelper.cleanName(rawName);
 
     setState(() => _isAddingCategory = true);
     try {
@@ -1131,6 +1355,83 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
       _showToast('Failed to create category: $e', isError: true);
     } finally {
       if (mounted) setState(() => _isAddingCategory = false);
+    }
+  }
+
+  Future<void> _showEditCategoryDialog(String module, CategoryRef cat) async {
+    final editController = TextEditingController(text: CategoryEmojiHelper.cleanName(cat.name));
+    final updated = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Edit Category (${module == 'buy_sell' ? 'Buy & Sell' : 'Lost & Found'})'),
+        content: TextField(
+          controller: editController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'New Category Name',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, editController.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (updated != null && updated.isNotEmpty && updated != CategoryEmojiHelper.cleanName(cat.name)) {
+      try {
+        final cleanNewName = CategoryEmojiHelper.cleanName(updated);
+        if (module == 'buy_sell') {
+          await ref.read(buySellRepositoryProvider).updateCategory(cat.id, cleanNewName);
+          ref.invalidate(buySellCategoriesProvider);
+        } else {
+          await ref.read(lostFoundRepositoryProvider).updateCategory(cat.id, cleanNewName);
+          ref.invalidate(lostFoundCategoriesProvider);
+        }
+        _showToast('Renamed category to "$cleanNewName".');
+      } catch (e) {
+        _showToast('Failed to rename category: $e', isError: true);
+      }
+    }
+  }
+
+  Future<void> _confirmDeleteCategory(String module, CategoryRef cat) async {
+    final cleanName = CategoryEmojiHelper.cleanName(cat.name);
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete Category "$cleanName"?'),
+        content: Text(
+          'Are you sure you want to remove "$cleanName" from ${module == 'buy_sell' ? 'Buy & Sell' : 'Lost & Found'} categories?\n\nExisting postings with this category will remain, but users will no longer be able to select it for new listings.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete Category'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        if (module == 'buy_sell') {
+          await ref.read(buySellRepositoryProvider).deleteCategory(cat.id);
+          ref.invalidate(buySellCategoriesProvider);
+        } else {
+          await ref.read(lostFoundRepositoryProvider).deleteCategory(cat.id);
+          ref.invalidate(lostFoundCategoriesProvider);
+        }
+        _showToast('Deleted category "$cleanName".');
+      } catch (e) {
+        _showToast('Failed to delete category: $e', isError: true);
+      }
     }
   }
 
@@ -1172,7 +1473,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
                                 'Cloud Services & Canary Health Status',
                                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                               ),
-                              Text('Continuous monitoring (NFR-4) • AWS Mumbai (ap-south-1)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                              Text('Continuous health monitoring • AWS Mumbai (ap-south-1)', style: TextStyle(fontSize: 11, color: Colors.grey)),
                             ],
                           ),
                         ],

@@ -18,6 +18,7 @@ class LostFoundFilterState {
   final SortOption sortOption;
   final PostType? typeFilter;
   final ViewMode viewMode;
+  final Set<ReportStatus> selectedStatuses;
 
   LostFoundFilterState({
     this.query = '',
@@ -27,17 +28,28 @@ class LostFoundFilterState {
     this.sortOption = SortOption.newest,
     this.typeFilter,
     this.viewMode = ViewMode.grid,
-  });
+    Set<ReportStatus>? selectedStatuses,
+  }) : selectedStatuses = selectedStatuses ?? {
+          ReportStatus.open,
+          ReportStatus.matched,
+          ReportStatus.closed,
+        };
 
   /// The active date range computed from custom selection or date preset
   DateTimeRange? get dateRange => customDateRange ?? datePreset.toDateTimeRange();
+
+  bool get isAllSelected =>
+      datePreset == DatePresetFilter.all &&
+      customDateRange == null &&
+      selectedStatuses.length >= 3;
 
   bool get hasActiveFilters =>
       category != 'All' ||
       datePreset != DatePresetFilter.all ||
       customDateRange != null ||
       query.isNotEmpty ||
-      sortOption != SortOption.newest;
+      sortOption != SortOption.newest ||
+      selectedStatuses.length < 3;
 
   LostFoundFilterState copyWith({
     String? query,
@@ -51,6 +63,7 @@ class LostFoundFilterState {
     PostType? typeFilter,
     bool clearTypeFilter = false,
     ViewMode? viewMode,
+    Set<ReportStatus>? selectedStatuses,
   }) {
     return LostFoundFilterState(
       query: query ?? this.query,
@@ -62,6 +75,7 @@ class LostFoundFilterState {
       sortOption: sortOption ?? this.sortOption,
       typeFilter: clearTypeFilter ? null : (typeFilter ?? this.typeFilter),
       viewMode: viewMode ?? this.viewMode,
+      selectedStatuses: selectedStatuses ?? this.selectedStatuses,
     );
   }
 }
@@ -108,6 +122,7 @@ class LostFoundPaginationNotifier extends StateNotifier<PaginatedFeedState<LostF
         query: filter.query,
         dateRange: filter.dateRange,
         sortOption: filter.sortOption,
+        statusList: filter.selectedStatuses.toList(),
         limit: _pageSize,
         offset: 0,
       );
@@ -142,6 +157,7 @@ class LostFoundPaginationNotifier extends StateNotifier<PaginatedFeedState<LostF
         query: filter.query,
         dateRange: filter.dateRange,
         sortOption: filter.sortOption,
+        statusList: filter.selectedStatuses.toList(),
         limit: _pageSize,
         offset: state.offset,
       );

@@ -258,6 +258,28 @@ class ApiLostFoundRepository implements ILostFoundRepository {
   }
 
   @override
+  Future<CategoryRef> updateCategory(int id, String newName) async {
+    try {
+      final response = await apiClient.patch(
+        '${ApiEndpoints.lostFoundCategories}/$id',
+        data: {'name': newName.trim()},
+      );
+      return CategoryRef.fromJson(response.data as Map<String, dynamic>);
+    } catch (_) {
+      return CategoryRef(id: id, name: newName.trim());
+    }
+  }
+
+  @override
+  Future<void> deleteCategory(int id) async {
+    try {
+      await apiClient.delete('${ApiEndpoints.lostFoundCategories}/$id');
+    } catch (_) {
+      // Ignored if backend does not expose DELETE categories
+    }
+  }
+
+  @override
   Future<List<LostFoundItem>> getPossibleMatches(LostFoundItem item) async {
     if (item.possibleMatches != null && item.possibleMatches!.isNotEmpty) {
       return item.possibleMatches!;

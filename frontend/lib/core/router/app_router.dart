@@ -10,6 +10,7 @@ import '../../features/buy_sell/providers/buy_sell_providers.dart';
 import '../../features/buy_sell/ui/buy_sell_feed_screen.dart';
 import '../../features/lost_found/providers/lost_found_providers.dart';
 import '../../features/lost_found/ui/lost_found_feed_screen.dart';
+import '../../features/admin/providers/admin_providers.dart';
 import '../../features/admin/ui/admin_controls_screen.dart';
 import '../../features/profile/ui/user_profile_screen.dart';
 
@@ -19,34 +20,60 @@ import '../../features/profile/ui/user_profile_screen.dart';
 final tabIndexProvider = StateProvider<int>((ref) => 0);
 
 // ---------------------------------------------------------------------------
-// GoRouter — single shell route, no per-tab routes, no history entries
+// GoRouter — direct routes for /buy and /lost-found with clean path strategy
 // ---------------------------------------------------------------------------
 final GoRouter appRouter = GoRouter(
-  initialLocation: '/app',
+  initialLocation: '/buy',
   routes: [
     GoRoute(
       path: '/',
-      redirect: (_, __) => '/app',
+      redirect: (_, __) => '/buy',
     ),
-    ShellRoute(
-      builder: (context, state, child) => child,
-      routes: [
-        GoRoute(
-          path: '/app',
-          builder: (context, state) => const AppShellLayout(),
-        ),
-        GoRoute(
-          path: '/profile',
-          builder: (context, state) => const UserProfileScreen(),
-        ),
-        GoRoute(
-          path: '/admin',
-          builder: (context, state) => const AdminControlsScreen(),
-        ),
-      ],
+    GoRoute(
+      path: '/buy',
+      builder: (context, state) => const AppShellLayout(initialTab: 0),
+    ),
+    GoRoute(
+      path: '/lost-found',
+      builder: (context, state) => const AppShellLayout(initialTab: 1),
+    ),
+    // Aliases and subpath redirects
+    GoRoute(
+      path: '/app',
+      redirect: (_, __) => '/buy',
+    ),
+    GoRoute(
+      path: '/app/:subpath',
+      redirect: (context, state) {
+        final sub = (state.pathParameters['subpath'] ?? '').toLowerCase();
+        if (sub.contains('lost') || sub.contains('lnf') || sub.contains('found')) {
+          return '/lost-found';
+        }
+        return '/buy';
+      },
+    ),
+    GoRoute(
+      path: '/buy-sell',
+      redirect: (_, __) => '/buy',
+    ),
+    GoRoute(
+      path: '/lost_found',
+      redirect: (_, __) => '/lost-found',
+    ),
+    GoRoute(
+      path: '/lnf',
+      redirect: (_, __) => '/lost-found',
+    ),
+    GoRoute(
+      path: '/profile',
+      builder: (context, state) => const UserProfileScreen(),
+    ),
+    GoRoute(
+      path: '/admin',
+      builder: (context, state) => const AdminControlsScreen(),
     ),
   ],
-  errorBuilder: (context, state) => const AppShellLayout(),
+  errorBuilder: (context, state) => const AppShellLayout(initialTab: 0),
 );
 
 // ---------------------------------------------------------------------------
@@ -109,6 +136,8 @@ class _AppRefreshButtonState extends ConsumerState<AppRefreshButton>
       // 1. Refetch user profile & updated authority from backend
       await ref.read(authRepositoryProvider).getCurrentUser();
       ref.invalidate(authStateProvider);
+      ref.invalidate(moderatorGrantsProvider);
+      ref.invalidate(registeredUsersProvider);
 
       // 2. Refetch Buy & Sell feeds & categories
       ref.read(buySellPaginationProvider.notifier).loadInitial();
@@ -193,7 +222,8 @@ class ThemeToggleButton extends ConsumerWidget {
 // Shell layout
 // ---------------------------------------------------------------------------
 class AppShellLayout extends ConsumerStatefulWidget {
-  const AppShellLayout({super.key});
+  final int initialTab;
+  const AppShellLayout({super.key, this.initialTab = 0});
 
   @override
   ConsumerState<AppShellLayout> createState() => _AppShellLayoutState();
@@ -215,6 +245,22 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
       begin: Offset.zero,
       end: Offset.zero,
     ).animate(_animController);
+
+    // Sync tab with initialTab on startup
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && ref.read(tabIndexProvider) != widget.initialTab) {
+        ref.read(tabIndexProvider.notifier).state = widget.initialTab;
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(AppShellLayout oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialTab != oldWidget.initialTab &&
+        widget.initialTab != ref.read(tabIndexProvider)) {
+      _switchTab(widget.initialTab, updateUrl: false);
+    }
   }
 
   @override
@@ -223,7 +269,7 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
     super.dispose();
   }
 
-  void _switchTab(int newIndex) {
+  void _switchTab(int newIndex, {bool updateUrl = true}) {
     final currentIndex = ref.read(tabIndexProvider);
     if (newIndex == currentIndex) return;
 
@@ -241,6 +287,10 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
 
     ref.read(tabIndexProvider.notifier).state = newIndex;
     _animController.forward(from: 0);
+
+    if (updateUrl) {
+      context.go(newIndex == 0 ? '/buy' : '/lost-found');
+    }
   }
 
   @override
@@ -595,6 +645,18 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
                 ],
               ),
               const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    context.push('/admin');
+                  },
+                  icon: const Icon(Icons.admin_panel_settings_rounded, size: 16),
+                  label: const Text('Open Admin Controls Panel'),
+                ),
+              ),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
@@ -628,6 +690,31 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
                     ),
                   ),
                 ],
+              ),
+            ] else if (currentUser.isModerator) ...[
+              const Divider(height: 24),
+              Row(
+                children: [
+                  Icon(Icons.shield_outlined, size: 16, color: Colors.teal.shade700),
+                  const SizedBox(width: 8),
+                  const Text('Moderator Controls', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(
+                    foregroundColor: isDark ? Colors.teal.shade200 : Colors.teal.shade900,
+                    backgroundColor: isDark ? const Color(0xFF134E4A) : Colors.teal.shade50,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    context.push('/admin');
+                  },
+                  icon: const Icon(Icons.shield_outlined, size: 16),
+                  label: const Text('Open Moderator Controls'),
+                ),
               ),
             ],
           ],

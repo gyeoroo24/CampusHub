@@ -63,7 +63,7 @@ abstract class IBuySellRepository {
   /// Replaces, reorders, or removes photos (seller only).
   Future<void> replacePhotos(String id, List<String> photoKeys);
 
-  /// Soft deletes a listing (seller, Buy & Sell moderator, or admin, FR-10).
+  /// Soft deletes a listing (seller, Buy & Sell moderator, or admin).
   Future<void> deleteListing(String id, {String? reason});
 
   /// Lists all Buy & Sell categories A-Z from `GET /api/v1/buy-sell/categories`.
@@ -71,6 +71,12 @@ abstract class IBuySellRepository {
 
   /// Adds a missing category or gets existing one (`POST /api/v1/buy-sell/categories`).
   Future<CategoryRef> createCategory(String name);
+
+  /// Updates or renames an existing category.
+  Future<CategoryRef> updateCategory(int id, String newName);
+
+  /// Deletes or removes a category.
+  Future<void> deleteCategory(int id);
 }
 
 /// Backward compatibility alias for existing code

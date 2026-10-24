@@ -291,9 +291,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Admin Controls & Governance'), findsOneWidget);
-      expect(find.text('Moderators (FR-3)'), findsOneWidget);
+      expect(find.text('Moderators'), findsOneWidget);
       expect(find.text('User Accounts'), findsOneWidget);
-      expect(find.text('Reports Queue (FR-10)'), findsOneWidget);
+      expect(find.text('Reports Queue'), findsOneWidget);
       expect(find.text('Categories'), findsOneWidget);
       expect(find.text('System & Health'), findsOneWidget);
       expect(find.text('Promote User to Moderator by IISc Email'), findsOneWidget);
@@ -334,7 +334,9 @@ void main() {
       // Access is granted, not restricted
       expect(find.text('Access Restricted'), findsNothing);
       expect(find.text('Moderator Controls & Reports'), findsOneWidget);
-      expect(find.text('Reports Queue (FR-10)'), findsOneWidget);
+      expect(find.text('Reports Queue'), findsOneWidget);
+      expect(find.text('Admin Contact'), findsOneWidget);
+      expect(find.text('Active Moderator Assignments'), findsNothing);
     });
 
     test('MockAuthRepository hydrates active moderator grants and profile for designated moderator', () async {

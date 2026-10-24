@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/enums/sort_option.dart';
 import '../../../core/enums/view_mode.dart';
+import '../../../core/utils/category_emoji_helper.dart';
 import '../../../core/widgets/compact_price_range_picker_dialog.dart';
 import '../../../core/widgets/skeleton_loader.dart';
 import '../../auth/providers/auth_providers.dart';
@@ -21,16 +22,6 @@ class BuySellFeedScreen extends ConsumerStatefulWidget {
 
 class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
   final ScrollController _scrollController = ScrollController();
-
-  static const _presetCategoryIcons = {
-    'All': '🌟',
-    'Books': '📚',
-    'Cycles': '🚲',
-    'Electronics': '💻',
-    'Furniture': '🛋️',
-    'Lab Equipment': '🔬',
-    'Others': '🎒',
-  };
 
   static const _presetCategoryOrder = [
     'Books',
@@ -77,22 +68,24 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
     final showTrustedExchangeBanner = ref.watch(showTrustedExchangeBannerProvider);
     final categoriesAsync = ref.watch(buySellCategoriesProvider);
     final categoryPills = <({String name, String? icon})>[
-      (name: 'All', icon: _presetCategoryIcons['All']),
+      (name: 'All', icon: CategoryEmojiHelper.getEmoji('All')),
     ];
     for (final p in _presetCategoryOrder) {
-      categoryPills.add((name: p, icon: _presetCategoryIcons[p]));
+      categoryPills.add((name: p, icon: CategoryEmojiHelper.getEmoji(p)));
     }
     final remoteCats = categoriesAsync.maybeWhen(
       data: (cats) => cats.map((c) => c.name.trim()).toList(),
       orElse: () => <String>[],
     );
     final userAdded = remoteCats.where((name) {
-      final lower = name.toLowerCase();
-      if (lower == 'all') return false;
-      return !_presetCategoryOrder.any((p) => p.toLowerCase() == lower);
+      final clean = CategoryEmojiHelper.cleanName(name).toLowerCase();
+      if (clean == 'all') return false;
+      return !_presetCategoryOrder.any((p) => p.toLowerCase() == clean);
     }).toList();
     for (final customName in userAdded) {
-      categoryPills.add((name: customName, icon: null));
+      final clean = CategoryEmojiHelper.cleanName(customName);
+      final emoji = CategoryEmojiHelper.getEmoji(customName);
+      categoryPills.add((name: clean, icon: emoji));
     }
 
     final isAllSelected = filter.minPrice == null &&

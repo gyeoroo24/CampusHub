@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/enums/date_preset.dart';
 import '../../../../core/enums/sort_option.dart';
 import '../../../../core/enums/view_mode.dart';
+import '../../../../core/utils/category_emoji_helper.dart';
 import '../../../../core/widgets/compact_date_range_picker_dialog.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../../../auth/ui/auth_dialog.dart';
@@ -12,16 +13,6 @@ import 'report_item_dialog.dart';
 
 class LostFoundFilterBar extends ConsumerWidget {
   const LostFoundFilterBar({super.key});
-
-  static const _presetCategoryIcons = {
-    'All': '📋',
-    'ID Cards': '🪪',
-    'Electronics': '💻',
-    'Personal Belongings': '🎒',
-    'Bags': '🧳',
-    'Keys': '🔑',
-    'Others': '📦',
-  };
 
   static const _presetCategoryOrder = [
     'ID Cards',
@@ -71,22 +62,24 @@ class LostFoundFilterBar extends ConsumerWidget {
     final filter = ref.watch(lostFoundFilterProvider);
     final categoriesAsync = ref.watch(lostFoundCategoriesProvider);
     final categoryPills = <({String name, String? icon})>[
-      (name: 'All', icon: _presetCategoryIcons['All']),
+      (name: 'All', icon: CategoryEmojiHelper.getEmoji('All')),
     ];
     for (final p in _presetCategoryOrder) {
-      categoryPills.add((name: p, icon: _presetCategoryIcons[p]));
+      categoryPills.add((name: p, icon: CategoryEmojiHelper.getEmoji(p)));
     }
     final remoteCats = categoriesAsync.maybeWhen(
       data: (cats) => cats.map((c) => c.name.trim()).toList(),
       orElse: () => <String>[],
     );
     final userAdded = remoteCats.where((name) {
-      final lower = name.toLowerCase();
-      if (lower == 'all') return false;
-      return !_presetCategoryOrder.any((p) => p.toLowerCase() == lower);
+      final clean = CategoryEmojiHelper.cleanName(name).toLowerCase();
+      if (clean == 'all') return false;
+      return !_presetCategoryOrder.any((p) => p.toLowerCase() == clean);
     }).toList();
     for (final customName in userAdded) {
-      categoryPills.add((name: customName, icon: null));
+      final clean = CategoryEmojiHelper.cleanName(customName);
+      final emoji = CategoryEmojiHelper.getEmoji(customName);
+      categoryPills.add((name: clean, icon: emoji));
     }
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -182,32 +175,148 @@ class LostFoundFilterBar extends ConsumerWidget {
           ),
           child: Row(
             children: [
-              // Convenient Date Filter Presets
+              // Quick Filter Chips: All | Date Presets + Custom | Status Chips
               Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: DatePresetFilter.values.map((preset) {
-                      final isSelected = filter.customDateRange == null && filter.datePreset == preset;
-                      return Padding(
+                    children: [
+                      // "All" Chip
+                      Padding(
                         padding: const EdgeInsets.only(right: 6.0),
                         child: FilterChip(
-                          label: Text(preset.label, style: const TextStyle(fontSize: 11)),
-                          selected: isSelected,
+                          label: const Text('All', style: TextStyle(fontSize: 11)),
+                          selected: filter.isAllSelected,
                           showCheckmark: false,
                           visualDensity: VisualDensity.compact,
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           onSelected: (_) {
                             ref.read(lostFoundFilterProvider.notifier).update(
                                   (s) => s.copyWith(
-                                    datePreset: preset,
+                                    datePreset: DatePresetFilter.all,
                                     clearCustomDateRange: true,
+                                    selectedStatuses: {
+                                      ReportStatus.open,
+                                      ReportStatus.matched,
+                                      ReportStatus.closed,
+                                    },
                                   ),
                                 );
                           },
                         ),
-                      );
-                    }).toList(),
+                      ),
+
+                      // Vertical Divider
+                      Container(
+                        height: 18,
+                        width: 1,
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                      ),
+                      const SizedBox(width: 4),
+
+                      // Date Presets
+                      ...[
+                        DatePresetFilter.today,
+                        DatePresetFilter.yesterday,
+                        DatePresetFilter.last3Days,
+                        DatePresetFilter.thisWeek,
+                        DatePresetFilter.thisMonth,
+                      ].map((preset) {
+                        final isSelected = filter.customDateRange == null && filter.datePreset == preset;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6.0),
+                          child: FilterChip(
+                            label: Text(preset.label, style: const TextStyle(fontSize: 11)),
+                            selected: isSelected,
+                            showCheckmark: false,
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            onSelected: (_) {
+                              if (isSelected) {
+                                ref.read(lostFoundFilterProvider.notifier).update(
+                                      (s) => s.copyWith(
+                                        datePreset: DatePresetFilter.all,
+                                        clearCustomDateRange: true,
+                                      ),
+                                    );
+                              } else {
+                                ref.read(lostFoundFilterProvider.notifier).update(
+                                      (s) => s.copyWith(
+                                        datePreset: preset,
+                                        clearCustomDateRange: true,
+                                      ),
+                                    );
+                              }
+                            },
+                          ),
+                        );
+                      }),
+
+                      // Custom Date Range Chip (if active)
+                      if (filter.customDateRange != null)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6.0),
+                          child: FilterChip(
+                            label: Text(
+                              '${filter.customDateRange!.start.day}/${filter.customDateRange!.start.month} - ${filter.customDateRange!.end.day}/${filter.customDateRange!.end.month}',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            selected: true,
+                            showCheckmark: false,
+                            avatar: const Icon(Icons.close_rounded, size: 14),
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            onSelected: (_) {
+                              ref.read(lostFoundFilterProvider.notifier).update(
+                                    (s) => s.copyWith(clearCustomDateRange: true),
+                                  );
+                            },
+                          ),
+                        ),
+
+                      // Vertical Divider
+                      Container(
+                        height: 18,
+                        width: 1,
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                      ),
+                      const SizedBox(width: 4),
+
+                      // Status Filter Chips (Toggles: Open, Matched, Resolved)
+                      ...[
+                        (label: 'Open', status: ReportStatus.open),
+                        (label: 'Matched', status: ReportStatus.matched),
+                        (label: 'Resolved', status: ReportStatus.closed),
+                      ].map((st) {
+                        final isSelected = filter.selectedStatuses.contains(st.status);
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6.0),
+                          child: FilterChip(
+                            label: Text(st.label, style: const TextStyle(fontSize: 11)),
+                            selected: isSelected,
+                            showCheckmark: false,
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            onSelected: (_) {
+                              final updated = Set<ReportStatus>.from(filter.selectedStatuses);
+                              if (isSelected) {
+                                updated.remove(st.status);
+                                if (updated.isEmpty) {
+                                  updated.add(ReportStatus.open);
+                                }
+                              } else {
+                                updated.add(st.status);
+                              }
+                              ref.read(lostFoundFilterProvider.notifier).update(
+                                    (s) => s.copyWith(selectedStatuses: updated),
+                                  );
+                            },
+                          ),
+                        );
+                      }),
+                    ],
                   ),
                 ),
               ),

@@ -63,7 +63,7 @@ abstract class ILostFoundRepository {
   /// Replaces photos with new ordered S3 keys.
   Future<void> replacePhotos(String id, PostType type, List<String> photoKeys);
 
-  /// Removes report (reporter, Lost & Found moderator, or admin, FR-10).
+  /// Removes report (reporter, Lost & Found moderator, or admin).
   Future<void> deleteReport(String id, PostType type, {String? reason});
 
   /// Lists all Lost & Found categories from `GET /api/v1/lost-found/categories`.
@@ -71,6 +71,12 @@ abstract class ILostFoundRepository {
 
   /// Adds a category or retrieves existing one (`POST /api/v1/lost-found/categories`).
   Future<CategoryRef> createCategory(String name);
+
+  /// Updates or renames an existing category.
+  Future<CategoryRef> updateCategory(int id, String newName);
+
+  /// Deletes or removes a category.
+  Future<void> deleteCategory(int id);
 
   /// Retrieves potential matches for an item (open reports of opposite kind in same category).
   Future<List<LostFoundItem>> getPossibleMatches(LostFoundItem item);
