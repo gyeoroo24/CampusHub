@@ -87,6 +87,20 @@ class MockAdminRepository implements IAdminRepository {
       graduationYear: 2026,
       isAdmin: true,
       isActive: true,
+      moderatorGrants: [
+        ModeratorGrant(
+          id: 'grant_001',
+          module: 'buy_sell',
+          scopeType: 'all',
+          grantedAt: DateTime.now().subtract(const Duration(days: 30)),
+        ),
+        ModeratorGrant(
+          id: 'grant_002',
+          module: 'lost_found',
+          scopeType: 'all',
+          grantedAt: DateTime.now().subtract(const Duration(days: 30)),
+        ),
+      ],
       createdAt: DateTime.now().subtract(const Duration(days: 60)),
     ),
     User(
@@ -98,6 +112,17 @@ class MockAdminRepository implements IAdminRepository {
       graduationYear: 2026,
       isAdmin: false,
       isActive: true,
+      moderatorGrants: [
+        ModeratorGrant(
+          id: 'grant_101',
+          userId: 'usr_mock_002',
+          userEmail: 'cadithya@iisc.ac.in',
+          userName: 'Adithya Chippa',
+          module: 'buy_sell',
+          scopeType: 'module',
+          grantedAt: DateTime.now().subtract(const Duration(days: 14)),
+        ),
+      ],
       createdAt: DateTime.now().subtract(const Duration(days: 45)),
     ),
     User(
@@ -109,6 +134,17 @@ class MockAdminRepository implements IAdminRepository {
       graduationYear: 2026,
       isAdmin: false,
       isActive: true,
+      moderatorGrants: [
+        ModeratorGrant(
+          id: 'grant_102',
+          userId: 'usr_mock_003',
+          userEmail: 'dinkylakhani@iisc.ac.in',
+          userName: 'Dinky Lakhani',
+          module: 'lost_found',
+          scopeType: 'module',
+          grantedAt: DateTime.now().subtract(const Duration(days: 10)),
+        ),
+      ],
       createdAt: DateTime.now().subtract(const Duration(days: 40)),
     ),
     User(
@@ -120,6 +156,17 @@ class MockAdminRepository implements IAdminRepository {
       graduationYear: 2026,
       isAdmin: false,
       isActive: true,
+      moderatorGrants: [
+        ModeratorGrant(
+          id: 'grant_103',
+          userId: 'usr_mock_004',
+          userEmail: 'mohammadazam@iisc.ac.in',
+          userName: 'Mohammad Sufyan Azam',
+          module: 'academic_help',
+          scopeType: 'department',
+          grantedAt: DateTime.now().subtract(const Duration(days: 5)),
+        ),
+      ],
       createdAt: DateTime.now().subtract(const Duration(days: 35)),
     ),
     User(
@@ -239,6 +286,12 @@ class MockAdminRepository implements IAdminRepository {
     );
 
     _mockGrants.insert(0, newGrant);
+
+    final uIdx = _mockUsers.indexWhere((u) => u.email.toLowerCase() == trimmed);
+    if (uIdx != -1) {
+      final u = _mockUsers[uIdx];
+      _mockUsers[uIdx] = u.copyWith(moderatorGrants: [newGrant, ...u.moderatorGrants]);
+    }
     return newGrant;
   }
 
@@ -260,6 +313,17 @@ class MockAdminRepository implements IAdminRepository {
         grantedAt: old.grantedAt,
         revokedAt: DateTime.now(),
       );
+
+      if (old.userEmail != null) {
+        final email = old.userEmail!.toLowerCase();
+        final uIdx = _mockUsers.indexWhere((u) => u.email.toLowerCase() == email);
+        if (uIdx != -1) {
+          final u = _mockUsers[uIdx];
+          _mockUsers[uIdx] = u.copyWith(
+            moderatorGrants: u.moderatorGrants.where((g) => g.id != grantId).toList(),
+          );
+        }
+      }
     }
   }
 

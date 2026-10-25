@@ -74,7 +74,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.go('/app'),
+            onPressed: () => context.go('/buy'),
           ),
           title: const Text('My Profile'),
         ),
@@ -135,7 +135,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
             if (Navigator.of(context).canPop()) {
               Navigator.of(context).pop();
             } else {
-              context.go('/app');
+              context.go('/buy');
             }
           },
         ),
@@ -1036,7 +1036,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
     if (confirm == true) {
       await ref.read(authRepositoryProvider).signOut();
       ref.invalidate(currentUserProvider);
-      if (mounted) context.go('/app');
+      if (mounted) context.go('/buy');
     }
   }
 

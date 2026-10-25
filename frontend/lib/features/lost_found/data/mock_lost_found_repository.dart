@@ -542,6 +542,22 @@ class MockLostFoundRepository implements ILostFoundRepository {
   }
 
   @override
+  Future<CategoryRef> updateCategory(int id, String newName) async {
+    final clean = newName.trim();
+    final idx = _categories.indexWhere((c) => c.id == id);
+    if (idx != -1) {
+      _categories[idx] = CategoryRef(id: id, name: clean);
+      return _categories[idx];
+    }
+    throw Exception('Category not found');
+  }
+
+  @override
+  Future<void> deleteCategory(int id) async {
+    _categories.removeWhere((c) => c.id == id);
+  }
+
+  @override
   Future<List<LostFoundItem>> getPossibleMatches(LostFoundItem item) async {
     final oppositeKind = item.kind == PostType.lost ? PostType.found : PostType.lost;
     return _mockReports

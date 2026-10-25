@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../config/server_config.dart';
 import '../theme/app_theme.dart';
 import '../widgets/super_search_bar.dart';
 import '../../features/auth/domain/user.dart';
@@ -10,6 +11,7 @@ import '../../features/buy_sell/providers/buy_sell_providers.dart';
 import '../../features/buy_sell/ui/buy_sell_feed_screen.dart';
 import '../../features/lost_found/providers/lost_found_providers.dart';
 import '../../features/lost_found/ui/lost_found_feed_screen.dart';
+import '../../features/admin/providers/admin_providers.dart';
 import '../../features/admin/ui/admin_controls_screen.dart';
 import '../../features/profile/ui/user_profile_screen.dart';
 import '../../features/academics/providers/academics_providers.dart';
@@ -27,38 +29,72 @@ import '../../features/wanted/providers/wanted_providers.dart';
 final tabIndexProvider = StateProvider<int>((ref) => 0);
 
 // ---------------------------------------------------------------------------
-// GoRouter — single shell route, no per-tab routes, no history entries
+// GoRouter — direct routes for /buy and /lost-found with clean path strategy
 // ---------------------------------------------------------------------------
 final GoRouter appRouter = GoRouter(
-  initialLocation: '/app',
+  initialLocation: '/buy',
   routes: [
     GoRoute(
       path: '/',
-      redirect: (_, __) => '/app',
+      redirect: (_, __) => '/buy',
     ),
-    ShellRoute(
-      builder: (context, state, child) => child,
-      routes: [
-        GoRoute(
-          path: '/app',
-          builder: (context, state) => const AppShellLayout(),
-        ),
-        GoRoute(
-          path: '/profile',
-          builder: (context, state) => const UserProfileScreen(),
-        ),
-        GoRoute(
-          path: '/admin',
-          builder: (context, state) => const AdminControlsScreen(),
-        ),
-        GoRoute(
-          path: '/courses/:id',
-          builder: (context, state) => CourseGuideScreen(courseId: state.pathParameters['id']!),
-        ),
-      ],
+    GoRoute(
+      path: '/buy',
+      builder: (context, state) => const AppShellLayout(initialTab: 0),
+    ),
+    GoRoute(
+      path: '/lost-found',
+      builder: (context, state) => const AppShellLayout(initialTab: 1),
+    ),
+    // Aliases and subpath redirects
+    GoRoute(
+      path: '/app',
+      redirect: (_, __) => '/buy',
+    ),
+    GoRoute(
+      path: '/app/:subpath',
+      redirect: (context, state) {
+        final sub = (state.pathParameters['subpath'] ?? '').toLowerCase();
+        if (sub.contains('lost') || sub.contains('lnf') || sub.contains('found')) {
+          return '/lost-found';
+        }
+        return '/buy';
+      },
+    ),
+    GoRoute(
+      path: '/buy-sell',
+      redirect: (_, __) => '/buy',
+    ),
+    GoRoute(
+      path: '/lost_found',
+      redirect: (_, __) => '/lost-found',
+    ),
+    GoRoute(
+      path: '/lnf',
+      redirect: (_, __) => '/lost-found',
+    ),
+    GoRoute(
+      path: '/courses',
+      builder: (context, state) => const AppShellLayout(initialTab: 2),
+    ),
+    GoRoute(
+      path: '/courses/:id',
+      builder: (context, state) => CourseGuideScreen(courseId: state.pathParameters['id']!),
+    ),
+    GoRoute(
+      path: '/profile',
+      builder: (context, state) => const UserProfileScreen(),
+    ),
+    GoRoute(
+      path: '/admin',
+      builder: (context, state) {
+        final tabParam = state.uri.queryParameters['tab'];
+        final initialTab = tabParam != null ? int.tryParse(tabParam) : null;
+        return AdminControlsScreen(initialTab: initialTab);
+      },
     ),
   ],
-  errorBuilder: (context, state) => const AppShellLayout(),
+  errorBuilder: (context, state) => const AppShellLayout(initialTab: 0),
 );
 
 // ---------------------------------------------------------------------------
@@ -127,6 +163,8 @@ class _AppRefreshButtonState extends ConsumerState<AppRefreshButton>
       // 1. Refetch user profile & updated authority from backend
       await ref.read(authRepositoryProvider).getCurrentUser();
       ref.invalidate(authStateProvider);
+      ref.invalidate(moderatorGrantsProvider);
+      ref.invalidate(registeredUsersProvider);
 
       // 2. Refetch Buy & Sell feeds & categories
       ref.read(buySellPaginationProvider.notifier).loadInitial();
@@ -281,7 +319,8 @@ class _MobileMoreMenu extends ConsumerWidget {
 // Shell layout
 // ---------------------------------------------------------------------------
 class AppShellLayout extends ConsumerStatefulWidget {
-  const AppShellLayout({super.key});
+  final int initialTab;
+  const AppShellLayout({super.key, this.initialTab = 0});
 
   @override
   ConsumerState<AppShellLayout> createState() => _AppShellLayoutState();
@@ -303,6 +342,22 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
       begin: Offset.zero,
       end: Offset.zero,
     ).animate(_animController);
+
+    // Sync tab with initialTab on startup
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && ref.read(tabIndexProvider) != widget.initialTab) {
+        ref.read(tabIndexProvider.notifier).state = widget.initialTab;
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(AppShellLayout oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialTab != oldWidget.initialTab &&
+        widget.initialTab != ref.read(tabIndexProvider)) {
+      _switchTab(widget.initialTab, updateUrl: false);
+    }
   }
 
   @override
@@ -311,7 +366,7 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
     super.dispose();
   }
 
-  void _switchTab(int newIndex) {
+  void _switchTab(int newIndex, {bool updateUrl = true}) {
     final currentIndex = ref.read(tabIndexProvider);
     if (newIndex == currentIndex) return;
 
@@ -329,6 +384,10 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
 
     ref.read(tabIndexProvider.notifier).state = newIndex;
     _animController.forward(from: 0);
+
+    if (updateUrl) {
+      context.go(const ['/buy', '/lost-found', '/courses'][newIndex]);
+    }
   }
 
   @override
@@ -336,6 +395,7 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
     final tabIndex = ref.watch(tabIndexProvider);
     final isDesktop = MediaQuery.of(context).size.width > 750;
     final currentUser = ref.watch(currentUserProvider);
+    final serverConfig = ref.watch(serverConfigProvider);
     final isGuest = currentUser == null || currentUser.isGuest;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -414,6 +474,61 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
             // Phones: campus services, theme and the admin/moderator panel share one menu,
             // so the search box keeps its width.
             _MobileMoreMenu(currentUser: isGuest ? null : currentUser),
+
+          // Server Connection Mode Badge (Admin only)
+          if (!isGuest && currentUser.isAdmin)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: () => context.push('/admin?tab=4'),
+                child: Tooltip(
+                  message: serverConfig.useMockData
+                      ? 'Mock In-Memory Mode active. Click to configure live teammate backend.'
+                      : 'Live Backend: ${serverConfig.baseUrl}. Click to configure connection.',
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: serverConfig.useMockData
+                          ? (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9))
+                          : const Color(0xFF10B981).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: serverConfig.useMockData
+                            ? (isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1))
+                            : const Color(0xFF10B981),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: serverConfig.useMockData ? Colors.amber : const Color(0xFF10B981),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          serverConfig.useMockData
+                              ? 'Mock Mode'
+                              : 'Live: ${_formatHost(serverConfig.baseUrl)}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: serverConfig.useMockData
+                                ? (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))
+                                : const Color(0xFF10B981),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
           // Admin Controls Quick Access
           if (isDesktop && !isGuest && currentUser.isAdmin)
@@ -690,6 +805,18 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
                 ],
               ),
               const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    context.push('/admin');
+                  },
+                  icon: const Icon(Icons.admin_panel_settings_rounded, size: 16),
+                  label: const Text('Open Admin Controls Panel'),
+                ),
+              ),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
@@ -723,6 +850,31 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
                     ),
                   ),
                 ],
+              ),
+            ] else if (currentUser.isModerator) ...[
+              const Divider(height: 24),
+              Row(
+                children: [
+                  Icon(Icons.shield_outlined, size: 16, color: Colors.teal.shade700),
+                  const SizedBox(width: 8),
+                  const Text('Moderator Controls', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(
+                    foregroundColor: isDark ? Colors.teal.shade200 : Colors.teal.shade900,
+                    backgroundColor: isDark ? const Color(0xFF134E4A) : Colors.teal.shade50,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    context.push('/admin');
+                  },
+                  icon: const Icon(Icons.shield_outlined, size: 16),
+                  label: const Text('Open Moderator Controls'),
+                ),
               ),
             ],
           ],
@@ -913,5 +1065,17 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
         ],
       ),
     );
+  }
+
+  String _formatHost(String url) {
+    try {
+      final uri = Uri.parse(url);
+      if (uri.host.isNotEmpty) {
+        return uri.hasPort ? '${uri.host}:${uri.port}' : uri.host;
+      }
+      return url.replaceFirst(RegExp(r'^https?:\/\/'), '');
+    } catch (_) {
+      return url;
+    }
   }
 }

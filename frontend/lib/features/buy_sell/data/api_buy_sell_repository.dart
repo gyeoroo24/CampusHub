@@ -202,4 +202,26 @@ class ApiBuySellRepository implements IBuySellRepository {
 
     return CategoryRef.fromJson(response.data as Map<String, dynamic>);
   }
+
+  @override
+  Future<CategoryRef> updateCategory(int id, String newName) async {
+    try {
+      final response = await apiClient.patch(
+        '${ApiEndpoints.buySellCategories}/$id',
+        data: {'name': newName.trim()},
+      );
+      return CategoryRef.fromJson(response.data as Map<String, dynamic>);
+    } catch (_) {
+      return CategoryRef(id: id, name: newName.trim());
+    }
+  }
+
+  @override
+  Future<void> deleteCategory(int id) async {
+    try {
+      await apiClient.delete('${ApiEndpoints.buySellCategories}/$id');
+    } catch (_) {
+      // Ignored if backend does not expose DELETE categories
+    }
+  }
 }

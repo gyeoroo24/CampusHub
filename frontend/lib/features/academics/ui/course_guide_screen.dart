@@ -38,7 +38,7 @@ class CourseGuideScreen extends ConsumerWidget {
         leading: IconButton(
           tooltip: 'Back to courses',
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.canPop() ? context.pop() : context.go('/app'),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/courses'),
         ),
         title: guideAsync.maybeWhen(
           data: (g) => Text('${g.courseCode} · ${g.courseName}', overflow: TextOverflow.ellipsis),

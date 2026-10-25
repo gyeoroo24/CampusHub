@@ -25,6 +25,7 @@ class SavedSearchesDialog extends ConsumerWidget {
         selectedStatuses: {ListingStatus.available},
       );
       ref.read(tabIndexProvider.notifier).state = 0;
+      appRouter.go('/buy');
     } else {
       ref.read(lostFoundFilterProvider.notifier).state = LostFoundFilterState(
         query: search.query ?? '',
@@ -32,6 +33,7 @@ class SavedSearchesDialog extends ConsumerWidget {
         typeFilter: PostType.found,
       );
       ref.read(tabIndexProvider.notifier).state = 1;
+      appRouter.go('/lost-found');
     }
     try {
       await ref.read(alertsRepositoryProvider).markSeen(search.id);

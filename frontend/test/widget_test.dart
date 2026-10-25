@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:campus_hub/core/router/app_router.dart';
 import 'package:campus_hub/features/auth/domain/user.dart';
 import 'package:campus_hub/features/auth/providers/auth_providers.dart';
 import 'package:campus_hub/features/buy_sell/data/mock_buy_sell_repository.dart';
@@ -22,6 +23,10 @@ Widget createTestApp({List<Override> overrides = const []}) {
 }
 
 void main() {
+  setUp(() {
+    appRouter.go('/buy');
+  });
+
   testWidgets('CampusHub desktop smoke test', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1.0;

@@ -662,4 +662,20 @@ class MockBuySellRepository implements IBuySellRepository {
     _categories.add(newCat);
     return newCat;
   }
+
+  @override
+  Future<CategoryRef> updateCategory(int id, String newName) async {
+    final clean = newName.trim();
+    final idx = _categories.indexWhere((c) => c.id == id);
+    if (idx != -1) {
+      _categories[idx] = CategoryRef(id: id, name: clean);
+      return _categories[idx];
+    }
+    throw Exception('Category not found');
+  }
+
+  @override
+  Future<void> deleteCategory(int id) async {
+    _categories.removeWhere((c) => c.id == id);
+  }
 }

@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/constants/app_config.dart';
+import '../../../core/config/server_config.dart';
 import '../../../core/enums/sort_option.dart';
 import '../../../core/enums/view_mode.dart';
 import '../../../core/models/category_ref.dart';
@@ -8,7 +8,8 @@ import '../data/buy_sell_repository.dart';
 import '../domain/buy_sell_item.dart';
 
 final buySellRepositoryProvider = Provider<IBuySellRepository>((ref) {
-  if (AppConfig.useMockData) {
+  final serverConfig = ref.watch(serverConfigProvider);
+  if (serverConfig.useMockData) {
     return MockBuySellRepository();
   }
   return ApiBuySellRepository(ref.watch(apiClientProvider));

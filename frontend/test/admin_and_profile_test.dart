@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:campus_hub/core/config/server_config.dart';
 import 'package:campus_hub/core/models/category_ref.dart';
 import 'package:campus_hub/core/models/contact.dart';
 import 'package:campus_hub/core/models/user_ref.dart';
@@ -291,11 +292,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Admin Controls & Governance'), findsOneWidget);
-      expect(find.text('Moderators (FR-3)'), findsOneWidget);
+      expect(find.text('Moderators'), findsOneWidget);
       expect(find.text('User Accounts'), findsOneWidget);
-      expect(find.text('Reports Queue (FR-10)'), findsOneWidget);
+      expect(find.text('Reports Queue'), findsOneWidget);
       expect(find.text('Categories'), findsOneWidget);
-      expect(find.text('System & Health'), findsOneWidget);
+      expect(find.text('Backend & Health'), findsOneWidget);
       expect(find.text('Promote User to Moderator by IISc Email'), findsOneWidget);
     });
 
@@ -334,7 +335,9 @@ void main() {
       // Access is granted, not restricted
       expect(find.text('Access Restricted'), findsNothing);
       expect(find.text('Moderator Controls & Reports'), findsOneWidget);
-      expect(find.text('Reports Queue (FR-10)'), findsOneWidget);
+      expect(find.text('Reports Queue'), findsOneWidget);
+      expect(find.text('Admin Contact'), findsOneWidget);
+      expect(find.text('Active Moderator Assignments'), findsNothing);
     });
 
     test('MockAuthRepository hydrates active moderator grants and profile for designated moderator', () async {
@@ -360,6 +363,65 @@ void main() {
           .firstWhere((r) => r.path == '/');
       expect(rootRoute.path, '/');
       expect(rootRoute.redirect, isNotNull);
+    });
+
+    test('ServerConfig model and notifier update settings correctly', () {
+      final config = const ServerConfig(
+        useMockData: true,
+        apiBaseUrl: 'http://localhost:8000',
+        devKey: 'test_key',
+        devUserEmail: 'mukund@iisc.ac.in',
+        databaseUrl: 'postgresql://postgres:pass@localhost:5432/db',
+      );
+
+      expect(config.useMockData, isTrue);
+      expect(config.baseUrl, 'http://localhost:8000');
+      expect(config.devKey, 'test_key');
+      expect(config.devUserEmail, 'mukund@iisc.ac.in');
+      expect(config.databaseUrl, 'postgresql://postgres:pass@localhost:5432/db');
+
+      final updated = config.copyWith(
+        useMockData: false,
+        apiBaseUrl: 'http://10.217.103.203:8000',
+      );
+      expect(updated.useMockData, isFalse);
+      expect(updated.apiBaseUrl, 'http://10.217.103.203:8000');
+      expect(updated.devKey, 'test_key');
+    });
+
+    testWidgets('AdminControlsScreen tab 4 renders Live Demo Connection Card', (WidgetTester tester) async {
+      final adminUser = User(
+        id: 'usr_mock_001',
+        email: 'mukund@iisc.ac.in',
+        name: 'Mukund Kukreja',
+        isAdmin: true,
+        moderatorGrants: const [],
+        createdAt: DateTime.now(),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            currentUserProvider.overrideWith((ref) => adminUser),
+            adminRepositoryProvider.overrideWithValue(MockAdminRepository()),
+            buySellCategoriesProvider.overrideWith((ref) => [const CategoryRef(id: 1, name: 'Books')]),
+            lostFoundCategoriesProvider.overrideWith((ref) => [const CategoryRef(id: 1, name: 'Electronics')]),
+          ],
+          child: const MaterialApp(
+            home: AdminControlsScreen(initialTab: 4),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Live Demo Backend & Database Connection'), findsOneWidget);
+      expect(find.text('FastAPI Server Base URL'), findsOneWidget);
+      expect(find.text('Developer Security Key / Secret (X-Dev-Key)'), findsOneWidget);
+      expect(find.text('Test User Email Identity (X-Dev-User)'), findsOneWidget);
+      expect(find.text('Database Connection URI (Demo Reference)'), findsOneWidget);
+      expect(find.text('Save & Apply Backend'), findsOneWidget);
+      expect(find.text('Test Server & Database Connection'), findsOneWidget);
+      expect(find.text('Reset to Default Mock'), findsOneWidget);
     });
   });
 }

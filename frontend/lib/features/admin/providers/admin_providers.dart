@@ -1,12 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/constants/app_config.dart';
+import '../../../core/config/server_config.dart';
 import '../../auth/domain/user.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../data/admin_repository.dart';
 import '../domain/content_report.dart';
 
 final adminRepositoryProvider = Provider<IAdminRepository>((ref) {
-  if (AppConfig.useMockData) {
+  final serverConfig = ref.watch(serverConfigProvider);
+  if (serverConfig.useMockData) {
     return MockAdminRepository();
   }
   return ApiAdminRepository(ref.watch(apiClientProvider));
