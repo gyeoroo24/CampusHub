@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/constants/app_config.dart';
+import '../../../core/config/server_config.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../data/alerts_repository.dart';
 import '../domain/alerts_models.dart';
 
 final alertsRepositoryProvider = Provider<IAlertsRepository>((ref) {
-  if (AppConfig.useMockData) {
+  if (ref.watch(serverConfigProvider).useMockData) {
     return MockAlertsRepository();
   }
   return ApiAlertsRepository(ref.watch(apiClientProvider));

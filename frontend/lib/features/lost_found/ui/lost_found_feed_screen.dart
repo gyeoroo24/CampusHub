@@ -1,14 +1,40 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../domain/lost_found_item.dart';
+import '../providers/lost_found_providers.dart';
 import 'widgets/lost_found_column.dart';
 import 'widgets/lost_found_filter_bar.dart';
 
-class LostFoundFeedScreen extends ConsumerWidget {
+class LostFoundFeedScreen extends ConsumerStatefulWidget {
   const LostFoundFeedScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LostFoundFeedScreen> createState() => _LostFoundFeedScreenState();
+}
+
+class _LostFoundFeedScreenState extends ConsumerState<LostFoundFeedScreen> {
+  // Captured in initState: `ref` itself is unusable by the time dispose() runs (Riverpod
+  // tears it down before calling the widget's dispose), but a notifier obtained earlier is
+  // still a plain object we can call into.
+  late final StateController<LostFoundFilterState> _filterNotifier;
+
+  @override
+  void initState() {
+    super.initState();
+    _filterNotifier = ref.read(lostFoundFilterProvider.notifier);
+  }
+
+  @override
+  void dispose() {
+    // Filters are scoped to a visit of this tab, not the whole session — reset them
+    // on the way out so switching tabs and back starts from a clean feed. Riverpod forbids
+    // writing a provider while the widget tree is being torn down, so this is deferred a tick.
+    Future(() => _filterNotifier.state = LostFoundFilterState());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final isDesktop = MediaQuery.of(context).size.width > 750;

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import '../../../../core/utils/contact_actions.dart';
 import '../../../../core/utils/date_time_formatter.dart';
 import '../../../../core/widgets/no_photo_placeholder.dart';
 import '../../domain/buy_sell_item.dart';
@@ -34,15 +34,15 @@ class _BuySellGridCardState extends State<BuySellGridCard> {
     switch (item.status) {
       case ListingStatus.available:
         statusColor = const Color(0xFF059669);
-        statusLabel = 'AVAILABLE';
+        statusLabel = ListingStatus.available.label.toUpperCase();
         break;
       case ListingStatus.reserved:
         statusColor = Colors.amber.shade800;
-        statusLabel = 'RESERVED';
+        statusLabel = ListingStatus.reserved.label.toUpperCase();
         break;
       case ListingStatus.sold:
         statusColor = isDark ? const Color(0xFFA1A1AA) : const Color(0xFF71717A);
-        statusLabel = 'SOLD';
+        statusLabel = ListingStatus.sold.label.toUpperCase();
         break;
     }
 
@@ -336,14 +336,7 @@ class _BuySellGridCardState extends State<BuySellGridCard> {
                                   onPressed: () {
                                     final email = item.sellerContact?.email ??
                                         '${item.seller.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
-                                    Clipboard.setData(ClipboardData(text: email));
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Copied $email to clipboard'),
-                                        duration: const Duration(seconds: 2),
-                                        behavior: SnackBarBehavior.floating,
-                                      ),
-                                    );
+                                    contactBy(context, email: email);
                                   },
                                   icon: Icon(Icons.email_outlined, size: 13, color: Theme.of(context).colorScheme.primary),
                                   label: Text(
@@ -368,14 +361,7 @@ class _BuySellGridCardState extends State<BuySellGridCard> {
                                 child: OutlinedButton.icon(
                                   onPressed: () {
                                     final phone = item.sellerContact!.phone!;
-                                    Clipboard.setData(ClipboardData(text: phone));
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Copied $phone to clipboard'),
-                                        duration: const Duration(seconds: 2),
-                                        behavior: SnackBarBehavior.floating,
-                                      ),
-                                    );
+                                    contactBy(context, phone: phone);
                                   },
                                   icon: Icon(Icons.phone_outlined, size: 13, color: Theme.of(context).colorScheme.primary),
                                   label: Text(
@@ -406,14 +392,7 @@ class _BuySellGridCardState extends State<BuySellGridCard> {
                             onPressed: () {
                               final email = item.sellerContact?.email ??
                                   '${item.seller.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
-                              Clipboard.setData(ClipboardData(text: email));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Copied $email to clipboard'),
-                                  duration: const Duration(seconds: 2),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
+                              contactBy(context, email: email);
                             },
                             icon: Icon(Icons.email_outlined, size: 13, color: Theme.of(context).colorScheme.primary),
                             label: Text(

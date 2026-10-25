@@ -47,8 +47,9 @@ class ApiLostFoundRepository implements ILostFoundRepository {
     if (categoryId != null) queryParams['category_id'] = categoryId;
     if (reporterId != null && reporterId.isNotEmpty) queryParams['reporter_id'] = reporterId;
     if (dateRange != null) {
-      queryParams['from_date'] = dateRange.start.toIso8601String();
-      queryParams['to_date'] = dateRange.end.toIso8601String();
+      // UTC with an explicit zone: the API compares against when the item was lost or found.
+      queryParams['from_date'] = dateRange.start.toUtc().toIso8601String();
+      queryParams['to_date'] = dateRange.end.toUtc().toIso8601String();
     }
     if (sortOption == SortOption.oldest) {
       queryParams['sort'] = 'oldest';
@@ -257,27 +258,18 @@ class ApiLostFoundRepository implements ILostFoundRepository {
     return CategoryRef.fromJson(response.data as Map<String, dynamic>);
   }
 
+  // The API has no rename or delete for categories (only list and add), so say so rather than
+  // reporting a success that never happened. Mock mode still supports both.
   @override
   Future<CategoryRef> updateCategory(int id, String newName) async {
-    try {
-      final response = await apiClient.patch(
-        '${ApiEndpoints.lostFoundCategories}/$id',
-        data: {'name': newName.trim()},
-      );
-      return CategoryRef.fromJson(response.data as Map<String, dynamic>);
-    } catch (_) {
-      return CategoryRef(id: id, name: newName.trim());
-    }
+    throw Exception("The server doesn't support renaming categories yet.");
   }
 
   @override
   Future<void> deleteCategory(int id) async {
-    try {
-      await apiClient.delete('${ApiEndpoints.lostFoundCategories}/$id');
-    } catch (_) {
-      // Ignored if backend does not expose DELETE categories
-    }
+    throw Exception("The server doesn't support deleting categories yet.");
   }
+
 
   @override
   Future<List<LostFoundItem>> getPossibleMatches(LostFoundItem item) async {

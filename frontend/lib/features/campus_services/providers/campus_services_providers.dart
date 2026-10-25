@@ -1,11 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/constants/app_config.dart';
+import '../../../core/config/server_config.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../data/campus_services_repository.dart';
 import '../domain/campus_service.dart';
 
 final campusServicesRepositoryProvider = Provider<ICampusServicesRepository>((ref) {
-  if (AppConfig.useMockData) {
+  if (ref.watch(serverConfigProvider).useMockData) {
     return MockCampusServicesRepository();
   }
   return ApiCampusServicesRepository(ref.watch(apiClientProvider));

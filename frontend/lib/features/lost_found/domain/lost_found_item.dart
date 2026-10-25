@@ -6,9 +6,13 @@ import '../../../../core/models/user_ref.dart';
 enum PostType { lost, found }
 
 enum ReportStatus {
-  open,
-  matched,
-  closed;
+  open('Open'),
+  matched('Matched'),
+  closed('Resolved');
+
+  /// The one name used for this status everywhere: filters, cards and dialogs.
+  final String label;
+  const ReportStatus(this.label);
 
   static ReportStatus fromString(String val) {
     switch (val.toLowerCase()) {

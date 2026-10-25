@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/utils/error_text.dart';
+import '../../../core/utils/validators.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/utils/date_time_formatter.dart';
 import '../../auth/domain/user.dart';
@@ -14,6 +17,7 @@ import '../../lost_found/providers/lost_found_providers.dart';
 import '../../lost_found/ui/widgets/edit_report_dialog.dart';
 import '../../lost_found/ui/widgets/lost_found_detail_dialog.dart';
 import '../../wanted/providers/wanted_providers.dart';
+import 'role_card.dart';
 import '../../wanted/ui/wanted_feed_sliver.dart';
 
 class UserProfileScreen extends ConsumerStatefulWidget {
@@ -34,6 +38,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
   final _phoneController = TextEditingController();
   final _programmeController = TextEditingController();
   final _gradYearController = TextEditingController();
+  final _profileFormKey = GlobalKey<FormState>();
 
   @override
   void initState() {
@@ -174,6 +179,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
                 // ── Profile Overview Header ──
                 _buildHeaderCard(currentUser, isDark, theme),
                 const SizedBox(height: 20),
+
+                // ── Role: admin tools or moderator roles (with Step down); nothing for students ──
+                RoleCard(user: currentUser),
 
                 // ── Edit Profile Form (collapsible) ──
                 if (_isEditingProfile) ...[
@@ -331,46 +339,6 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
               ],
             ),
 
-            if (user.moderatorGrants.isNotEmpty) ...[
-              const Divider(height: 24),
-              Wrap(
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.shield_outlined, size: 16, color: Colors.blue.shade700),
-                      const SizedBox(width: 6),
-                      const Text(
-                        'Active Moderation Duties:',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                  for (final grant in user.moderatorGrants)
-                    Chip(
-                      avatar: const Icon(Icons.verified_user_outlined, size: 14),
-                      label: Text(
-                        '${grant.module.replaceAll('_', ' ').toUpperCase()} (${grant.scopeType})',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                    ),
-                  FilledButton.tonalIcon(
-                    style: FilledButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    ),
-                    icon: const Icon(Icons.report_gmailerrorred_rounded, size: 14),
-                    label: const Text('Reports Queue', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    onPressed: () => context.push('/admin'),
-                  ),
-                ],
-              ),
-            ],
           ],
         ),
       ),
@@ -397,17 +365,24 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
                 Icon(Icons.badge_outlined, size: 20, color: theme.colorScheme.primary),
                 const SizedBox(width: 8),
                 const Text(
-                  'Update Profile Details (PATCH /api/v1/me)',
+                  'Update profile details',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                 ),
               ],
             ),
             const SizedBox(height: 16),
+            Form(
+              key: _profileFormKey,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              child: Column(children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: TextField(
+                  child: TextFormField(
                     controller: _nameController,
+                    maxLength: 100,
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter your name' : null,
                     decoration: InputDecoration(
                       labelText: 'Full Name',
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -417,11 +392,16 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: TextField(
+                  child: TextFormField(
                     controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    maxLength: 20,
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+\s-]'))],
+                    validator: validatePhone,
                     decoration: InputDecoration(
                       labelText: 'Phone Number (Optional)',
                       hintText: 'e.g. +919876543210',
+                      helperText: '10–15 digits, optional + and country code',
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     ),
@@ -429,12 +409,14 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 4),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: TextField(
+                  child: TextFormField(
                     controller: _programmeController,
+                    maxLength: 100,
                     decoration: InputDecoration(
                       labelText: 'Degree Programme',
                       hintText: 'e.g. MTech CSA, PhD EECS',
@@ -445,9 +427,16 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: TextField(
+                  child: TextFormField(
                     controller: _gradYearController,
                     keyboardType: TextInputType.number,
+                    maxLength: 4,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) return null;
+                      final year = int.tryParse(v.trim());
+                      return (year == null || year < 1950 || year > 2100) ? 'A year between 1950 and 2100' : null;
+                    },
                     decoration: InputDecoration(
                       labelText: 'Graduation Year',
                       hintText: 'e.g. 2026',
@@ -457,6 +446,8 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
                   ),
                 ),
               ],
+            ),
+              ]),
             ),
             const SizedBox(height: 16),
             Align(
@@ -480,22 +471,20 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
   }
 
   Future<void> _handleSaveProfile() async {
+    // Same rules as the server, so a bad value is caught here instead of failing on save.
+    if (!(_profileFormKey.currentState?.validate() ?? false)) return;
     final name = _nameController.text.trim();
-    final phone = _phoneController.text.trim();
+    final phone = normalizePhone(_phoneController.text);
     final programme = _programmeController.text.trim();
-    final gradYearStr = _gradYearController.text.trim();
-    final gradYear = int.tryParse(gradYearStr);
-
-    if (name.isEmpty) {
-      _showToast('Name cannot be empty.');
-      return;
-    }
+    final gradYear = int.tryParse(_gradYearController.text.trim());
+    final hadPhone = (ref.read(currentUserProvider)?.phone ?? '').isNotEmpty;
 
     setState(() => _isSavingProfile = true);
     try {
       await ref.read(authRepositoryProvider).updateProfile(
             name: name,
             phone: phone.isNotEmpty ? phone : null,
+            clearPhone: phone.isEmpty && hadPhone,
             programme: programme.isNotEmpty ? programme : null,
             graduationYear: gradYear,
           );
@@ -503,7 +492,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
       setState(() => _isEditingProfile = false);
       _showToast('Profile updated successfully.');
     } catch (e) {
-      _showToast('Failed to update profile: $e', isError: true);
+      _showToast('Failed to update profile: ${errorText(e)}', isError: true);
     } finally {
       if (mounted) setState(() => _isSavingProfile = false);
     }
@@ -638,7 +627,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
                       children: [
                         for (final st in ListingStatus.values) ...[
                           ChoiceChip(
-                            label: Text(st.name.toUpperCase(), style: const TextStyle(fontSize: 10)),
+                            label: Text(st.label, style: const TextStyle(fontSize: 10)),
                             selected: item.status == st,
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
@@ -682,7 +671,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Text('Error loading listings: $e'),
+      error: (e, _) => Text('Error loading listings: ${errorText(e)}'),
     );
   }
 
@@ -754,7 +743,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
                       children: [
                         for (final st in ReportStatus.values) ...[
                           ChoiceChip(
-                            label: Text(st.name.toUpperCase(), style: const TextStyle(fontSize: 10)),
+                            label: Text(st.label, style: const TextStyle(fontSize: 10)),
                             selected: item.status == st,
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
@@ -798,7 +787,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Text('Error: $e'),
+      error: (e, _) => Text('Error: ${errorText(e)}'),
     );
   }
 
@@ -870,7 +859,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
                       children: [
                         for (final st in ReportStatus.values) ...[
                           ChoiceChip(
-                            label: Text(st.name.toUpperCase(), style: const TextStyle(fontSize: 10)),
+                            label: Text(st.label, style: const TextStyle(fontSize: 10)),
                             selected: item.status == st,
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
@@ -914,7 +903,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Text('Error: $e'),
+      error: (e, _) => Text('Error: ${errorText(e)}'),
     );
   }
 
@@ -923,7 +912,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
   Widget _buildMyWantedList() {
     return ref.watch(myWantedPostsProvider).when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Failed to load Wanted posts: $e')),
+          error: (e, _) => Center(child: Text('Failed to load Wanted posts: ${errorText(e)}')),
           data: (posts) => posts.isEmpty
               ? _buildEmptyState(
                   'No Wanted Posts Yet',

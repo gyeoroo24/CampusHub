@@ -6,7 +6,7 @@ import '../../buy_sell/domain/buy_sell_item.dart';
 
 enum WantedStatus {
   open('Looking'),
-  fulfilled('Found it'),
+  fulfilled('Got it'),
   closed('Closed');
 
   final String label;

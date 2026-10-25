@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/utils/web_history_support.dart';
 import '../../../core/utils/date_time_formatter.dart';
 import '../../../core/utils/error_text.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../auth/ui/auth_dialog.dart';
 import '../../buy_sell/domain/buy_sell_item.dart';
 import '../../buy_sell/ui/widgets/buy_sell_detail_dialog.dart';
 import '../domain/wanted_post.dart';
@@ -98,7 +100,8 @@ class _WantedDetailDialogState extends ConsumerState<WantedDetailDialog> {
     final canModerate = user != null && !isOwner && (user.canModerateBuySell || user.isAdmin);
     final matches = ref.watch(wantedMatchesProvider(_post.id));
 
-    return AlertDialog(
+    return ModalHistoryWrapper(
+      child: AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       titlePadding: const EdgeInsets.fromLTRB(22, 18, 22, 0),
       title: Column(
@@ -146,8 +149,21 @@ class _WantedDetailDialogState extends ConsumerState<WantedDetailDialog> {
               if (_post.authorContact != null && !isOwner)
                 _ContactRow(email: _post.authorContact!.email, phone: _post.authorContact!.phone)
               else if (user == null || user.isGuest)
-                Text('Sign in to see how to contact the buyer.',
-                    style: TextStyle(fontSize: 12, color: theme.hintColor)),
+                TextButton.icon(
+                  onPressed: () async {
+                    final signedIn = await AuthDialog.ensureSignedIn(
+                      context,
+                      ref,
+                      title: 'Sign In to Contact the Buyer',
+                      message: "The buyer's email and phone are shown to signed-in IISc members.",
+                    );
+                    if (!signedIn || !mounted) return;
+                    final full = await ref.read(wantedRepositoryProvider).getWanted(_post.id);
+                    if (mounted && full != null) setState(() => _post = full);
+                  },
+                  icon: const Icon(Icons.login_rounded, size: 16),
+                  label: const Text('Sign in to see how to contact the buyer'),
+                ),
               const Divider(height: 28),
               Text('Listings that match', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
@@ -201,7 +217,7 @@ class _WantedDetailDialogState extends ConsumerState<WantedDetailDialog> {
           const SizedBox.shrink(),
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
       ],
-    );
+    ));
   }
 }
 

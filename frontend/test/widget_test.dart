@@ -71,7 +71,7 @@ void main() {
     expect(find.byType(FloatingActionButton), findsNWidgets(2));
   });
 
-  testWidgets('CampusHub user profile account dialog renders without error', (WidgetTester tester) async {
+  testWidgets('Account menu shows profile, admin panel and sign out for a signed-in admin', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
@@ -101,28 +101,23 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Find user profile pill button in app bar
-    final profileButton = find.text('Adithya C');
-    expect(profileButton, findsOneWidget);
+    // The account control in the app bar shows the user's name
+    final accountButton = find.text('Adithya C');
+    expect(accountButton, findsOneWidget);
 
-    // Tap it to open account dialog
-    await tester.tap(profileButton);
+    await tester.tap(accountButton);
     await tester.pumpAndSettle();
 
-    // Verify account dialog is displayed with email, roles, and admin controls without any crash
+    // Menu: name, email and role, then the actions (account tools live in the admin panel now)
     expect(find.text('admin@iisc.ac.in'), findsOneWidget);
-    expect(find.text('Permissions & Roles:'), findsOneWidget);
     expect(find.text('Admin'), findsOneWidget);
-    expect(find.text('Moderator'), findsOneWidget);
-    expect(find.text('Admin Management Controls'), findsOneWidget);
-    expect(find.text('Account Status'), findsOneWidget);
-    expect(find.text('Transfer Role'), findsOneWidget);
-    expect(find.text('Sign Out'), findsOneWidget);
+    expect(find.text('My profile'), findsOneWidget);
+    expect(find.text('Admin panel'), findsOneWidget);
+    expect(find.text('Sign out'), findsOneWidget);
 
-    // Close the dialog
-    await tester.tap(find.text('Close'));
+    // Close the menu
+    await tester.tapAt(const Offset(10, 600));
     await tester.pumpAndSettle();
-
     expect(find.text('admin@iisc.ac.in'), findsNothing);
   });
 

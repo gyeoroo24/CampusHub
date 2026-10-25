@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/widgets/error_state.dart';
 import '../../../core/enums/sort_option.dart';
 import '../../../core/enums/view_mode.dart';
 import '../../../core/utils/category_emoji_helper.dart';
@@ -42,16 +43,26 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
     (label: '₹2,000+', min: 2000.0, max: null),
   ];
 
+  // Captured in initState: `ref` itself is unusable by the time dispose() runs (Riverpod
+  // tears it down before calling the widget's dispose), but a notifier obtained earlier is
+  // still a plain object we can call into.
+  late final StateController<BuySellFilterState> _filterNotifier;
+
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _filterNotifier = ref.read(buySellFilterProvider.notifier);
   }
 
   @override
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    // Filters are scoped to a visit of this tab, not the whole session — reset them
+    // on the way out so switching tabs and back starts from a clean feed. Riverpod forbids
+    // writing a provider while the widget tree is being torn down, so this is deferred a tick.
+    Future(() => _filterNotifier.state = BuySellFilterState());
     super.dispose();
   }
 
@@ -404,7 +415,7 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                           ...[
                             (label: 'Available', status: ListingStatus.available),
                             (label: 'Reserved', status: ListingStatus.reserved),
-                            (label: 'Sold Out', status: ListingStatus.sold),
+                            (label: 'Sold', status: ListingStatus.sold),
                           ].map((st) {
                             final isSelected = filter.selectedStatuses.contains(st.status);
                             return Padding(
@@ -560,6 +571,14 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
               child: filter.viewMode == ViewMode.list
                   ? const SkeletonList(itemCount: 6)
                   : const SkeletonGrid(itemCount: 8),
+            )
+          else if (paginatedState.items.isEmpty && paginatedState.errorMessage != null)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: ErrorState(
+                message: paginatedState.errorMessage!,
+                onRetry: () => ref.read(buySellPaginationProvider.notifier).loadInitial(),
+              ),
             )
           else if (paginatedState.items.isEmpty)
             SliverFillRemaining(

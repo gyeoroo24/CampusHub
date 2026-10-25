@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/utils/web_history_support.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/utils/error_text.dart';
 import '../../buy_sell/domain/buy_sell_item.dart';
@@ -61,7 +62,8 @@ class SavedSearchesDialog extends ConsumerWidget {
       }
     }
 
-    return AlertDialog(
+    return ModalHistoryWrapper(
+      child: AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: const Row(
         children: [
@@ -148,6 +150,6 @@ class SavedSearchesDialog extends ConsumerWidget {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
       ],
-    );
+    ));
   }
 }

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/utils/contact_actions.dart';
+import '../../../../core/utils/error_text.dart';
 import '../../../../core/utils/date_time_formatter.dart';
 import '../../../../core/utils/web_history_support.dart';
 import '../../../../core/widgets/photo_carousel.dart';
+import '../../../../core/widgets/report_content_dialog.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../../../auth/ui/auth_dialog.dart';
 import '../../domain/buy_sell_item.dart';
@@ -22,6 +24,9 @@ class BuySellDetailDialog extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // The feed's summary has no description or seller contact: show it at once, then the full listing.
+    final full = ref.watch(listingDetailProvider(this.item.id));
+    final item = full.valueOrNull ?? this.item;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -79,6 +84,26 @@ class BuySellDetailDialog extends ConsumerWidget {
                       ),
                     ),
                   ),
+                  // Report button (not for the listing's own owner)
+                  if (!isOwner)
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: CircleAvatar(
+                        backgroundColor: Colors.black.withValues(alpha: 0.6),
+                        child: IconButton(
+                          tooltip: 'Report this listing',
+                          icon: const Icon(Icons.flag_outlined, color: Colors.white, size: 18),
+                          onPressed: () => ReportContentDialog.show(
+                            context,
+                            ref,
+                            targetType: 'listing',
+                            targetId: item.id,
+                            itemLabel: 'this listing',
+                          ),
+                        ),
+                      ),
+                    ),
                   // Status badge
                   Positioned(
                     bottom: 12,
@@ -90,7 +115,7 @@ class BuySellDetailDialog extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        item.status.name.toUpperCase(),
+                        item.status.label.toUpperCase(),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 11,
@@ -202,7 +227,8 @@ class BuySellDetailDialog extends ConsumerWidget {
                     const SizedBox(height: 20),
 
                     // ── Status & Owner Controls (Original Author Only) ─────────────────────────
-                    if (isOwner) ...[
+                    // The backend lets the admin edit anyone's listing too.
+                    if (isOwner || (currentUser?.isAdmin ?? false)) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -216,8 +242,8 @@ class BuySellDetailDialog extends ConsumerWidget {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text(
-                                  'Listing Owner Controls',
+                                Text(
+                                  isOwner ? 'Listing Owner Controls' : 'Admin Controls',
                                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                                 ),
                                 Row(
@@ -253,13 +279,10 @@ class BuySellDetailDialog extends ConsumerWidget {
                               children: ListingStatus.values.map((status) {
                                 final isSelected = item.status == status;
                                 return ChoiceChip(
-                                  label: Text(status.name.toUpperCase()),
+                                  label: Text(status.label),
                                   selected: isSelected,
                                   onSelected: (selected) {
-                                    if (selected && onStatusChange != null) {
-                                      onStatusChange!(status);
-                                      Navigator.pop(context);
-                                    }
+                                    if (selected && !isSelected) _changeStatus(context, ref, status);
                                   },
                                 );
                               }).toList(),
@@ -319,10 +342,7 @@ class BuySellDetailDialog extends ConsumerWidget {
                                   children: [
                                     ElevatedButton.icon(
                                       onPressed: () {
-                                        Clipboard.setData(ClipboardData(text: item.sellerContact!.email));
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Copied email: ${item.sellerContact!.email}')),
-                                        );
+                                        contactBy(context, email: item.sellerContact!.email);
                                       },
                                       icon: const Icon(Icons.email_outlined, size: 14),
                                       label: const Text('Email'),
@@ -332,10 +352,7 @@ class BuySellDetailDialog extends ConsumerWidget {
                                       const SizedBox(width: 8),
                                       ElevatedButton.icon(
                                         onPressed: () {
-                                          Clipboard.setData(ClipboardData(text: item.sellerContact!.phone!));
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text('Copied phone: ${item.sellerContact!.phone}')),
-                                          );
+                                          contactBy(context, phone: item.sellerContact!.phone!);
                                         },
                                         icon: const Icon(Icons.phone_outlined, size: 14),
                                         label: const Text('Call'),
@@ -345,7 +362,15 @@ class BuySellDetailDialog extends ConsumerWidget {
                                 ),
                               ],
                             )
-                          : (currentUser != null && !currentUser.isGuest)
+                          : (currentUser != null && !currentUser.isGuest && full.isLoading)
+                              ? Row(
+                                  children: [
+                                    const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                                    const SizedBox(width: 10),
+                                    Text('Loading contact details…', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                                  ],
+                                )
+                              : (currentUser != null && !currentUser.isGuest)
                               ? Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -465,13 +490,58 @@ class BuySellDetailDialog extends ConsumerWidget {
     }
   }
 
+  /// Saves the new status, then updates the card in the feed and the profile. The dialog stays
+  /// open on failure, with the reason.
+  Future<void> _changeStatus(BuildContext context, WidgetRef ref, ListingStatus status) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(buySellRepositoryProvider).updateStatus(item.id, status);
+      ref.read(buySellPaginationProvider.notifier).updateItemStatusLocally(item.id, status);
+      ref.invalidate(listingDetailProvider(item.id));
+      ref.invalidate(myBuySellListingsProvider);
+      if (context.mounted) Navigator.pop(context);
+      messenger.showSnackBar(SnackBar(
+        content: Text('Marked as ${status.label.toLowerCase()}.'),
+        behavior: SnackBarBehavior.floating,
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+        content: Text("Couldn't change the status: ${errorText(e)}"),
+        backgroundColor: Colors.red.shade700,
+      ));
+    }
+  }
+
+  /// Removes the listing, waiting for the server before closing anything.
+  Future<void> _remove(BuildContext context, WidgetRef ref, BuildContext promptContext, {String? reason}) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(buySellRepositoryProvider).deleteListing(item.id, reason: reason);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+        content: Text("Couldn't remove the listing: ${errorText(e)}"),
+        backgroundColor: Colors.red.shade700,
+      ));
+      return;
+    }
+    if (promptContext.mounted) Navigator.pop(promptContext);
+    if (context.mounted) Navigator.pop(context);
+    ref.read(buySellPaginationProvider.notifier).removeItemLocally(item.id);
+    ref.invalidate(buySellListingsProvider);
+    ref.invalidate(myBuySellListingsProvider);
+    messenger.showSnackBar(const SnackBar(
+      content: Text('Listing removed from the marketplace.'),
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
   void _confirmOwnerDelete(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Listing', style: TextStyle(fontWeight: FontWeight.bold)),
         content: const Text(
-          'Are you sure you want to delete this listing? It will be permanently removed from the marketplace.',
+          'Delete this listing? It will no longer appear in the marketplace.',
         ),
         actions: [
           TextButton(
@@ -480,21 +550,7 @@ class BuySellDetailDialog extends ConsumerWidget {
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              Navigator.pop(context);
-              await ref.read(buySellRepositoryProvider).deleteListing(item.id);
-              ref.invalidate(buySellListingsProvider);
-              ref.read(buySellPaginationProvider.notifier).loadInitial();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Listing deleted successfully.'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
-            },
+            onPressed: () => _remove(context, ref, ctx),
             child: const Text('Delete'),
           ),
         ],
@@ -530,15 +586,7 @@ class BuySellDetailDialog extends ConsumerWidget {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-            onPressed: () async {
-              Navigator.pop(ctx); // Close prompt
-              Navigator.pop(context); // Close detail dialog
-              await ref.read(buySellRepositoryProvider).deleteListing(
-                    item.id,
-                    reason: reasonController.text.trim(),
-                  );
-              ref.invalidate(buySellListingsProvider);
-            },
+            onPressed: () => _remove(context, ref, ctx, reason: reasonController.text.trim()),
             child: const Text('Confirm Remove'),
           ),
         ],

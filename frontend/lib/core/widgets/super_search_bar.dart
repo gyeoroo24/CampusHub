@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../router/app_router.dart';
+import '../../features/academics/providers/academics_providers.dart';
 import '../../features/buy_sell/domain/buy_sell_item.dart';
 import '../../features/buy_sell/providers/buy_sell_providers.dart';
 import '../../features/buy_sell/ui/widgets/buy_sell_detail_dialog.dart';
@@ -78,7 +80,7 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
                     return const Padding(
                       padding: EdgeInsets.all(16.0),
                       child: Text(
-                        'Type to search across all CampusHub modules...',
+                        'Type to search listings, lost & found reports and courses (e.g. DS252)…',
                         style: TextStyle(fontSize: 13, color: Colors.grey),
                       ),
                     );
@@ -112,27 +114,45 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
                     orElse: () => const <LostFoundItem>[],
                   );
 
-                  final isBuySellActive = activeTab == 0;
+                  final courseMatchList = ref.watch(allCoursesProvider).maybeWhen(
+                    data: (all) => all.where((c) => courseMatches(c, query)).take(8).toList(),
+                    orElse: () => const <CourseWithDepartment>[],
+                  );
+
+                  // One section per tab, the current tab's first.
+                  String header(int tab, String name) =>
+                      '$name RESULTS${tab == activeTab ? ' (CURRENT TAB)' : ''}';
+                  final sections = <int, List<Widget>>{
+                    0: [
+                      _buildSectionHeader(header(0, 'BUY & SELL')),
+                      ..._buildBuySellItems(context, ref, buySellMatches),
+                    ],
+                    1: [
+                      _buildSectionHeader(header(1, 'LOST & FOUND')),
+                      if (lostMatches.isEmpty && foundMatches.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                          child: Text('No matching Lost & Found reports',
+                              style: TextStyle(fontSize: 12, color: Colors.grey)),
+                        ),
+                      ..._buildLostFoundItems(context, ref, lostMatches, 'Lost'),
+                      ..._buildLostFoundItems(context, ref, foundMatches, 'Found'),
+                    ],
+                    2: [
+                      _buildSectionHeader(header(2, 'COURSES')),
+                      ..._buildCourseItems(context, courseMatchList),
+                    ],
+                  };
+                  final order = [activeTab, ...[0, 1, 2].where((t) => t != activeTab)];
 
                   return SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (isBuySellActive) ...[
-                          _buildSectionHeader('BUY & SELL RESULTS (CURRENT TAB)'),
-                          ..._buildBuySellItems(context, ref, buySellMatches),
-                          const Divider(),
-                          _buildSectionHeader('LOST & FOUND RESULTS (OTHER TABS)'),
-                          ..._buildLostFoundItems(context, ref, lostMatches, 'Lost'),
-                          ..._buildLostFoundItems(context, ref, foundMatches, 'Found'),
-                        ] else ...[
-                          _buildSectionHeader('LOST & FOUND RESULTS (CURRENT TAB)'),
-                          ..._buildLostFoundItems(context, ref, lostMatches, 'Lost'),
-                          ..._buildLostFoundItems(context, ref, foundMatches, 'Found'),
-                          const Divider(),
-                          _buildSectionHeader('BUY & SELL RESULTS (OTHER TABS)'),
-                          ..._buildBuySellItems(context, ref, buySellMatches),
+                        for (var i = 0; i < order.length; i++) ...[
+                          if (i > 0) const Divider(),
+                          ...?sections[order[i]],
                         ],
                       ],
                     ),
@@ -197,6 +217,29 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
     }).toList();
   }
 
+  List<Widget> _buildCourseItems(BuildContext context, List<CourseWithDepartment> items) {
+    if (items.isEmpty) {
+      return [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+          child: Text('No matching courses', style: TextStyle(fontSize: 12, color: Colors.grey)),
+        )
+      ];
+    }
+    return items.map((c) {
+      return ListTile(
+        dense: true,
+        leading: const Icon(Icons.school_outlined, size: 20),
+        title: Text('${c.course.code} · ${c.course.name}', style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(c.departmentName, maxLines: 1, overflow: TextOverflow.ellipsis),
+        onTap: () {
+          _removeOverlay();
+          context.go('/courses/${c.course.id}');
+        },
+      );
+    }).toList();
+  }
+
   List<Widget> _buildLostFoundItems(BuildContext context, WidgetRef ref, List<LostFoundItem> items, String type) {
     if (items.isEmpty) return [];
     return items.map((item) {
@@ -244,7 +287,7 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
           child: TextField(
             controller: _searchController,
             decoration: InputDecoration(
-              hintText: 'Super Search across all modules...',
+              hintText: 'Search listings, lost & found, courses…',
               hintStyle: const TextStyle(fontSize: 13),
               prefixIcon: const Icon(Icons.search_rounded, size: 20),
               suffixIcon: _isDebouncing

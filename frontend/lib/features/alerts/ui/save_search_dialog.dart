@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/utils/web_history_support.dart';
 import '../../../core/utils/error_text.dart';
 import '../../auth/ui/auth_dialog.dart';
 import '../domain/alerts_models.dart';
@@ -138,7 +139,8 @@ class _SaveSearchDialogState extends ConsumerState<SaveSearchDialog> {
     final theme = Theme.of(context);
     final watches = widget.module == SavedSearchModule.buySell ? 'new listings' : 'new found-item reports';
 
-    return AlertDialog(
+    return ModalHistoryWrapper(
+      child: AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: const Row(
         children: [
@@ -149,7 +151,8 @@ class _SaveSearchDialogState extends ConsumerState<SaveSearchDialog> {
       ),
       content: SizedBox(
         width: 380,
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -195,6 +198,7 @@ class _SaveSearchDialogState extends ConsumerState<SaveSearchDialog> {
               Text(_error!, style: TextStyle(color: theme.colorScheme.error, fontSize: 12)),
           ],
         ),
+        ),
       ),
       actions: [
         TextButton(onPressed: _saving ? null : () => Navigator.pop(context), child: const Text('Cancel')),
@@ -206,6 +210,6 @@ class _SaveSearchDialogState extends ConsumerState<SaveSearchDialog> {
           label: const Text('Save'),
         ),
       ],
-    );
+    ));
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/utils/web_history_support.dart';
 import '../../../core/utils/error_text.dart';
 import '../../auth/ui/auth_dialog.dart';
 import '../../buy_sell/providers/buy_sell_providers.dart';
@@ -96,7 +97,8 @@ class _CreateWantedDialogState extends ConsumerState<CreateWantedDialog> {
     final categories = ref.watch(buySellCategoriesProvider);
     final theme = Theme.of(context);
 
-    return AlertDialog(
+    return ModalHistoryWrapper(
+      child: AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: const Row(
         children: [
@@ -198,6 +200,6 @@ class _CreateWantedDialogState extends ConsumerState<CreateWantedDialog> {
           label: const Text('Post'),
         ),
       ],
-    );
+    ));
   }
 }

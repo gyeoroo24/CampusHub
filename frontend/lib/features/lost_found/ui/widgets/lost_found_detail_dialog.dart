@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/utils/contact_actions.dart';
+import '../../../../core/utils/error_text.dart';
 import '../../../../core/utils/date_time_formatter.dart';
 import '../../../../core/utils/web_history_support.dart';
 import '../../../../core/widgets/photo_carousel.dart';
+import '../../../../core/widgets/report_content_dialog.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../../../auth/ui/auth_dialog.dart';
 import '../../domain/lost_found_item.dart';
@@ -22,6 +24,9 @@ class LostFoundDetailDialog extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // The feed's summary has no reporter contact or photos: show it at once, then the full report.
+    final full = ref.watch(lostFoundDetailProvider((id: this.item.id, kind: this.item.kind)));
+    final item = full.valueOrNull ?? this.item;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final isLost = item.kind == PostType.lost;
@@ -68,6 +73,26 @@ class LostFoundDetailDialog extends ConsumerWidget {
                       ),
                     ),
                   ),
+                  // Report button (not for the report's own author)
+                  if (!isOwner)
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: CircleAvatar(
+                        backgroundColor: Colors.black.withValues(alpha: 0.6),
+                        child: IconButton(
+                          tooltip: 'Report this post',
+                          icon: const Icon(Icons.flag_outlined, color: Colors.white, size: 18),
+                          onPressed: () => ReportContentDialog.show(
+                            context,
+                            ref,
+                            targetType: isLost ? 'lost_report' : 'found_report',
+                            targetId: item.id,
+                            itemLabel: 'this report',
+                          ),
+                        ),
+                      ),
+                    ),
                   // Status / Type badge
                   Positioned(
                     bottom: 12,
@@ -100,7 +125,7 @@ class LostFoundDetailDialog extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
-                        item.status.name.toUpperCase(),
+                        item.status.label.toUpperCase(),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 10,
@@ -310,7 +335,8 @@ class LostFoundDetailDialog extends ConsumerWidget {
                         ),
 
                     // ── Status & Owner Controls (Original Reporter Only) ───────────────
-                    if (isOwner) ...[
+                    // The backend lets the admin edit anyone's report too.
+                    if (isOwner || (currentUser?.isAdmin ?? false)) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -324,8 +350,8 @@ class LostFoundDetailDialog extends ConsumerWidget {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text(
-                                  'Report Owner Controls',
+                                Text(
+                                  isOwner ? 'Report Owner Controls' : 'Admin Controls',
                                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                                 ),
                                 Row(
@@ -361,23 +387,10 @@ class LostFoundDetailDialog extends ConsumerWidget {
                               children: ReportStatus.values.map((status) {
                                 final isSelected = item.status == status;
                                 return ChoiceChip(
-                                  label: Text(status.name.toUpperCase()),
+                                  label: Text(status.label),
                                   selected: isSelected,
                                   onSelected: (selected) {
-                                    if (selected) {
-                                      if (onStatusChange != null) {
-                                        onStatusChange!(status);
-                                      } else {
-                                        ref.read(lostFoundRepositoryProvider).updateStatus(
-                                              item.id,
-                                              item.kind,
-                                              status,
-                                            );
-                                        ref.invalidate(lostReportsProvider);
-                                        ref.invalidate(foundReportsProvider);
-                                      }
-                                      Navigator.pop(context);
-                                    }
+                                    if (selected && !isSelected) _changeStatus(context, ref, status);
                                   },
                                 );
                               }).toList(),
@@ -455,12 +468,7 @@ class LostFoundDetailDialog extends ConsumerWidget {
                                         foregroundColor: Colors.white,
                                       ),
                                       onPressed: () {
-                                        Clipboard.setData(ClipboardData(text: item.reporterContact!.email));
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text('Copied email: ${item.reporterContact!.email}'),
-                                          ),
-                                        );
+                                        contactBy(context, email: item.reporterContact!.email);
                                       },
                                       icon: const Icon(Icons.email_outlined, size: 14),
                                       label: const Text('Email'),
@@ -474,12 +482,7 @@ class LostFoundDetailDialog extends ConsumerWidget {
                                           foregroundColor: Colors.white,
                                         ),
                                         onPressed: () {
-                                          Clipboard.setData(ClipboardData(text: item.reporterContact!.phone!));
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text('Copied phone: ${item.reporterContact!.phone}'),
-                                            ),
-                                          );
+                                          contactBy(context, phone: item.reporterContact!.phone!);
                                         },
                                         icon: const Icon(Icons.phone_outlined, size: 14),
                                         label: const Text('Call'),
@@ -489,7 +492,15 @@ class LostFoundDetailDialog extends ConsumerWidget {
                                 ),
                               ],
                             )
-                          : (currentUser != null && !currentUser.isGuest)
+                          : (currentUser != null && !currentUser.isGuest && full.isLoading)
+                              ? Row(
+                                  children: [
+                                    const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                                    const SizedBox(width: 10),
+                                    Text('Loading contact details…', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                                  ],
+                                )
+                              : (currentUser != null && !currentUser.isGuest)
                               ? Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -590,6 +601,60 @@ class LostFoundDetailDialog extends ConsumerWidget {
     }
   }
 
+  LostFoundPaginationNotifier _feed(WidgetRef ref) => item.kind == PostType.lost
+      ? ref.read(lostReportsPaginationProvider.notifier)
+      : ref.read(foundReportsPaginationProvider.notifier);
+
+  void _refreshLists(WidgetRef ref) {
+    ref.invalidate(lostReportsProvider);
+    ref.invalidate(foundReportsProvider);
+    ref.invalidate(myLostReportsProvider);
+    ref.invalidate(myFoundReportsProvider);
+    ref.invalidate(lostFoundDetailProvider((id: item.id, kind: item.kind)));
+  }
+
+  /// Saves the new status, then updates the card in the feed. Stays open on failure, with the reason.
+  Future<void> _changeStatus(BuildContext context, WidgetRef ref, ReportStatus status) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(lostFoundRepositoryProvider).updateStatus(item.id, item.kind, status);
+      _feed(ref).updateItemStatusLocally(item.id, status);
+      _refreshLists(ref);
+      if (context.mounted) Navigator.pop(context);
+      messenger.showSnackBar(SnackBar(
+        content: Text('Marked as ${status.label.toLowerCase()}.'),
+        behavior: SnackBarBehavior.floating,
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+        content: Text("Couldn't change the status: ${errorText(e)}"),
+        backgroundColor: Colors.red.shade700,
+      ));
+    }
+  }
+
+  /// Removes the report, waiting for the server before closing anything.
+  Future<void> _remove(BuildContext context, WidgetRef ref, BuildContext promptContext, {String? reason}) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(lostFoundRepositoryProvider).deleteReport(item.id, item.kind, reason: reason);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+        content: Text("Couldn't remove the report: ${errorText(e)}"),
+        backgroundColor: Colors.red.shade700,
+      ));
+      return;
+    }
+    if (promptContext.mounted) Navigator.pop(promptContext);
+    if (context.mounted) Navigator.pop(context);
+    _feed(ref).removeItemLocally(item.id);
+    _refreshLists(ref);
+    messenger.showSnackBar(const SnackBar(
+      content: Text('Report removed from the board.'),
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
   void _confirmOwnerDelete(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
@@ -597,7 +662,7 @@ class LostFoundDetailDialog extends ConsumerWidget {
         title: Text('Delete ${item.kind == PostType.lost ? "Lost" : "Found"} Report',
             style: const TextStyle(fontWeight: FontWeight.bold)),
         content: const Text(
-          'Are you sure you want to delete this report? It will be permanently removed from the lost and found board.',
+          'Delete this report? It will no longer appear on the Lost & Found board.',
         ),
         actions: [
           TextButton(
@@ -606,23 +671,7 @@ class LostFoundDetailDialog extends ConsumerWidget {
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              Navigator.pop(context);
-              await ref.read(lostFoundRepositoryProvider).deleteReport(item.id, item.kind);
-              ref.invalidate(lostReportsProvider);
-              ref.invalidate(foundReportsProvider);
-              ref.read(lostReportsPaginationProvider.notifier).loadInitial();
-              ref.read(foundReportsPaginationProvider.notifier).loadInitial();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Report deleted successfully.'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
-            },
+            onPressed: () => _remove(context, ref, ctx),
             child: const Text('Delete'),
           ),
         ],
@@ -658,17 +707,7 @@ class LostFoundDetailDialog extends ConsumerWidget {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              Navigator.pop(context);
-              await ref.read(lostFoundRepositoryProvider).deleteReport(
-                    item.id,
-                    item.kind,
-                    reason: reasonController.text.trim(),
-                  );
-              ref.invalidate(lostReportsProvider);
-              ref.invalidate(foundReportsProvider);
-            },
+            onPressed: () => _remove(context, ref, ctx, reason: reasonController.text.trim()),
             child: const Text('Confirm Remove'),
           ),
         ],

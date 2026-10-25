@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/api/api_exception.dart';
+import '../../../../core/config/server_config.dart';
+import '../../../../core/utils/error_text.dart';
+import '../../../../core/utils/validators.dart';
 import '../providers/auth_providers.dart';
 
 /// Modal dialog prompting the user to sign in with their IISc email address and OTP.
@@ -85,7 +88,7 @@ class _AuthDialogState extends ConsumerState<AuthDialog> {
           if (e is ServiceUnavailableException) {
             _errorMessage = 'Sign-in is temporarily unavailable (Cognito JWKS key sync). Please try again in a few moments.';
           } else {
-            _errorMessage = e.toString().replaceFirst('Exception: ', '');
+            _errorMessage = errorText(e);
           }
           _isLoading = false;
         });
@@ -116,7 +119,7 @@ class _AuthDialogState extends ConsumerState<AuthDialog> {
           if (e is ServiceUnavailableException) {
             _errorMessage = 'Sign-in is temporarily unavailable (Cognito JWKS key sync). Please try again in a few moments.';
           } else {
-            _errorMessage = e.toString().replaceFirst('Exception: ', '');
+            _errorMessage = errorText(e);
           }
           _isLoading = false;
         });
@@ -161,6 +164,11 @@ class _AuthDialogState extends ConsumerState<AuthDialog> {
             widget.message,
             style: const TextStyle(fontSize: 13, color: Colors.grey),
           ),
+          const SizedBox(height: 6),
+          const Text(
+            'New to CampusHub? Signing in with your IISc email creates your account.',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
           const SizedBox(height: 16),
           TextFormField(
             controller: _emailController,
@@ -178,8 +186,8 @@ class _AuthDialogState extends ConsumerState<AuthDialog> {
                 return 'Please enter your email';
               }
               final trimmed = value.trim().toLowerCase();
-              if (!trimmed.endsWith('@iisc.ac.in')) {
-                return 'Must be an @iisc.ac.in email address';
+              if (!isIiscEmail(trimmed)) {
+                return 'Use your IISc email (ending in iisc.ac.in)';
               }
               return null;
             },
@@ -212,6 +220,7 @@ class _AuthDialogState extends ConsumerState<AuthDialog> {
 
   Widget _buildOtpForm() {
     final email = _emailController.text.trim();
+    final useMockData = ref.watch(serverConfigProvider).useMockData;
 
     return Form(
       key: _otpFormKey,
@@ -278,7 +287,9 @@ class _AuthDialogState extends ConsumerState<AuthDialog> {
           ),
           const SizedBox(height: 8),
           Text(
-            '💡 Mock Mode: Enter any 6 digits (e.g., 123456)',
+            useMockData
+                ? '💡 Mock Mode: Enter any 6 digits (e.g., 123456)'
+                : 'Check your inbox — the code may take a minute to arrive.',
             style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
           ),
         ],

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/models/page.dart';
+import '../../../core/utils/error_text.dart';
 import '../../../core/config/server_config.dart';
 import '../../../core/enums/date_preset.dart';
 import '../../../core/enums/sort_option.dart';
@@ -90,6 +92,14 @@ final lostFoundRepositoryProvider = Provider<ILostFoundRepository>((ref) {
   return ApiLostFoundRepository(ref.watch(apiClientProvider));
 });
 
+/// The full report (photos, reporter contact for signed-in users). Feed cards carry only the
+/// summary, so the detail view loads this when it opens.
+final lostFoundDetailProvider =
+    FutureProvider.autoDispose.family<LostFoundItem?, ({String id, PostType kind})>((ref, key) {
+  ref.watch(currentUserProvider); // contact details depend on who is asking
+  return ref.watch(lostFoundRepositoryProvider).getReportById(key.id, type: key.kind);
+});
+
 final lostFoundCategoriesProvider = FutureProvider<List<CategoryRef>>((ref) async {
   final repo = ref.watch(lostFoundRepositoryProvider);
   return repo.fetchCategories();
@@ -112,70 +122,60 @@ class LostFoundPaginationNotifier extends StateNotifier<PaginatedFeedState<LostF
     });
   }
 
+  /// One page from the server with the current filters. Category chips hold names, so the name is
+  /// turned into the server's category id; a preset chip with no server category matches nothing.
+  Future<PaginatedResponse<LostFoundItem>?> _fetch(int offset) async {
+    final repo = _ref.read(lostFoundRepositoryProvider);
+    final filter = _ref.read(lostFoundFilterProvider);
+    int? categoryId;
+    if (filter.category != 'All') {
+      final categories = await _ref.read(lostFoundCategoriesProvider.future);
+      final match = categories.where((c) => c.name.toLowerCase() == filter.category.toLowerCase());
+      if (match.isEmpty) return null;
+      categoryId = match.first.id;
+    }
+    return repo.fetchReportsPage(
+      type: _kind,
+      query: filter.query,
+      categoryId: categoryId,
+      dateRange: filter.dateRange,
+      sortOption: filter.sortOption,
+      statusList: filter.selectedStatuses.toList(),
+      limit: _pageSize,
+      offset: offset,
+    );
+  }
+
   Future<void> loadInitial() async {
     state = state.copyWith(isLoadingInitial: true, clearError: true);
     try {
-      final repo = _ref.read(lostFoundRepositoryProvider);
-      final filter = _ref.read(lostFoundFilterProvider);
-
-      final paged = await repo.fetchReportsPage(
-        type: _kind,
-        query: filter.query,
-        dateRange: filter.dateRange,
-        sortOption: filter.sortOption,
-        statusList: filter.selectedStatuses.toList(),
-        limit: _pageSize,
-        offset: 0,
-      );
-
-      var items = paged.items;
-      if (filter.category != 'All') {
-        items = items.where((it) => it.category.name.toLowerCase() == filter.category.toLowerCase()).toList();
-      }
-
+      final paged = await _fetch(0);
       state = PaginatedFeedState(
-        items: items,
+        items: paged?.items ?? const [],
         isLoadingInitial: false,
         isLoadingMore: false,
-        hasMore: paged.hasMore,
-        offset: paged.items.length,
+        hasMore: paged?.hasMore ?? false,
+        offset: paged?.items.length ?? 0,
       );
     } catch (e) {
-      state = state.copyWith(isLoadingInitial: false, errorMessage: e.toString());
+      state = state.copyWith(isLoadingInitial: false, errorMessage: errorText(e));
     }
   }
 
   Future<void> loadMore() async {
     if (state.isLoadingInitial || state.isLoadingMore || !state.hasMore) return;
 
-    state = state.copyWith(isLoadingMore: true);
+    state = state.copyWith(isLoadingMore: true, clearError: true);
     try {
-      final repo = _ref.read(lostFoundRepositoryProvider);
-      final filter = _ref.read(lostFoundFilterProvider);
-
-      final paged = await repo.fetchReportsPage(
-        type: _kind,
-        query: filter.query,
-        dateRange: filter.dateRange,
-        sortOption: filter.sortOption,
-        statusList: filter.selectedStatuses.toList(),
-        limit: _pageSize,
-        offset: state.offset,
-      );
-
-      var newItems = paged.items;
-      if (filter.category != 'All') {
-        newItems = newItems.where((it) => it.category.name.toLowerCase() == filter.category.toLowerCase()).toList();
-      }
-
+      final paged = await _fetch(state.offset);
       state = state.copyWith(
-        items: [...state.items, ...newItems],
+        items: [...state.items, ...?paged?.items],
         isLoadingMore: false,
-        hasMore: paged.hasMore,
-        offset: state.offset + paged.items.length,
+        hasMore: paged?.hasMore ?? false,
+        offset: state.offset + (paged?.items.length ?? 0),
       );
     } catch (e) {
-      state = state.copyWith(isLoadingMore: false, errorMessage: e.toString());
+      state = state.copyWith(isLoadingMore: false, errorMessage: errorText(e));
     }
   }
 
@@ -240,28 +240,21 @@ final possibleMatchesForItemProvider =
   return ref.watch(lostFoundRepositoryProvider).getPossibleMatches(item);
 });
 
-final myLostReportsProvider = FutureProvider<List<LostFoundItem>>((ref) async {
+/// Every report the signed-in user filed of one kind, newest first. Asked for by reporter_id,
+/// page by page (the API returns at most 50 per page), so older reports are included too.
+Future<List<LostFoundItem>> _myReports(Ref ref, PostType type) async {
   final user = ref.watch(currentUserProvider);
   if (user == null || user.isGuest) return [];
   final repo = ref.watch(lostFoundRepositoryProvider);
-  final all = await repo.fetchReports(type: PostType.lost, limit: 100);
-  return all
-      .where((r) =>
-          r.reporter.id == user.id ||
-          r.reporter.name == user.name ||
-          (r.reporterContact?.email != null && r.reporterContact!.email == user.email))
-      .toList();
-});
+  final mine = <LostFoundItem>[];
+  for (var offset = 0; offset < 500; offset += 50) {
+    final page = await repo.fetchReportsPage(type: type, reporterId: user.id, limit: 50, offset: offset);
+    mine.addAll(page.items);
+    if (!page.hasMore) break;
+  }
+  return mine;
+}
 
-final myFoundReportsProvider = FutureProvider<List<LostFoundItem>>((ref) async {
-  final user = ref.watch(currentUserProvider);
-  if (user == null || user.isGuest) return [];
-  final repo = ref.watch(lostFoundRepositoryProvider);
-  final all = await repo.fetchReports(type: PostType.found, limit: 100);
-  return all
-      .where((r) =>
-          r.reporter.id == user.id ||
-          r.reporter.name == user.name ||
-          (r.reporterContact?.email != null && r.reporterContact!.email == user.email))
-      .toList();
-});
+final myLostReportsProvider = FutureProvider<List<LostFoundItem>>((ref) => _myReports(ref, PostType.lost));
+
+final myFoundReportsProvider = FutureProvider<List<LostFoundItem>>((ref) => _myReports(ref, PostType.found));

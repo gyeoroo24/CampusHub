@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/utils/web_history_support.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/utils/error_text.dart';
 import '../domain/campus_service.dart';
@@ -58,7 +59,8 @@ class CampusServicesDialog extends ConsumerWidget {
     final servicesAsync = ref.watch(campusServicesProvider);
     final theme = Theme.of(context);
 
-    return AlertDialog(
+    return ModalHistoryWrapper(
+      child: AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       title: const Row(
         children: [
@@ -108,7 +110,7 @@ class CampusServicesDialog extends ConsumerWidget {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
       ],
-    );
+    ));
   }
 }
 

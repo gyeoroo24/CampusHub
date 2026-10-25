@@ -456,6 +456,7 @@ class MockBuySellRepository implements IBuySellRepository {
     double? maxPrice,
     List<ListingStatus>? statusList,
     String? sellerId,
+    SortOption sortOption = SortOption.newest,
     int limit = 20,
     int offset = 0,
   }) async {
@@ -479,7 +480,11 @@ class MockBuySellRepository implements IBuySellRepository {
           matchesSeller;
     }).toList();
 
-    filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    filtered.sort((a, b) => switch (sortOption) {
+          SortOption.priceLowToHigh => a.price.compareTo(b.price),
+          SortOption.priceHighToLow => b.price.compareTo(a.price),
+          _ => b.createdAt.compareTo(a.createdAt),
+        });
 
     if (offset >= filtered.length) {
       return PaginatedResponse(items: [], limit: limit, offset: offset, hasMore: false);

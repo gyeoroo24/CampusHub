@@ -9,6 +9,8 @@ import 'package:campus_hub/features/academics/domain/academics_models.dart';
 import 'package:campus_hub/features/academics/providers/academics_providers.dart';
 import 'package:campus_hub/features/academics/ui/course_guide_screen.dart';
 import 'package:campus_hub/features/academics/ui/sentiment_trend_chart.dart';
+import 'package:campus_hub/features/auth/domain/user.dart';
+import 'package:campus_hub/features/auth/providers/auth_providers.dart';
 import 'package:campus_hub/features/alerts/data/alerts_repository.dart';
 import 'package:campus_hub/features/alerts/domain/alerts_models.dart';
 import 'package:campus_hub/features/buy_sell/data/mock_buy_sell_repository.dart';
@@ -233,6 +235,53 @@ void main() {
       expect(find.textContaining('Students are mostly positive about DS 252'), findsOneWidget);
       expect(find.text('Improving'), findsOneWidget);
       expect(find.text('Start the project early.'), findsOneWidget);
+    });
+
+    testWidgets('A signed-in student writes, edits and deletes their one review', (tester) async {
+      tester.view.physicalSize = const Size(1200, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+      addTearDown(MockAcademicsRepository.resetMockData);
+      final student = User(id: 'u1', email: 'asha@iisc.ac.in', name: 'Asha', createdAt: DateTime(2026));
+      await tester.pumpWidget(app(
+        home: const CourseGuideScreen(courseId: 'c_252'),
+        overrides: [currentUserProvider.overrideWith((ref) => student), isGuestUserProvider.overrideWith((ref) => false)],
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Share your feedback'));
+      await tester.pumpAndSettle();
+      expect(find.text('How did this course go?'), findsOneWidget);
+      await tester.enterText(find.byType(TextField).last, 'Clear lectures.');
+      await tester.tap(find.text('Post anonymously'));
+      await tester.pump();
+      await tester.tap(find.text('Post'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Your review'), findsOneWidget);
+      expect(find.text('posted anonymously'), findsOneWidget);
+      expect(find.text('Share your feedback'), findsNothing); // one review per course
+
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pumpAndSettle();
+      expect(find.text('Share your feedback'), findsOneWidget);
+    });
+
+    testWidgets('The feedback form fits a short phone screen', (tester) async {
+      tester.view.physicalSize = const Size(375, 520);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+      final student = User(id: 'u1', email: 'asha@iisc.ac.in', name: 'Asha', createdAt: DateTime(2026));
+      await tester.pumpWidget(app(
+        home: const CourseGuideScreen(courseId: 'c_221'),
+        overrides: [currentUserProvider.overrideWith((ref) => student), isGuestUserProvider.overrideWith((ref) => false)],
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Share your feedback'));
+      await tester.pumpAndSettle();
+      expect(find.text('How did this course go?'), findsOneWidget); // and no overflow exception
     });
 
     testWidgets('A course with no feedback shows the empty guide', (tester) async {

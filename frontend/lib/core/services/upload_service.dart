@@ -111,12 +111,11 @@ class UploadService {
     try {
       await _rawDio.put(
         ticket.uploadUrl,
-        data: Stream.fromIterable([fileBytes]),
+        // Raw bytes, not a stream, so the browser adapter can send them. The browser sets
+        // Content-Length itself (scripts may not); the signed headers come from the ticket.
+        data: fileBytes,
         options: Options(
-          headers: {
-            ...ticket.headers,
-            'Content-Length': fileBytes.length.toString(),
-          },
+          headers: ticket.headers,
           sendTimeout: const Duration(minutes: 5),
         ),
         onSendProgress: onProgress,

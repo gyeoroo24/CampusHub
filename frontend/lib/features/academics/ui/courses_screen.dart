@@ -84,7 +84,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
                 child: TextField(
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.search_rounded, size: 18),
-                    hintText: 'Find a course by code or name, e.g. DS 252',
+                    hintText: 'Search all departments by code or name, e.g. DS252',
                     isDense: true,
                     border: OutlineInputBorder(),
                   ),
@@ -92,16 +92,17 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
                 ),
               ),
             ),
-            coursesAsync.when(
+            // Typing searches every department; otherwise the picked department is listed.
+            (_search.isNotEmpty
+                    ? ref.watch(allCoursesProvider).whenData((all) => all.where((c) => courseMatches(c, _search)).toList())
+                    : coursesAsync.whenData((cs) => [for (final c in cs) (course: c, departmentName: department.name)]))
+                .when(
               loading: () => const SliverToBoxAdapter(child: SkeletonList(itemCount: 6)),
               error: (e, _) => SliverToBoxAdapter(child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(errorText(e)),
               )),
-              data: (courses) {
-                final filtered = courses
-                    .where((c) => _search.isEmpty || '${c.code} ${c.name}'.toLowerCase().contains(_search))
-                    .toList();
+              data: (filtered) {
                 if (filtered.isEmpty) {
                   return const SliverFillRemaining(
                     hasScrollBody: false,
@@ -118,7 +119,10 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
                       mainAxisSpacing: 12,
                     ),
                     delegate: SliverChildBuilderDelegate(
-                      (context, i) => _CourseTile(course: filtered[i]),
+                      (context, i) => _CourseTile(
+                        course: filtered[i].course,
+                        departmentName: _search.isNotEmpty ? filtered[i].departmentName : null,
+                      ),
                       childCount: filtered.length,
                     ),
                   ),
@@ -135,7 +139,10 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
 class _CourseTile extends StatelessWidget {
   final Course course;
 
-  const _CourseTile({required this.course});
+  /// Shown when the tile comes from a search across departments.
+  final String? departmentName;
+
+  const _CourseTile({required this.course, this.departmentName});
 
   @override
   Widget build(BuildContext context) {
@@ -149,7 +156,10 @@ class _CourseTile extends StatelessWidget {
         side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.4)),
       ),
       child: InkWell(
-        onTap: () => context.push('/courses/${course.id}'),
+        // go() (not push()) so the browser URL actually changes to /courses/:id —
+        // push() only updates go_router's internal imperative stack, so a reload
+        // would land back on the course list instead of this detail page.
+        onTap: () => context.go('/courses/${course.id}'),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(
@@ -168,7 +178,12 @@ class _CourseTile extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
                     Text(
-                      course.feedbackCount == 0 ? 'No feedback yet' : '${course.feedbackCount} reviews',
+                      [
+                        if (departmentName != null) departmentName!,
+                        course.feedbackCount == 0 ? 'No feedback yet' : '${course.feedbackCount} reviews',
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 11, color: theme.hintColor),
                     ),
                   ],

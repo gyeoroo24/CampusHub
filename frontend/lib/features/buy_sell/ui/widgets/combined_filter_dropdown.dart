@@ -324,7 +324,7 @@ class _RichFilterDialogState extends State<_RichFilterDialog> {
                           onSelected: () => setState(() => _statusFilter = ListingStatus.reserved),
                         ),
                         _buildChoiceChip(
-                          label: 'Sold Out Only',
+                          label: 'Sold only',
                           selected: _statusFilter == ListingStatus.sold,
                           onSelected: () => setState(() => _statusFilter = ListingStatus.sold),
                         ),

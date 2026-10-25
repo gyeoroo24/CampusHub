@@ -131,6 +131,10 @@ class User {
   bool get canModerateBuySell => canModerateModule('buy_sell');
   bool get canModerateLostFound => canModerateModule('lost_found');
 
+  /// Academic Help department moderator: may appoint course moderators in that department.
+  bool get isDepartmentModerator =>
+      moderatorGrants.any((g) => g.module == 'academic_help' && g.scopeType == 'department');
+
   bool canModerateDepartment(String deptId) =>
       isAdmin ||
       moderatorGrants.any(

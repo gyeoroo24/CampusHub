@@ -34,6 +34,7 @@ abstract class IBuySellRepository {
     double? maxPrice,
     List<ListingStatus>? statusList,
     String? sellerId,
+    SortOption sortOption = SortOption.newest,
     int limit = 20,
     int offset = 0,
   });

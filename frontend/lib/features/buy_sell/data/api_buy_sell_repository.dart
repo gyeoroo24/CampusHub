@@ -21,6 +21,7 @@ class ApiBuySellRepository implements IBuySellRepository {
     double? maxPrice,
     List<ListingStatus>? statusList,
     String? sellerId,
+    SortOption sortOption = SortOption.newest,
     int limit = 20,
     int offset = 0,
   }) async {
@@ -34,6 +35,11 @@ class ApiBuySellRepository implements IBuySellRepository {
     if (minPrice != null) queryParams['min_price'] = minPrice;
     if (maxPrice != null) queryParams['max_price'] = maxPrice;
     if (sellerId != null && sellerId.isNotEmpty) queryParams['seller_id'] = sellerId;
+    queryParams['sort'] = switch (sortOption) {
+      SortOption.priceLowToHigh => 'price_asc',
+      SortOption.priceHighToLow => 'price_desc',
+      _ => 'newest',
+    };
     if (statusList != null && statusList.isNotEmpty) {
       queryParams['status'] = statusList.map((s) => s.name).toList();
     }
@@ -203,25 +209,16 @@ class ApiBuySellRepository implements IBuySellRepository {
     return CategoryRef.fromJson(response.data as Map<String, dynamic>);
   }
 
+  // The API has no rename or delete for categories (only list and add), so say so rather than
+  // reporting a success that never happened. Mock mode still supports both.
   @override
   Future<CategoryRef> updateCategory(int id, String newName) async {
-    try {
-      final response = await apiClient.patch(
-        '${ApiEndpoints.buySellCategories}/$id',
-        data: {'name': newName.trim()},
-      );
-      return CategoryRef.fromJson(response.data as Map<String, dynamic>);
-    } catch (_) {
-      return CategoryRef(id: id, name: newName.trim());
-    }
+    throw Exception("The server doesn't support renaming categories yet.");
   }
 
   @override
   Future<void> deleteCategory(int id) async {
-    try {
-      await apiClient.delete('${ApiEndpoints.buySellCategories}/$id');
-    } catch (_) {
-      // Ignored if backend does not expose DELETE categories
-    }
+    throw Exception("The server doesn't support deleting categories yet.");
   }
+
 }

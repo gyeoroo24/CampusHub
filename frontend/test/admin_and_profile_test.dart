@@ -174,7 +174,7 @@ void main() {
       await tester.tap(find.text('Edit Profile'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Update Profile Details (PATCH /api/v1/me)'), findsOneWidget);
+      expect(find.text('Update profile details'), findsOneWidget);
       expect(find.text('Save Profile Changes'), findsOneWidget);
     });
   });
@@ -297,7 +297,8 @@ void main() {
       expect(find.text('Reports Queue'), findsOneWidget);
       expect(find.text('Categories'), findsOneWidget);
       expect(find.text('Backend & Health'), findsOneWidget);
-      expect(find.text('Promote User to Moderator by IISc Email'), findsOneWidget);
+      expect(find.text('Campus Services'), findsOneWidget);
+      expect(find.text('Appoint a moderator'), findsOneWidget);
     });
 
     testWidgets('Module moderator has access to Moderator Panel and Reports Queue', (WidgetTester tester) async {
@@ -336,8 +337,12 @@ void main() {
       expect(find.text('Access Restricted'), findsNothing);
       expect(find.text('Moderator Controls & Reports'), findsOneWidget);
       expect(find.text('Reports Queue'), findsOneWidget);
-      expect(find.text('Admin Contact'), findsOneWidget);
-      expect(find.text('Active Moderator Assignments'), findsNothing);
+      // A Buy & Sell moderator gets only the tools they can use: reports and categories.
+      expect(find.text('Categories'), findsOneWidget);
+      expect(find.text('User Accounts'), findsNothing);
+      expect(find.text('Backend & Health'), findsNothing);
+      expect(find.text('Campus Services'), findsNothing);
+      expect(find.text('Appoint a moderator'), findsNothing);
     });
 
     test('MockAuthRepository hydrates active moderator grants and profile for designated moderator', () async {

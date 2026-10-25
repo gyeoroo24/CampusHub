@@ -107,9 +107,11 @@ void main() {
 
     expect(find.text('Calculus 8th Edition'), findsOneWidget);
     expect(find.text('Listing Owner Controls'), findsOneWidget);
-    expect(find.text('AVAILABLE'), findsNWidgets(2));
-    expect(find.text('RESERVED'), findsOneWidget);
-    expect(find.text('SOLD'), findsOneWidget);
+    expect(find.text('AVAILABLE'), findsOneWidget); // status badge on the photo
+    // Owner status chips use the shared status labels.
+    expect(find.text('Available'), findsOneWidget);
+    expect(find.text('Reserved'), findsOneWidget);
+    expect(find.text('Sold'), findsOneWidget);
   });
 
   testWidgets('LostFoundDetailDialog displays report details and guest privacy notice', (WidgetTester tester) async {

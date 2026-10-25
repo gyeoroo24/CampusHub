@@ -7,9 +7,14 @@ class ApiEndpoints {
   // --- Health & Canary ---
   static const String health = '$version/health';
 
+  // --- Dev sign-in OTP (local dev only; Cognito handles this in production) ---
+  static const String otpRequest = '$version/auth/otp/request';
+  static const String otpVerify = '$version/auth/otp/verify';
+
   // --- Profile & Users ---
   static const String me = '$version/me';
   static String user(String id) => '$version/users/$id';
+  static const String userLookup = '$version/users/lookup';
   static String userMakeAdmin(String id) => '$version/users/$id/make-admin';
 
   // --- File Uploads (S3 Presigned URLs) ---
@@ -61,6 +66,8 @@ class ApiEndpoints {
   static String courseMaterials(String courseId) => '$version/courses/$courseId/materials';
   static String courseFeedback(String courseId) => '$version/courses/$courseId/feedback';
   static String courseSurvivalGuide(String courseId) => '$version/courses/$courseId/survival-guide';
+  static String myCourseFeedback(String courseId) => '$version/courses/$courseId/feedback/mine';
+  static String feedback(String id) => '$version/feedback/$id';
 
   // --- Saved Searches & Alerts (rev 6) ---
   static const String savedSearches = '$version/me/saved-searches';

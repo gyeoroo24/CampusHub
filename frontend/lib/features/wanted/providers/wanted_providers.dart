@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/constants/app_config.dart';
+import '../../../core/config/server_config.dart';
 import '../../../core/models/user_ref.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../buy_sell/domain/buy_sell_item.dart';
@@ -8,7 +8,7 @@ import '../data/wanted_repository.dart';
 import '../domain/wanted_post.dart';
 
 final wantedRepositoryProvider = Provider<IWantedRepository>((ref) {
-  if (AppConfig.useMockData) {
+  if (ref.watch(serverConfigProvider).useMockData) {
     final user = ref.watch(currentUserProvider);
     return user == null || user.isGuest
         ? MockWantedRepository()

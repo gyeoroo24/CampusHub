@@ -1,14 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/models/category_ref.dart';
-import '../../../../core/models/photo.dart';
+import '../../../../core/utils/error_text.dart';
+import '../../../../core/widgets/photo_picker_field.dart';
 import '../../../../core/models/user_ref.dart';
 import '../../../../core/utils/web_history_support.dart';
 import '../../domain/buy_sell_item.dart';
 import '../../providers/buy_sell_providers.dart';
 
 class CreateListingDialog extends ConsumerStatefulWidget {
-  final Function(ListingItem) onSubmit;
+  /// Saves the listing; the dialog waits for it and shows any error.
+  final FutureOr<void> Function(ListingItem) onSubmit;
   final String? userEmail;
   final String? userName;
   final String? userId;
@@ -31,7 +35,9 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
   final _priceController = TextEditingController();
   final _locationController = TextEditingController();
   final _descController = TextEditingController();
-  final _imageUrlController = TextEditingController();
+  List<PickedPhoto> _photos = [];
+  bool _isSubmitting = false;
+  String? _submitError;
 
   CategoryRef? _selectedCategory;
   List<CategoryRef> _availableCategories = [];
@@ -66,7 +72,7 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
             CategoryRef(id: 3, name: 'Electronics'),
             CategoryRef(id: 4, name: 'Furniture'),
             CategoryRef(id: 5, name: 'Lab Equipment'),
-            CategoryRef(id: 6, name: 'Other'),
+            CategoryRef(id: 6, name: 'Others'),
           ];
           _selectedCategory = _availableCategories.first;
           _isLoadingCategories = false;
@@ -191,12 +197,10 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                TextFormField(
-                  controller: _imageUrlController,
-                  decoration: const InputDecoration(
-                    labelText: 'Photo URL (optional)',
-                    hintText: 'Paste an image link or leave empty',
-                  ),
+                PhotoPickerField(
+                  photos: _photos,
+                  enabled: !_isSubmitting,
+                  onChanged: (p) => setState(() => _photos = p),
                 ),
                 const SizedBox(height: 8),
                 TextFormField(
@@ -214,10 +218,18 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(
-          onPressed: _handleSubmit,
-          child: const Text('Publish Listing'),
+        if (_submitError != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(_submitError!, style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12)),
+          ),
+        TextButton(onPressed: _isSubmitting ? null : () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton.icon(
+          onPressed: _isSubmitting ? null : _handleSubmit,
+          icon: _isSubmitting
+              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.publish_rounded, size: 16),
+          label: Text(_isSubmitting ? (_photos.isEmpty ? 'Publishing…' : 'Uploading photos…') : 'Publish Listing'),
         ),
       ],
     ));
@@ -225,24 +237,33 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
 
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
-
-    final price = double.parse(_priceController.text.trim());
-    CategoryRef cat = _selectedCategory ?? const CategoryRef(id: 1, name: 'Other');
-
-    if (_isCustomCategory && _customCategoryController.text.trim().isNotEmpty) {
-      try {
-        cat = await ref.read(buySellRepositoryProvider).createCategory(
-              _customCategoryController.text.trim(),
-            );
-        ref.invalidate(buySellCategoriesProvider);
-      } catch (_) {
-        cat = CategoryRef(id: 99, name: _customCategoryController.text.trim());
+    setState(() {
+      _isSubmitting = true;
+      _submitError = null;
+    });
+    try {
+      await _submit();
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+          _submitError = "Couldn't publish: ${errorText(e)}";
+        });
       }
     }
+  }
 
-    final imageUrl = _imageUrlController.text.trim().isNotEmpty
-        ? _imageUrlController.text.trim()
-        : 'https://picsum.photos/seed/${DateTime.now().millisecondsSinceEpoch}/600/400';
+  Future<void> _submit() async {
+    final price = double.parse(_priceController.text.trim());
+    CategoryRef cat = _selectedCategory ?? const CategoryRef(id: 1, name: 'Others');
+
+    if (_isCustomCategory && _customCategoryController.text.trim().isNotEmpty) {
+      cat = await ref.read(buySellRepositoryProvider).createCategory(_customCategoryController.text.trim());
+      ref.invalidate(buySellCategoriesProvider);
+    }
+
+    final photos = await uploadPickedPhotos(ref, _photos, kind: 'listing_photo');
 
     final newItem = ListingItem(
       id: '',
@@ -258,14 +279,11 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
         id: widget.userId ?? 'usr_me',
         name: widget.userName ?? (widget.userEmail?.split('@').first ?? 'Seller'),
       ),
-      coverPhotoUrl: imageUrl,
-      photos: [
-        Photo(s3Key: '', url: imageUrl, sortOrder: 0),
-      ],
+      coverPhotoUrl: photos.isEmpty ? null : photos.first.url,
+      photos: photos,
       createdAt: DateTime.now(),
     );
 
-    widget.onSubmit(newItem);
-    if (mounted) Navigator.pop(context);
+    await widget.onSubmit(newItem);
   }
 }

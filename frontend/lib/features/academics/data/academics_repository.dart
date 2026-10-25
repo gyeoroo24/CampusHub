@@ -1,5 +1,6 @@
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/api/api_exception.dart';
 import '../domain/academics_models.dart';
 
 /// The parts of Academic Help the course survival guide needs: browse departments and courses,
@@ -16,7 +17,15 @@ abstract class IAcademicsRepository {
   /// Newest first.
   Future<List<CourseFeedback>> fetchFeedback(String courseId, {int limit = 20});
 
-  Future<CourseFeedback> postFeedback(String courseId, String content);
+  /// One review per person per course; a second one fails with "already reviewed".
+  Future<CourseFeedback> postFeedback(String courseId, String content, {bool anonymous = false});
+
+  /// The signed-in user's review of this course, or null if they haven't written one.
+  Future<CourseFeedback?> fetchMyFeedback(String courseId);
+
+  Future<CourseFeedback> updateFeedback(String feedbackId, {String? content, bool? anonymous});
+
+  Future<void> deleteFeedback(String feedbackId);
 }
 
 class ApiAcademicsRepository implements IAcademicsRepository {
@@ -56,9 +65,35 @@ class ApiAcademicsRepository implements IAcademicsRepository {
   }
 
   @override
-  Future<CourseFeedback> postFeedback(String courseId, String content) async {
-    final response = await apiClient.post(ApiEndpoints.courseFeedback(courseId), data: {'content': content});
+  Future<CourseFeedback> postFeedback(String courseId, String content, {bool anonymous = false}) async {
+    final response = await apiClient.post(ApiEndpoints.courseFeedback(courseId),
+        data: {'content': content, 'is_anonymous': anonymous});
     return CourseFeedback.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  @override
+  Future<CourseFeedback?> fetchMyFeedback(String courseId) async {
+    try {
+      final response = await apiClient.get(ApiEndpoints.myCourseFeedback(courseId));
+      return CourseFeedback.fromJson(response.data as Map<String, dynamic>);
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<CourseFeedback> updateFeedback(String feedbackId, {String? content, bool? anonymous}) async {
+    final response = await apiClient.patch(ApiEndpoints.feedback(feedbackId), data: {
+      if (content != null) 'content': content,
+      if (anonymous != null) 'is_anonymous': anonymous,
+    });
+    return CourseFeedback.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  @override
+  Future<void> deleteFeedback(String feedbackId) async {
+    await apiClient.delete(ApiEndpoints.feedback(feedbackId));
   }
 }
 
@@ -176,14 +211,39 @@ class MockAcademicsRepository implements IAcademicsRepository {
       courseId == 'c_252' ? List.of(_feedback) : [];
 
   @override
-  Future<CourseFeedback> postFeedback(String courseId, String content) async {
+  Future<CourseFeedback> postFeedback(String courseId, String content, {bool anonymous = false}) async {
+    if (_feedback.any((f) => f.isMine)) {
+      throw Exception("You've already reviewed this course. Edit your feedback instead.");
+    }
     final feedback = CourseFeedback(
       id: 'f_${DateTime.now().microsecondsSinceEpoch}',
       authorName: 'You',
+      isAnonymous: anonymous,
+      isMine: true,
       content: content,
       createdAt: DateTime.now(),
     );
     _feedback.insert(0, feedback);
     return feedback;
   }
+
+  @override
+  Future<CourseFeedback?> fetchMyFeedback(String courseId) async {
+    final mine = _feedback.where((f) => f.isMine);
+    return mine.isEmpty ? null : mine.first;
+  }
+
+  @override
+  Future<CourseFeedback> updateFeedback(String feedbackId, {String? content, bool? anonymous}) async {
+    final i = _feedback.indexWhere((f) => f.id == feedbackId);
+    if (i < 0) throw Exception('Feedback not found.');
+    _feedback[i] = _feedback[i].copyWith(content: content, isAnonymous: anonymous);
+    return _feedback[i];
+  }
+
+  @override
+  Future<void> deleteFeedback(String feedbackId) async => _feedback.removeWhere((f) => f.id == feedbackId);
+
+  /// Removes feedback added during a test.
+  static void resetMockData() => _feedback.removeWhere((f) => f.isMine);
 }

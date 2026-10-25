@@ -97,31 +97,44 @@ class LostFoundFilterBar extends ConsumerWidget {
           child: Row(
             children: [
               Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: categoryPills.map((pill) {
-                      final isSelected = filter.category.toLowerCase() == pill.name.toLowerCase();
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: ChoiceChip(
-                          avatar: pill.icon != null
-                              ? Text(pill.icon!, style: const TextStyle(fontSize: 13))
-                              : null,
-                          label: Text(pill.name),
-                          selected: isSelected,
-                          onSelected: (selected) {
-                            if (selected) {
-                              ref.read(lostFoundFilterProvider.notifier).update(
-                                    (s) => s.copyWith(category: pill.name),
-                                  );
-                            }
-                          },
-                          visualDensity: VisualDensity.compact,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        ),
-                      );
-                    }).toList(),
+                // Fades the trailing chip out instead of hard-clipping it where the
+                // scrollable row meets the Report buttons, so it reads as "scroll for
+                // more" rather than a layout glitch.
+                child: ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [Colors.black, Colors.black, Colors.transparent],
+                    stops: [0.0, 0.9, 1.0],
+                  ).createShader(bounds),
+                  blendMode: BlendMode.dstIn,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.only(right: 20),
+                    child: Row(
+                      children: categoryPills.map((pill) {
+                        final isSelected = filter.category.toLowerCase() == pill.name.toLowerCase();
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: ChoiceChip(
+                            avatar: pill.icon != null
+                                ? Text(pill.icon!, style: const TextStyle(fontSize: 13))
+                                : null,
+                            label: Text(pill.name),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              if (selected) {
+                                ref.read(lostFoundFilterProvider.notifier).update(
+                                      (s) => s.copyWith(category: pill.name),
+                                    );
+                              }
+                            },
+                            visualDensity: VisualDensity.compact,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          ),
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ),
               ),

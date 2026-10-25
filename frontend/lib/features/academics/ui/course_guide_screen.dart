@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/utils/date_time_formatter.dart';
 import '../../../core/utils/error_text.dart';
+import '../../auth/providers/auth_providers.dart';
 import '../../auth/ui/auth_dialog.dart';
 import '../domain/academics_models.dart';
 import '../providers/academics_providers.dart';
@@ -352,90 +353,229 @@ class _FeedbackSection extends ConsumerWidget {
 
   const _FeedbackSection({required this.courseId});
 
-  Future<void> _write(BuildContext context, WidgetRef ref) async {
-    final signedIn = await AuthDialog.ensureSignedIn(
-      context,
-      ref,
-      title: 'Sign In to Share Feedback',
-      message: 'Feedback is posted under your IISc account.',
+  void _refresh(WidgetRef ref) {
+    ref.invalidate(courseFeedbackProvider(courseId));
+    ref.invalidate(myCourseFeedbackProvider(courseId));
+    ref.invalidate(survivalGuideProvider(courseId));
+  }
+
+  void _toast(ScaffoldMessengerState messenger, String text, {bool error = false}) {
+    messenger.showSnackBar(SnackBar(
+      content: Text(text),
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: error ? Colors.red.shade700 : null,
+    ));
+  }
+
+  /// Write a new review, or edit [existing]. One review per person per course.
+  Future<void> _write(BuildContext context, WidgetRef ref, {CourseFeedback? existing}) async {
+    if (existing == null) {
+      final signedIn = await AuthDialog.ensureSignedIn(
+        context,
+        ref,
+        title: 'Sign In to Share Feedback',
+        message: 'Feedback is tied to your IISc account (one review per course), but you can hide your name.',
+      );
+      if (!signedIn || !context.mounted) return;
+    }
+    final result = await showDialog<({String text, bool anonymous})>(
+      context: context,
+      builder: (_) => _FeedbackEditor(existing: existing),
     );
-    if (!signedIn || !context.mounted) return;
-    final controller = TextEditingController();
-    final content = await showDialog<String>(
+    if (result == null || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final repo = ref.read(academicsRepositoryProvider);
+    try {
+      if (existing == null) {
+        await repo.postFeedback(courseId, result.text, anonymous: result.anonymous);
+        _toast(messenger, 'Thanks! Your review is posted.');
+      } else {
+        await repo.updateFeedback(existing.id, content: result.text, anonymous: result.anonymous);
+        _toast(messenger, 'Your review is updated.');
+      }
+      _refresh(ref);
+    } catch (e) {
+      _toast(messenger, errorText(e), error: true);
+      _refresh(ref); // e.g. "already reviewed": show their existing review with Edit
+    }
+  }
+
+  Future<void> _delete(BuildContext context, WidgetRef ref, CourseFeedback mine) async {
+    final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('How did this course go?'),
-        content: SizedBox(
-          width: 440,
-          child: TextField(
-            controller: controller,
-            maxLines: 6,
-            maxLength: 5000,
-            autofocus: true,
-            decoration: const InputDecoration(
-              hintText: 'Workload, exams, teaching, what you wish you had known...',
-              border: OutlineInputBorder(),
-            ),
-          ),
-        ),
+        title: const Text('Delete your review?'),
+        content: const Text('It is removed from this course and its survival guide. You can write a new one later.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('Post')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
-    controller.dispose();
-    if (content == null || content.isEmpty) return;
+    if (ok != true || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      await ref.read(academicsRepositoryProvider).postFeedback(courseId, content);
-      ref.invalidate(courseFeedbackProvider(courseId));
-      ref.invalidate(survivalGuideProvider(courseId));
+      await ref.read(academicsRepositoryProvider).deleteFeedback(mine.id);
+      _toast(messenger, 'Your review is deleted.');
+      _refresh(ref);
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorText(e)), backgroundColor: Colors.red.shade700),
-        );
-      }
+      _toast(messenger, errorText(e), error: true);
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final feedbackAsync = ref.watch(courseFeedbackProvider(courseId));
+    final mine = ref.watch(myCourseFeedbackProvider(courseId)).valueOrNull;
+    final isGuest = ref.watch(isGuestUserProvider);
     final theme = Theme.of(context);
     return _Section(
       title: 'Recent feedback',
+      subtitle: isGuest ? 'Sign in to see who wrote each review.' : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: () => _write(context, ref),
-              icon: const Icon(Icons.rate_review_outlined, size: 16),
-              label: const Text('Share your feedback'),
+          if (mine == null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: () => _write(context, ref),
+                icon: const Icon(Icons.rate_review_outlined, size: 16),
+                label: const Text('Share your feedback'),
+              ),
+            )
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text('Your review', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 8),
+                      if (mine.isAnonymous)
+                        Text('posted anonymously', style: TextStyle(fontSize: 11, color: theme.hintColor)),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: () => _write(context, ref, existing: mine),
+                        icon: const Icon(Icons.edit_outlined, size: 16),
+                        label: const Text('Edit'),
+                      ),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
+                        onPressed: () => _delete(context, ref, mine),
+                        icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                        label: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                  Text(mine.content, style: const TextStyle(fontSize: 13)),
+                ],
+              ),
             ),
-          ),
           const SizedBox(height: 8),
           feedbackAsync.when(
             loading: () => const LinearProgressIndicator(),
             error: (e, _) => Text(errorText(e)),
-            data: (items) => items.isEmpty
-                ? Text('No feedback yet.', style: TextStyle(color: theme.hintColor))
-                : Column(
-                    children: [
-                      for (final f in items)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(f.content, style: const TextStyle(fontSize: 13)),
-                          subtitle: Text('${f.authorName} · ${DateTimeFormatter.timeAgo(f.createdAt)}',
-                              style: const TextStyle(fontSize: 11)),
-                        ),
-                    ],
-                  ),
+            data: (items) {
+              final others = items.where((f) => !f.isMine).toList();
+              return others.isEmpty
+                  ? Text(mine == null ? 'No feedback yet.' : 'No other feedback yet.',
+                      style: TextStyle(color: theme.hintColor))
+                  : Column(
+                      children: [
+                        for (final f in others)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(f.content, style: const TextStyle(fontSize: 13)),
+                            subtitle: Text(
+                              '${f.displayAuthor} · ${DateTimeFormatter.timeAgo(f.createdAt)}${f.wasEdited ? ' · edited' : ''}',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                          ),
+                      ],
+                    );
+            },
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Write or edit a review: the text, and whether to hide your name.
+class _FeedbackEditor extends StatefulWidget {
+  final CourseFeedback? existing;
+
+  const _FeedbackEditor({this.existing});
+
+  @override
+  State<_FeedbackEditor> createState() => _FeedbackEditorState();
+}
+
+class _FeedbackEditorState extends State<_FeedbackEditor> {
+  late final _controller = TextEditingController(text: widget.existing?.content);
+  late bool _anonymous = widget.existing?.isAnonymous ?? false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.existing == null ? 'How did this course go?' : 'Edit your review'),
+      // Scrolls on short screens (and with the keyboard up) instead of overflowing.
+      content: SizedBox(
+        width: 460,
+        child: SingleChildScrollView(
+          child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _controller,
+              maxLines: 6,
+              maxLength: 5000,
+              autofocus: true,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                hintText: 'Workload, exams, teaching, what you wish you had known...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _anonymous,
+              onChanged: (v) => setState(() => _anonymous = v ?? false),
+              title: const Text('Post anonymously', style: TextStyle(fontSize: 13)),
+              subtitle: const Text('Your name is hidden from everyone else. You can still edit or delete it.',
+                  style: TextStyle(fontSize: 11)),
+            ),
+          ],
+        ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(
+          onPressed: _controller.text.trim().isEmpty
+              ? null
+              : () => Navigator.pop(context, (text: _controller.text.trim(), anonymous: _anonymous)),
+          child: Text(widget.existing == null ? 'Post' : 'Save'),
+        ),
+      ],
     );
   }
 }

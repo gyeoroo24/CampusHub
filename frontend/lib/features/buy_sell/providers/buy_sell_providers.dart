@@ -3,6 +3,8 @@ import '../../../core/config/server_config.dart';
 import '../../../core/enums/sort_option.dart';
 import '../../../core/enums/view_mode.dart';
 import '../../../core/models/category_ref.dart';
+import '../../../core/models/page.dart';
+import '../../../core/utils/error_text.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../data/buy_sell_repository.dart';
 import '../domain/buy_sell_item.dart';
@@ -13,6 +15,13 @@ final buySellRepositoryProvider = Provider<IBuySellRepository>((ref) {
     return MockBuySellRepository();
   }
   return ApiBuySellRepository(ref.watch(apiClientProvider));
+});
+
+/// The full listing (description, all photos, seller contact for signed-in users). Feed cards
+/// carry only the summary, so detail views load this when they open.
+final listingDetailProvider = FutureProvider.autoDispose.family<ListingItem?, String>((ref, id) {
+  ref.watch(currentUserProvider); // contact details depend on who is asking
+  return ref.watch(buySellRepositoryProvider).getListingById(id);
 });
 
 final buySellCategoriesProvider = FutureProvider<List<CategoryRef>>((ref) async {
@@ -172,74 +181,63 @@ class BuySellPaginationNotifier extends StateNotifier<PaginatedFeedState<Listing
     });
   }
 
+  /// One page from the server with the current filters. Category chips hold names, so the name is
+  /// turned into the server's category id; a preset chip with no server category matches nothing.
+  Future<PaginatedResponse<ListingItem>?> _fetch(int offset) async {
+    final repo = _ref.read(buySellRepositoryProvider);
+    final filter = _ref.read(buySellFilterProvider);
+    int? categoryId;
+    if (filter.category != 'All') {
+      final categories = await _ref.read(buySellCategoriesProvider.future);
+      final match = categories.where((c) => c.name.toLowerCase() == filter.category.toLowerCase());
+      if (match.isEmpty) return null;
+      categoryId = match.first.id;
+    }
+    final statusList = (filter.selectedStatuses.isEmpty || filter.selectedStatuses.length == 3)
+        ? null
+        : filter.selectedStatuses.toList();
+    return repo.fetchListingsPage(
+      query: filter.query,
+      categoryId: categoryId,
+      minPrice: filter.minPrice,
+      maxPrice: filter.maxPrice,
+      statusList: statusList,
+      sortOption: filter.sortOption,
+      limit: _pageSize,
+      offset: offset,
+    );
+  }
+
   Future<void> loadInitial() async {
     state = state.copyWith(isLoadingInitial: true, clearError: true);
     try {
-      final repo = _ref.read(buySellRepositoryProvider);
-      final filter = _ref.read(buySellFilterProvider);
-
-      final statusList = (filter.selectedStatuses.isEmpty || filter.selectedStatuses.length == 3)
-          ? null
-          : filter.selectedStatuses.toList();
-      final paged = await repo.fetchListingsPage(
-        query: filter.query,
-        minPrice: filter.minPrice,
-        maxPrice: filter.maxPrice,
-        statusList: statusList,
-        limit: _pageSize,
-        offset: 0,
-      );
-
-      var items = paged.items;
-      if (filter.category != 'All') {
-        items = items.where((it) => it.category.name.toLowerCase() == filter.category.toLowerCase()).toList();
-      }
-
+      final paged = await _fetch(0);
       state = PaginatedFeedState(
-        items: items,
+        items: paged?.items ?? const [],
         isLoadingInitial: false,
         isLoadingMore: false,
-        hasMore: paged.hasMore,
-        offset: paged.items.length,
+        hasMore: paged?.hasMore ?? false,
+        offset: paged?.items.length ?? 0,
       );
     } catch (e) {
-      state = state.copyWith(isLoadingInitial: false, errorMessage: e.toString());
+      state = state.copyWith(isLoadingInitial: false, errorMessage: errorText(e));
     }
   }
 
   Future<void> loadMore() async {
     if (state.isLoadingInitial || state.isLoadingMore || !state.hasMore) return;
 
-    state = state.copyWith(isLoadingMore: true);
+    state = state.copyWith(isLoadingMore: true, clearError: true);
     try {
-      final repo = _ref.read(buySellRepositoryProvider);
-      final filter = _ref.read(buySellFilterProvider);
-
-      final statusList = (filter.selectedStatuses.isEmpty || filter.selectedStatuses.length == 3)
-          ? null
-          : filter.selectedStatuses.toList();
-      final paged = await repo.fetchListingsPage(
-        query: filter.query,
-        minPrice: filter.minPrice,
-        maxPrice: filter.maxPrice,
-        statusList: statusList,
-        limit: _pageSize,
-        offset: state.offset,
-      );
-
-      var newItems = paged.items;
-      if (filter.category != 'All') {
-        newItems = newItems.where((it) => it.category.name.toLowerCase() == filter.category.toLowerCase()).toList();
-      }
-
+      final paged = await _fetch(state.offset);
       state = state.copyWith(
-        items: [...state.items, ...newItems],
+        items: [...state.items, ...?paged?.items],
         isLoadingMore: false,
-        hasMore: paged.hasMore,
-        offset: state.offset + paged.items.length,
+        hasMore: paged?.hasMore ?? false,
+        offset: state.offset + (paged?.items.length ?? 0),
       );
     } catch (e) {
-      state = state.copyWith(isLoadingMore: false, errorMessage: e.toString());
+      state = state.copyWith(isLoadingMore: false, errorMessage: errorText(e));
     }
   }
 
@@ -299,15 +297,17 @@ final buySellListingsProvider = FutureProvider<List<ListingItem>>((ref) async {
   );
 });
 
+/// Every listing the signed-in user posted, any status, newest first. Asked for by seller_id,
+/// page by page (the API returns at most 50 per page), so older listings are included too.
 final myBuySellListingsProvider = FutureProvider<List<ListingItem>>((ref) async {
   final user = ref.watch(currentUserProvider);
   if (user == null || user.isGuest) return [];
   final repo = ref.watch(buySellRepositoryProvider);
-  final all = await repo.fetchListings();
-  return all
-      .where((it) =>
-          it.seller.id == user.id ||
-          it.seller.name == user.name ||
-          (it.sellerContact?.email != null && it.sellerContact!.email == user.email))
-      .toList();
+  final mine = <ListingItem>[];
+  for (var offset = 0; offset < 500; offset += 50) {
+    final page = await repo.fetchListingsPage(sellerId: user.id, limit: 50, offset: offset);
+    mine.addAll(page.items);
+    if (!page.hasMore) break;
+  }
+  return mine;
 });

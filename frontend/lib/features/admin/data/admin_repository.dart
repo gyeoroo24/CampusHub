@@ -18,6 +18,15 @@ abstract class IAdminRepository {
   Future<AccountStatus> transferAdminRole(String targetEmail);
   Future<AccountStatus> updateUserStatus({required String email, required bool isActive});
   Future<List<ContentReport>> listReports({String? status, String? module});
+
+  /// Flags a listing or lost/found report for moderator review (FR-10). Any signed-in user may
+  /// file one open report per item; the backend rejects a second with 409.
+  Future<void> createReport({
+    required String targetType, // 'listing' | 'lost_report' | 'found_report'
+    required String targetId,
+    required String reason,
+  });
+
   Future<void> resolveReport(
     String reportId, {
     required String action, // 'actioned' or 'dismissed'
@@ -26,6 +35,9 @@ abstract class IAdminRepository {
   });
   Future<Map<String, dynamic>> getSystemHealth();
   Future<List<User>> listRegisteredUsers();
+
+  /// Finds an account by email (admin only); throws if nobody with that email has signed in yet.
+  Future<AccountStatus> lookupUser(String email);
 }
 
 /// In-memory mock admin repository for local UI development and testing.
@@ -393,6 +405,38 @@ class MockAdminRepository implements IAdminRepository {
     }).toList();
   }
 
+  static const _fixedModule = {
+    'listing': 'buy_sell',
+    'lost_report': 'lost_found',
+    'found_report': 'lost_found',
+  };
+
+  @override
+  Future<void> createReport({
+    required String targetType,
+    required String targetId,
+    required String reason,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    final alreadyOpen = _mockReports.any((r) =>
+        r.targetType == targetType && r.targetId == targetId && r.status == 'open');
+    if (alreadyOpen) {
+      throw Exception('You already have an open report on this item.');
+    }
+    _mockReports.insert(
+      0,
+      ContentReport(
+        id: 'rep_${DateTime.now().millisecondsSinceEpoch}',
+        module: _fixedModule[targetType] ?? 'buy_sell',
+        targetType: targetType,
+        targetId: targetId,
+        reason: reason,
+        status: 'open',
+        createdAt: DateTime.now(),
+      ),
+    );
+  }
+
   @override
   Future<void> resolveReport(
     String reportId, {
@@ -426,6 +470,14 @@ class MockAdminRepository implements IAdminRepository {
       'openReports': _mockReports.where((r) => r.status == 'open').length,
       'registeredUsers': _mockUsers.length,
     };
+  }
+
+  @override
+  Future<AccountStatus> lookupUser(String email) async {
+    final match = _mockUsers.where((u) => u.email.toLowerCase() == email.trim().toLowerCase());
+    if (match.isEmpty) throw Exception('No account with that email. The person needs to sign in once first.');
+    final u = match.first;
+    return AccountStatus(id: u.id, email: u.email, name: u.name, isActive: u.isActive, isAdmin: u.isAdmin);
   }
 
   @override
@@ -485,14 +537,14 @@ class ApiAdminRepository implements IAdminRepository {
   }
 
   @override
-  Future<AccountStatus> transferAdminRole(String targetEmail) async {
-    // Look up user or pass email directly
-    final users = await listRegisteredUsers();
-    final target = users.firstWhere(
-      (u) => u.email.toLowerCase() == targetEmail.trim().toLowerCase(),
-      orElse: () => throw Exception('User with email $targetEmail not found.'),
-    );
+  Future<AccountStatus> lookupUser(String email) async {
+    final response = await apiClient.get(ApiEndpoints.userLookup, queryParameters: {'email': email.trim()});
+    return AccountStatus.fromJson(response.data as Map<String, dynamic>);
+  }
 
+  @override
+  Future<AccountStatus> transferAdminRole(String targetEmail) async {
+    final target = await lookupUser(targetEmail);
     final response = await apiClient.post(
       ApiEndpoints.userMakeAdmin(target.id),
     );
@@ -501,12 +553,7 @@ class ApiAdminRepository implements IAdminRepository {
 
   @override
   Future<AccountStatus> updateUserStatus({required String email, required bool isActive}) async {
-    final users = await listRegisteredUsers();
-    final target = users.firstWhere(
-      (u) => u.email.toLowerCase() == email.trim().toLowerCase(),
-      orElse: () => throw Exception('User with email $email not found.'),
-    );
-
+    final target = await lookupUser(email);
     final response = await apiClient.patch(
       ApiEndpoints.user(target.id),
       data: {'is_active': isActive},
@@ -517,7 +564,7 @@ class ApiAdminRepository implements IAdminRepository {
   @override
   Future<List<ContentReport>> listReports({String? status, String? module}) async {
     final params = <String, dynamic>{};
-    if (status != null && status != 'all') params['status'] = status;
+    if (status != null) params['status'] = status; // 'all' is understood by the API
     if (module != null && module != 'all') params['module'] = module;
 
     final response = await apiClient.get(
@@ -531,6 +578,22 @@ class ApiAdminRepository implements IAdminRepository {
           .toList();
     }
     return [];
+  }
+
+  @override
+  Future<void> createReport({
+    required String targetType,
+    required String targetId,
+    required String reason,
+  }) async {
+    await apiClient.post(
+      ApiEndpoints.reports,
+      data: {
+        'target_type': targetType,
+        'target_id': targetId,
+        'reason': reason,
+      },
+    );
   }
 
   @override

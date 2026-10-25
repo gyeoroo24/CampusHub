@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import '../../../../core/utils/contact_actions.dart';
 import '../../../../core/utils/date_time_formatter.dart';
 import '../../../../core/widgets/no_photo_placeholder.dart';
 import '../../domain/lost_found_item.dart';
@@ -33,10 +33,10 @@ class _LostFoundCardState extends State<LostFoundCard> {
 
     if (item.status == ReportStatus.matched) {
       badgeColor = Colors.purple.shade700;
-      statusLabel = 'MATCHED';
+      statusLabel = ReportStatus.matched.label.toUpperCase();
     } else if (item.status == ReportStatus.closed) {
       badgeColor = Colors.grey.shade600;
-      statusLabel = 'CLOSED';
+      statusLabel = ReportStatus.closed.label.toUpperCase();
     } else {
       badgeColor = isLost ? Colors.pinkAccent.shade700 : Colors.teal.shade700;
       statusLabel = isLost ? 'LOST' : 'FOUND';
@@ -308,14 +308,7 @@ class _LostFoundCardState extends State<LostFoundCard> {
                                 onPressed: () {
                                   final email = item.reporterContact?.email ??
                                       '${item.reporter.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
-                                  Clipboard.setData(ClipboardData(text: email));
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Copied $email to clipboard'),
-                                      duration: const Duration(seconds: 2),
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
+                                  contactBy(context, email: email);
                                 },
                                 icon: Icon(Icons.email_outlined, size: 13, color: badgeColor),
                                 label: Text(
@@ -340,14 +333,7 @@ class _LostFoundCardState extends State<LostFoundCard> {
                               child: OutlinedButton.icon(
                                 onPressed: () {
                                   final phone = item.reporterContact!.phone!;
-                                  Clipboard.setData(ClipboardData(text: phone));
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Copied $phone to clipboard'),
-                                      duration: const Duration(seconds: 2),
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
+                                  contactBy(context, phone: phone);
                                 },
                                 icon: Icon(Icons.phone_outlined, size: 13, color: badgeColor),
                                 label: Text(
@@ -378,14 +364,7 @@ class _LostFoundCardState extends State<LostFoundCard> {
                           onPressed: () {
                             final email = item.reporterContact?.email ??
                                 '${item.reporter.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
-                            Clipboard.setData(ClipboardData(text: email));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Copied $email to clipboard'),
-                                duration: const Duration(seconds: 2),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
+                            contactBy(context, email: email);
                           },
                           icon: Icon(Icons.email_outlined, size: 13, color: badgeColor),
                           label: Text(

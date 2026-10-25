@@ -44,17 +44,50 @@ class Course {
 
 class CourseFeedback {
   final String id;
-  final String authorName;
+
+  /// null when the author chose to stay anonymous, or the viewer is a guest.
+  final String? authorName;
+  final bool isAnonymous;
+
+  /// The viewer wrote it, so they may edit or delete it.
+  final bool isMine;
   final String content;
   final DateTime createdAt;
+  final DateTime? updatedAt;
 
-  const CourseFeedback({required this.id, required this.authorName, required this.content, required this.createdAt});
+  const CourseFeedback({
+    required this.id,
+    this.authorName,
+    this.isAnonymous = false,
+    this.isMine = false,
+    required this.content,
+    required this.createdAt,
+    this.updatedAt,
+  });
 
   factory CourseFeedback.fromJson(Map<String, dynamic> json) => CourseFeedback(
         id: json['id'].toString(),
-        authorName: (json['author'] as Map?)?['name']?.toString() ?? 'Student',
+        authorName: (json['author'] as Map?)?['name']?.toString(),
+        isAnonymous: json['is_anonymous'] as bool? ?? false,
+        isMine: json['is_mine'] as bool? ?? false,
         content: json['content']?.toString() ?? '',
         createdAt: DateTime.tryParse('${json['created_at']}') ?? DateTime.now(),
+        updatedAt: DateTime.tryParse('${json['updated_at']}'),
+      );
+
+  /// What to show as the author: their name, or a neutral label.
+  String get displayAuthor => isAnonymous ? 'Anonymous student' : (authorName ?? 'A student');
+
+  bool get wasEdited => updatedAt != null && updatedAt!.difference(createdAt).inSeconds > 5;
+
+  CourseFeedback copyWith({String? content, bool? isAnonymous}) => CourseFeedback(
+        id: id,
+        authorName: authorName,
+        isAnonymous: isAnonymous ?? this.isAnonymous,
+        isMine: isMine,
+        content: content ?? this.content,
+        createdAt: createdAt,
+        updatedAt: DateTime.now(),
       );
 }
 

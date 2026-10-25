@@ -33,15 +33,15 @@ class _BuySellListCardState extends State<BuySellListCard> {
     switch (item.status) {
       case ListingStatus.available:
         statusColor = const Color(0xFF059669);
-        statusLabel = 'AVAILABLE';
+        statusLabel = ListingStatus.available.label.toUpperCase();
         break;
       case ListingStatus.reserved:
         statusColor = Colors.amber.shade800;
-        statusLabel = 'RESERVED';
+        statusLabel = ListingStatus.reserved.label.toUpperCase();
         break;
       case ListingStatus.sold:
         statusColor = isDark ? const Color(0xFFA1A1AA) : const Color(0xFF71717A);
-        statusLabel = 'SOLD';
+        statusLabel = ListingStatus.sold.label.toUpperCase();
         break;
     }
 

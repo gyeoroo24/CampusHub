@@ -145,7 +145,7 @@ class _EditReportDialogState extends ConsumerState<EditReportDialog> {
                 TextFormField(
                   controller: _descController,
                   maxLines: 4,
-                  maxLength: 5000,
+                  maxLength: 2000, // same limit as the API and the report form
                   decoration: const InputDecoration(
                     labelText: 'Detailed Description *',
                     hintText: 'Color, brand, identifying marks, where/when last seen...',

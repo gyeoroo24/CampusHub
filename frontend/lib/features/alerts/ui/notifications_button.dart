@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/utils/web_history_support.dart';
 import '../../../core/utils/date_time_formatter.dart';
 import '../../../core/utils/error_text.dart';
 import '../../auth/providers/auth_providers.dart';
@@ -87,7 +88,8 @@ class NotificationsDialog extends ConsumerWidget {
     final unread = ref.watch(unreadNotificationsCountProvider);
     final theme = Theme.of(context);
 
-    return AlertDialog(
+    return ModalHistoryWrapper(
+      child: AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
       title: Row(
@@ -110,7 +112,8 @@ class NotificationsDialog extends ConsumerWidget {
       contentPadding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
       content: SizedBox(
         width: 460,
-        height: 420,
+        // At most 420px, less on short screens so the dialog never overflows.
+        height: (MediaQuery.of(context).size.height * 0.6).clamp(160.0, 420.0),
         child: notificationsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text(errorText(e))),
@@ -161,6 +164,6 @@ class NotificationsDialog extends ConsumerWidget {
         ),
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
       ],
-    );
+    ));
   }
 }

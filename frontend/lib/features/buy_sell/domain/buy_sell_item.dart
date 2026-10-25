@@ -4,9 +4,13 @@ import '../../../../core/models/photo.dart';
 import '../../../../core/models/user_ref.dart';
 
 enum ListingStatus {
-  available,
-  reserved,
-  sold;
+  available('Available'),
+  reserved('Reserved'),
+  sold('Sold');
+
+  /// The one name used for this status everywhere: filters, cards and dialogs.
+  final String label;
+  const ListingStatus(this.label);
 
   static ListingStatus fromString(String val) {
     switch (val.toLowerCase()) {

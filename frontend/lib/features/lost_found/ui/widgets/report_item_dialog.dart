@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/utils/error_text.dart';
+import '../../../../core/widgets/photo_picker_field.dart';
 import '../../../../core/models/category_ref.dart';
 import '../../../../core/models/contact.dart';
-import '../../../../core/models/photo.dart';
 import '../../../../core/models/user_ref.dart';
 import '../../../../core/utils/web_history_support.dart';
 import '../../domain/lost_found_item.dart';
@@ -36,7 +37,7 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
   final _formKey = GlobalKey<FormState>();
   final _descController = TextEditingController();
   final _locController = TextEditingController();
-  final _imageUrlController = TextEditingController();
+  List<PickedPhoto> _photos = [];
 
   DateTime _occurredAt = DateTime.now();
   CategoryRef? _selectedCategory;
@@ -56,7 +57,6 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
   void dispose() {
     _descController.dispose();
     _locController.dispose();
-    _imageUrlController.dispose();
     _customCategoryController.dispose();
     super.dispose();
   }
@@ -317,14 +317,10 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
                 ),
                 const SizedBox(height: 6),
 
-                // Photo URL (optional)
-                TextFormField(
-                  controller: _imageUrlController,
-                  decoration: const InputDecoration(
-                    labelText: 'Photo URL (optional)',
-                    hintText: 'Paste an image link or leave empty',
-                    prefixIcon: Icon(Icons.photo_camera_outlined, size: 20),
-                  ),
+                PhotoPickerField(
+                  photos: _photos,
+                  enabled: !_isSubmitting,
+                  onChanged: (p) => setState(() => _photos = p),
                 ),
                 const SizedBox(height: 12),
 
@@ -379,21 +375,17 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
     setState(() => _isSubmitting = true);
 
     try {
-      CategoryRef cat = _selectedCategory ?? const CategoryRef(id: 6, name: 'Other');
+      CategoryRef cat = _selectedCategory ?? const CategoryRef(id: 6, name: 'Others');
       if (_isCustomCategory && _customCategoryController.text.trim().isNotEmpty) {
-        try {
-          cat = await ref.read(lostFoundRepositoryProvider).createCategory(
-                _customCategoryController.text.trim(),
-              );
-          ref.invalidate(lostFoundCategoriesProvider);
-        } catch (_) {
-          cat = CategoryRef(id: 99, name: _customCategoryController.text.trim());
-        }
+        cat = await ref.read(lostFoundRepositoryProvider).createCategory(_customCategoryController.text.trim());
+        ref.invalidate(lostFoundCategoriesProvider);
       }
 
-      final imageUrl = _imageUrlController.text.trim().isNotEmpty
-          ? _imageUrlController.text.trim()
-          : 'https://picsum.photos/seed/${DateTime.now().millisecondsSinceEpoch}/600/400';
+      final photos = await uploadPickedPhotos(
+        ref,
+        _photos,
+        kind: widget.postType == PostType.lost ? 'lost_report_photo' : 'found_report_photo',
+      );
 
       final newItem = LostFoundItem(
         id: '',
@@ -409,8 +401,8 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
           id: widget.userId ?? 'usr_me',
           name: widget.userName ?? (widget.userEmail?.split('@').first ?? 'Reporter'),
         ),
-        coverPhotoUrl: imageUrl,
-        photos: [Photo(s3Key: '', url: imageUrl, sortOrder: 0)],
+        coverPhotoUrl: photos.isEmpty ? null : photos.first.url,
+        photos: photos,
         reporterContact: Contact(
           email: widget.userEmail ?? 'student@iisc.ac.in',
         ),
@@ -446,7 +438,7 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to submit report: $e'),
+            content: Text('Failed to submit report: ${errorText(e)}'),
             backgroundColor: Colors.red.shade700,
           ),
         );

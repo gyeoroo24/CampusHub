@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/widgets/error_state.dart';
 import '../../../../core/enums/view_mode.dart';
 import '../../../../core/widgets/skeleton_loader.dart';
 import '../../domain/lost_found_item.dart';
@@ -90,6 +91,17 @@ class _LostFoundColumnState extends ConsumerState<LostFoundColumn> {
                 );
               },
             );
+    }
+
+    if (items.isEmpty && paginatedState.errorMessage != null) {
+      return ErrorState(
+        compact: true,
+        message: paginatedState.errorMessage!,
+        onRetry: () => (widget.postType == PostType.lost
+                ? ref.read(lostReportsPaginationProvider.notifier)
+                : ref.read(foundReportsPaginationProvider.notifier))
+            .loadInitial(),
+      );
     }
 
     if (items.isEmpty) {

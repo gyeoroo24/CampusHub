@@ -1,6 +1,8 @@
 import 'dart:async';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_endpoints.dart';
+import '../../../../core/api/api_exception.dart';
+import '../../../../core/utils/validators.dart';
 import '../../../../core/storage/token_storage.dart';
 import '../../admin/data/admin_repository.dart';
 import '../domain/account_status.dart';
@@ -11,6 +13,7 @@ abstract class IAuthRepository {
   Future<User> updateProfile({
     String? name,
     String? phone,
+    bool clearPhone = false,
     String? departmentId,
     String? programme,
     int? graduationYear,
@@ -109,6 +112,7 @@ class MockAuthRepository implements IAuthRepository {
   Future<User> updateProfile({
     String? name,
     String? phone,
+    bool clearPhone = false,
     String? departmentId,
     String? programme,
     int? graduationYear,
@@ -124,6 +128,10 @@ class MockAuthRepository implements IAuthRepository {
       graduationYear: graduationYear ?? _currentUser!.graduationYear,
       updatedAt: DateTime.now(),
     );
+    if (clearPhone) {
+      // copyWith can't set a field to null, so rebuild without the phone.
+      _currentUser = User.fromJson({..._currentUser!.toJson(), 'phone': null});
+    }
 
     await tokenStorage.saveUser(_currentUser!.toJson());
     _controller.add(_currentUser);
@@ -185,7 +193,7 @@ class MockAuthRepository implements IAuthRepository {
   Future<void> sendOtp(String email) async {
     await _init();
     final trimmed = email.trim().toLowerCase();
-    if (!trimmed.endsWith('@iisc.ac.in') && !trimmed.contains('.iisc.ac.in')) {
+    if (!isIiscEmail(trimmed)) {
       throw Exception('Only valid IISc email addresses (ending in iisc.ac.in) are accepted.');
     }
     // Mock simulation: any 6-digit OTP succeeds
@@ -278,26 +286,23 @@ class ApiAuthRepository implements IAuthRepository {
     try {
       final response = await apiClient.get(ApiEndpoints.me);
       if (response.data != null && response.data is Map<String, dynamic>) {
-        final data = response.data as Map<String, dynamic>;
-        var user = User.fromJson(data);
-        if (user.moderatorGrants.isEmpty) {
-          final fallbackGrants = MockAdminRepository.getActiveGrantsForEmail(user.email);
-          if (fallbackGrants.isNotEmpty) {
-            user = user.copyWith(moderatorGrants: fallbackGrants);
-          }
-        }
-        if (!user.isAdmin && user.email.toLowerCase() == 'kmukund@iisc.ac.in') {
-          user = user.copyWith(isAdmin: true);
-        }
-        _cachedUser = user;
+        // Roles and moderator grants come only from the server (`/me`): the database is the
+        // single source of truth for who may moderate.
+        _cachedUser = User.fromJson(response.data as Map<String, dynamic>);
         await tokenStorage.saveUser(_cachedUser!.toJson());
         _controller.add(_cachedUser);
         return _cachedUser;
       }
-    } catch (_) {
-      await tokenStorage.clearAll();
-      _cachedUser = null;
-      _controller.add(null);
+    } on ApiException catch (e) {
+      // Only a rejected sign-in ends the session; a network blip or server error keeps the
+      // last known user so the app doesn't sign people out while the server restarts.
+      if (e.statusCode == 401 || e.statusCode == 403) {
+        await tokenStorage.clearAll();
+        _cachedUser = null;
+        _controller.add(null);
+        rethrow;
+      }
+      return _cachedUser;
     }
     return null;
   }
@@ -306,6 +311,7 @@ class ApiAuthRepository implements IAuthRepository {
   Future<User> updateProfile({
     String? name,
     String? phone,
+    bool clearPhone = false,
     String? departmentId,
     String? programme,
     int? graduationYear,
@@ -313,6 +319,7 @@ class ApiAuthRepository implements IAuthRepository {
     final payload = <String, dynamic>{};
     if (name != null) payload['name'] = name;
     if (phone != null) payload['phone'] = phone;
+    if (clearPhone) payload['phone'] = null; // null removes it
     if (departmentId != null) payload['department_id'] = departmentId;
     if (programme != null) payload['programme'] = programme;
     if (graduationYear != null) payload['graduation_year'] = graduationYear;
@@ -357,49 +364,40 @@ class ApiAuthRepository implements IAuthRepository {
 
   @override
   Future<void> sendOtp(String email) async {
-    // In cloud deployment, Cognito handles sign-up/sign-in directly.
+    // In cloud deployment (auth_mode=cognito), Cognito emails and verifies its own code at
+    // sign-up; this call 404s there and is skipped by the dialog. Locally, it emails a real code.
     final trimmed = email.trim().toLowerCase();
-    if (!trimmed.endsWith('@iisc.ac.in') && !trimmed.contains('.iisc.ac.in')) {
+    if (!isIiscEmail(trimmed)) {
       throw Exception('Only valid IISc email addresses (ending in iisc.ac.in) are accepted.');
+    }
+    try {
+      await apiClient.post(ApiEndpoints.otpRequest, data: {'email': trimmed});
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) return; // not dev auth: nothing to send, Cognito owns this step
+      rethrow;
     }
   }
 
   @override
   Future<User> verifyOtp(String email, String otp) async {
-    // In local dev, save dev user email immediately so ApiClient injects X-Dev-User
+    // Local dev sign-in: check the code the user was emailed, then the email goes to the API in
+    // the X-Dev-User header. The server creates the account on first sign-in and returns the
+    // user's real roles from `/me`.
     final trimmedEmail = email.trim().toLowerCase();
-    final registered = MockAdminRepository.findRegisteredUser(trimmedEmail);
-    final mockGrants = MockAdminRepository.getActiveGrantsForEmail(trimmedEmail);
-    final isDevAdmin = registered?.isAdmin ?? (trimmedEmail == 'kmukund@iisc.ac.in');
-
-    await tokenStorage.saveUser({
-      'email': trimmedEmail,
-      'name': registered != null && registered.name.isNotEmpty ? registered.name : trimmedEmail.split('@').first,
-      'is_admin': isDevAdmin,
-      'moderator_grants': mockGrants.map((g) => g.toJson()).toList(),
-    });
+    try {
+      await apiClient.post(ApiEndpoints.otpVerify, data: {'email': trimmedEmail, 'otp': otp.trim()});
+    } on ApiException catch (e) {
+      if (e.statusCode != 404) rethrow; // 404 = not dev auth; nothing to verify here
+    }
+    await tokenStorage.saveUser({'email': trimmedEmail, 'name': trimmedEmail.split('@').first});
     await tokenStorage.saveTokens(accessToken: 'dev_token_$trimmedEmail');
 
-    User? user;
-    try {
-      user = await getCurrentUser();
-    } catch (_) {}
-
-    if (user == null || (user.moderatorGrants.isEmpty && mockGrants.isNotEmpty)) {
-      final fallback = (user ?? registered ?? User(
-        id: 'usr_${trimmedEmail.hashCode.abs()}',
-        email: trimmedEmail,
-        name: trimmedEmail.split('@').first,
-        isAdmin: isDevAdmin,
-        createdAt: DateTime.now(),
-      )).copyWith(
-        moderatorGrants: mockGrants.isNotEmpty ? mockGrants : user?.moderatorGrants ?? const [],
-        isAdmin: isDevAdmin || (user?.isAdmin ?? false),
-      );
-      _cachedUser = fallback;
-      await tokenStorage.saveUser(fallback.toJson());
-      _controller.add(fallback);
-      return fallback;
+    final user = await getCurrentUser();
+    if (user == null || user.email.toLowerCase() != trimmedEmail) {
+      await tokenStorage.clearAll();
+      _cachedUser = null;
+      _controller.add(null);
+      throw Exception("Couldn't reach the CampusHub server to sign you in. Check your connection and try again.");
     }
     return user;
   }
