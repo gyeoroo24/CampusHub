@@ -3,7 +3,7 @@ from datetime import datetime
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..auth import CurrentUser, current_user, optional_user
@@ -101,6 +101,18 @@ async def update_me(body: ProfileUpdate, user: CurrentUser = Depends(current_use
     sql, values = set_clause(changes, start=2)
     await conn.execute(f"UPDATE users SET {sql} WHERE id = $1", user.id, *values)
     return await _my_profile(conn, user.id)
+
+
+@router.get("/users/lookup", response_model=AccountStatus, summary="Find an account by email (admin)")
+async def lookup_user(email: str = Query(..., min_length=3, max_length=320),
+                      user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
+    """The admin's account tools work by email; this turns an email into the account and its status."""
+    if not user.is_admin:
+        raise forbidden("Only the admin can look up accounts.")
+    row = await conn.fetchrow(f"SELECT {_STATUS_COLUMNS} FROM users WHERE email = $1", email.strip())
+    if row is None:
+        raise HTTPException(404, "No account with that email. The person needs to sign in to CampusHub once first.")
+    return AccountStatus(**dict(row))
 
 
 @router.get("/users/{user_id}", response_model=PublicProfile, summary="Someone's public profile")

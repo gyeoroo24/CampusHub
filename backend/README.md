@@ -75,6 +75,13 @@ docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub 
 docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub < db/reference-data.sql
 ```
 
+A database created before revision 7 (25 Oct 2026: anonymous feedback, one review per person
+per course) also needs:
+
+```bash
+docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub < db/migrations/007_feedback_rules.sql
+```
+
 ### Share it on your network
 
 To let teammates on the same Wi-Fi use your running backend (no cloud needed):
@@ -177,10 +184,11 @@ takes and returns, written for frontend design, see [docs/api-reference.md](../d
 | GET /health | guest | Health check (CloudWatch canary) |
 | GET, PATCH /me | user | My profile, admin flag and active moderator roles; update profile (phone is optional) |
 | GET /users/{id} | guest | Public profile; email and phone only for signed-in viewers |
+| GET /users/lookup?email= | admin | Find an account by email (for deactivating or handing over the admin role) |
 | PATCH /users/{id} | admin | Deactivate or reactivate an account (`is_active`); not your own |
 | POST /users/{id}/make-admin | admin | Hand the admin role over: there is exactly one admin, so the caller becomes a signed-in user |
 | POST /moderators | admin; department moderator for their courses | Grant a moderator role by email |
-| DELETE /moderators/{id} | same | Revoke a role |
+| DELETE /moderators/{id} | same, or the moderator themselves | Revoke a role, or step down from your own |
 | GET /moderators | admin, department moderator | List roles |
 | POST /uploads | user | Get a presigned upload URL |
 
@@ -189,7 +197,7 @@ takes and returns, written for frontend design, see [docs/api-reference.md](../d
 | Method & path | Who | What |
 |---|---|---|
 | GET, POST /buy-sell/categories | guest / user | List; add or get the existing category with that name |
-| GET /listings | guest | Browse. Filters: `q`, `category_id`, `min_price`, `max_price`, `status`, `seller_id` |
+| GET /listings | guest | Browse. Filters: `q`, `category_id`, `min_price`, `max_price`, `status`, `seller_id`; `sort` newest / price_asc / price_desc |
 | POST /listings | user | Create, with up to 10 `photo_keys` |
 | GET /listings/{id} | guest | Detail with photos; seller contact for signed-in users |
 | PATCH /listings/{id} | seller, admin | Edit fields; admin edits are logged |
@@ -226,7 +234,7 @@ New, edited or re-opened listings alert matching saved searches and Wanted posts
 | Method & path | Who | What |
 |---|---|---|
 | GET, POST /lost-found/categories | guest / user | Categories name the item (ID card, Water bottle…) |
-| GET /lost-reports | guest | Browse. Filters: `category_id`, `status`, `q`, `reporter_id` |
+| GET /lost-reports | guest | Browse. Filters: `category_id`, `status`, `q`, `reporter_id`, `from_date`/`to_date` (when lost or found); `sort` newest / oldest |
 | POST /lost-reports | user | File a report. The response lists `possible_matches`. Filing a *found* report notifies everyone with an open lost report in that category; so does changing a found report's category or time, or reopening it (each person is told once) |
 | GET, PATCH, DELETE /lost-reports/{id} | guest / reporter or admin / reporter, Lost & Found moderator or admin | |
 | PATCH /lost-reports/{id}/status | reporter, admin | open / matched / closed |
@@ -248,8 +256,9 @@ New, edited or re-opened listings alert matching saved searches and Wanted posts
 | GET /courses/{id}/materials | guest | With download URLs |
 | POST /courses/{id}/materials | course moderator of that course, department moderator, admin | |
 | PATCH, DELETE /materials/{id} | same | |
-| GET /courses/{id}/feedback | guest | |
-| POST /courses/{id}/feedback | user | |
+| GET /courses/{id}/feedback | guest | Names only for signed-in viewers; anonymous feedback never shows one. `is_mine` marks the viewer's own |
+| GET /courses/{id}/feedback/mine | user | My review of the course (404 if none) |
+| POST /courses/{id}/feedback | user | One review per person per course (409 on a second); `is_anonymous` hides the name |
 | PATCH /feedback/{id} | author, department moderator, admin | Edit |
 | DELETE /feedback/{id} | author, course moderator of that course, department moderator, admin | Remove |
 | GET /courses/{id}/survival-guide | guest | Feedback summary per semester (Aug / Jan, by when it was written) with sentiment, trend, themes, repeated advice and a summary paragraph. Computed on request (`app/sentiment.py`) |
@@ -275,7 +284,7 @@ New, edited or re-opened listings alert matching saved searches and Wanted posts
 |---|---|---|
 | POST /reports | user | Report a listing, Wanted post, lost/found report, material, feedback, thread or comment |
 | GET /me/reports | user | Reports I filed |
-| GET /reports | moderator, admin | Queue of reports in my scope (default: open) |
+| GET /reports | moderator, admin | Queue of reports in my scope (default: open; `status=all` for every status) |
 | POST /reports/{id}/resolve | moderator in scope | `actioned` (optionally `remove_content`) or `dismissed`; closes all open reports on that item. Removing an item any other way also closes its reports |
 | GET /me/notifications | user | Inbox (`unread_only` filter) |
 | POST /me/notifications/{id}/read | user | Mark one notification read |

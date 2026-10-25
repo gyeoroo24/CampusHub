@@ -1,7 +1,8 @@
 """Grant and revoke moderator roles (FR-3, §3.1).
 
 Admins can grant any role. A department moderator (Academic Help) can grant and revoke
-course moderators for courses in their own department.
+course moderators for courses in their own department. Any moderator can step down by
+revoking their own role.
 """
 from datetime import datetime
 from typing import Literal
@@ -96,15 +97,18 @@ async def grant(body: GrantCreate, user: CurrentUser = Depends(current_user),
     return Grant(**dict(await conn.fetchrow(_GRANT_SELECT + " WHERE m.id = $1", grant_id)))
 
 
-@router.delete("/{grant_id}", status_code=204, summary="Revoke a moderator role")
+@router.delete("/{grant_id}", status_code=204,
+               summary="Revoke a moderator role (admin; department moderator for course roles; or step down from your own)")
 async def revoke(grant_id: UUID, user: CurrentUser = Depends(current_user),
                  conn: asyncpg.Connection = Depends(get_conn)):
     row = await conn.fetchrow(
-        "SELECT module::text AS module, scope_type::text AS scope_type, course_id, revoked_at "
+        "SELECT user_id, module::text AS module, scope_type::text AS scope_type, course_id, revoked_at "
         "FROM moderator_assignments WHERE id = $1", grant_id)
     if row is None or row["revoked_at"] is not None:
         raise not_found("Active moderator role")
-    if not await _may_manage_grant(conn, user, row["module"], row["scope_type"], row["course_id"]):
+    stepping_down = row["user_id"] == user.id
+    if not stepping_down and not await _may_manage_grant(conn, user, row["module"], row["scope_type"],
+                                                         row["course_id"]):
         raise forbidden()
     async with conn.transaction():
         # Only an active grant is revoked, so two admins revoking at once can't both succeed.
@@ -112,7 +116,8 @@ async def revoke(grant_id: UUID, user: CurrentUser = Depends(current_user),
                 "UPDATE moderator_assignments SET revoked_at = now(), revoked_by = $2 "
                 "WHERE id = $1 AND revoked_at IS NULL RETURNING id", grant_id, user.id) is None:
             raise not_found("Active moderator role")
-        await log_moderation(conn, user.id, "revoke_moderator", "moderator_assignment", grant_id)
+        await log_moderation(conn, user.id, "step_down_moderator" if stepping_down else "revoke_moderator",
+                             "moderator_assignment", grant_id)
     return Response(status_code=204)
 
 

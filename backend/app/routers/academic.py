@@ -4,7 +4,8 @@
   courses            admins and department moderators add/edit/remove courses in their department
   materials          course moderators (own course) and department moderators (their department)
                      create/edit/remove; anyone can read
-  feedback           any signed-in user posts; the author, department moderators and admins edit;
+  feedback           any signed-in user posts one review per course (optionally anonymous); the author,
+                     department moderators and admins edit;
                      the author, moderators of the course (course or department level) and admins remove
 
 Deleting a course deletes everything under it (materials, feedback, its forum, threads,
@@ -18,7 +19,7 @@ import asyncpg
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
-from ..auth import CurrentUser, current_user
+from ..auth import CurrentUser, current_user, optional_user
 from ..common import Page, PageParams, UserRef, forbidden, make_page, not_found, page_params, set_clause, text
 from ..db import get_conn
 from ..permissions import can_manage_course, can_manage_department, close_reports, log_moderation
@@ -88,12 +89,20 @@ class Material(BaseModel):
 
 class FeedbackIn(BaseModel):
     content: text(5000)
+    is_anonymous: bool = Field(False, description="Hide your name from everyone else")
+
+
+class FeedbackUpdate(BaseModel):
+    content: text(5000) | None = None
+    is_anonymous: bool | None = None
 
 
 class Feedback(BaseModel):
     id: UUID
     course_id: UUID
-    author: UserRef
+    author: UserRef | None = Field(description="null for anonymous feedback (except to its author) and for guests")
+    is_anonymous: bool
+    is_mine: bool = Field(description="True when the viewer wrote it, so the app can offer edit and delete")
     content: str
     created_at: datetime
     updated_at: datetime
@@ -318,14 +327,18 @@ async def delete_material(material_id: UUID, reason: str | None = Query(None, ma
 
 # ---------------------------------------------------------------- feedback
 _FEEDBACK_SELECT = """
-SELECT f.id, f.course_id, f.content, f.created_at, f.updated_at, u.id AS author_id, u.name AS author_name
+SELECT f.id, f.course_id, f.content, f.is_anonymous, f.created_at, f.updated_at,
+       u.id AS author_id, u.name AS author_name
 FROM course_feedback f JOIN users u ON u.id = f.author_id
 """
 
 
-def _feedback(r: asyncpg.Record) -> Feedback:
-    return Feedback(id=r["id"], course_id=r["course_id"], content=r["content"],
-                    author=UserRef(id=r["author_id"], name=r["author_name"]),
+def _feedback(r: asyncpg.Record, viewer: CurrentUser | None) -> Feedback:
+    """Names are shown only to signed-in viewers, and never for anonymous feedback (except to its author)."""
+    mine = viewer is not None and viewer.id == r["author_id"]
+    show_name = mine or (viewer is not None and not r["is_anonymous"])
+    return Feedback(id=r["id"], course_id=r["course_id"], content=r["content"], is_anonymous=r["is_anonymous"],
+                    is_mine=mine, author=UserRef(id=r["author_id"], name=r["author_name"]) if show_name else None,
                     created_at=r["created_at"], updated_at=r["updated_at"])
 
 
@@ -350,35 +363,57 @@ async def _may_change_feedback(conn: asyncpg.Connection, user: CurrentUser, feed
 
 @router.get("/courses/{course_id}/feedback", response_model=Page[Feedback], summary="A course's feedback")
 async def list_feedback(course_id: UUID, page: PageParams = Depends(page_params),
+                        viewer: CurrentUser | None = Depends(optional_user),
                         conn: asyncpg.Connection = Depends(get_conn)):
     await _course_department(conn, course_id)
     rows = await conn.fetch(
         _FEEDBACK_SELECT + """ WHERE f.course_id = $1 AND f.deleted_at IS NULL
         ORDER BY f.created_at DESC, f.id DESC LIMIT $2 OFFSET $3""", course_id, page.limit + 1, page.offset)
-    return make_page(rows, page, _feedback)
+    return make_page(rows, page, lambda r: _feedback(r, viewer))
+
+
+@router.get("/courses/{course_id}/feedback/mine", response_model=Feedback, summary="My feedback on a course, if any")
+async def my_feedback(course_id: UUID, user: CurrentUser = Depends(current_user),
+                      conn: asyncpg.Connection = Depends(get_conn)):
+    await _course_department(conn, course_id)
+    row = await conn.fetchrow(_FEEDBACK_SELECT + """ WHERE f.course_id = $1 AND f.author_id = $2
+                              AND f.deleted_at IS NULL""", course_id, user.id)
+    if row is None:
+        raise not_found("Your feedback on this course")
+    return _feedback(row, user)
 
 
 @router.post("/courses/{course_id}/feedback", response_model=Feedback, status_code=201,
-             summary="Post feedback on a course (FR-12)")
+             summary="Post feedback on a course (FR-12); one per person per course")
 async def create_feedback(course_id: UUID, body: FeedbackIn, user: CurrentUser = Depends(current_user),
                           conn: asyncpg.Connection = Depends(get_conn)):
     await _course_department(conn, course_id)
-    feedback_id = await conn.fetchval(
-        "INSERT INTO course_feedback (course_id, author_id, content) VALUES ($1, $2, $3) RETURNING id",
-        course_id, user.id, body.content)
-    return _feedback(await conn.fetchrow(_FEEDBACK_SELECT + " WHERE f.id = $1", feedback_id))
+    try:
+        feedback_id = await conn.fetchval(
+            "INSERT INTO course_feedback (course_id, author_id, content, is_anonymous) VALUES ($1, $2, $3, $4) "
+            "RETURNING id", course_id, user.id, body.content, body.is_anonymous)
+    except asyncpg.UniqueViolationError as exc:
+        # One review per person keeps the survival guide's numbers from being skewed by repeat posts.
+        raise HTTPException(409, "You've already reviewed this course. Edit your feedback instead.") from exc
+    return _feedback(await conn.fetchrow(_FEEDBACK_SELECT + " WHERE f.id = $1", feedback_id), user)
 
 
 @router.patch("/feedback/{feedback_id}", response_model=Feedback,
               summary="Edit feedback (author, department moderator, admin)")
-async def update_feedback(feedback_id: UUID, body: FeedbackIn, user: CurrentUser = Depends(current_user),
+async def update_feedback(feedback_id: UUID, body: FeedbackUpdate, user: CurrentUser = Depends(current_user),
                           conn: asyncpg.Connection = Depends(get_conn)):
     row = await _may_change_feedback(conn, user, feedback_id, removing=False)
+    changes = body.model_dump(exclude_unset=True)
+    if any(changes.get(k, 0) is None for k in ("content", "is_anonymous")):
+        raise HTTPException(422, "content and is_anonymous can't be empty.")
+    if "is_anonymous" in changes and row["author_id"] != user.id:
+        raise forbidden("Only the author can change whether their name is shown.")
+    sql, values = set_clause(changes, start=2)
     async with conn.transaction():
-        await conn.execute("UPDATE course_feedback SET content = $2 WHERE id = $1", feedback_id, body.content)
+        await conn.execute(f"UPDATE course_feedback SET {sql} WHERE id = $1", feedback_id, *values)
         if row["author_id"] != user.id:
             await log_moderation(conn, user.id, "edit_course_feedback", "course_feedback", feedback_id)
-    return _feedback(await conn.fetchrow(_FEEDBACK_SELECT + " WHERE f.id = $1", feedback_id))
+    return _feedback(await conn.fetchrow(_FEEDBACK_SELECT + " WHERE f.id = $1", feedback_id), user)
 
 
 @router.delete("/feedback/{feedback_id}", status_code=204,

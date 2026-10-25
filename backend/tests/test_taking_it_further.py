@@ -2,7 +2,7 @@
 and the course survival guide."""
 from datetime import datetime, timedelta, timezone
 
-from .conftest import ADMIN, API, ASHA, KIRAN, MEERA, RAVI, category, grant, make_admin, sign_in, sql
+from .conftest import as_user, ADMIN, API, ASHA, KIRAN, MEERA, RAVI, category, grant, make_admin, sign_in, sql
 
 
 def _listing(client, headers, cat, **fields):
@@ -214,13 +214,12 @@ def _feedback(client, course_id, headers, content, written_at):
 
 def test_survival_guide_groups_by_semester_and_shows_trend(client):
     course = _course(client)
-    people = [ASHA, RAVI, MEERA]
     terms = [("2023-11-20T10:00:00+05:30", "The pace was brutal and grading was opaque. Start the project early."),
              ("2024-12-01T10:00:00+05:30", "Content is good but the workload is heavy. Start the project early."),
              ("2025-11-25T10:00:00+05:30", "One of the best courses, the instructor explains really clearly.")]
-    for when, text in terms:
-        for who in people:
-            _feedback(client, course["id"], who, text, when)
+    for t, (when, text) in enumerate(terms):
+        for n in range(3):   # one review per person per course, so each semester has its own students
+            _feedback(client, course["id"], as_user(f"student{t}{n}@iisc.ac.in"), text, when)
 
     guide = client.get(f"{API}/courses/{course['id']}/survival-guide").json()
     assert guide["course"]["code"] == "DS 252" and guide["feedback_count"] == 9

@@ -1,5 +1,5 @@
 -- ============================================================================
--- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 6
+-- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 7
 -- DS252 Introduction to Cloud Computing — Team "Order of Phoenix"
 --
 -- Permission modules (FR-2, NFR-6): buy_sell, lost_found, academic_help,
@@ -16,6 +16,10 @@
 --   4. No table for the course survival guide: it is computed from
 --      course_feedback when requested.
 --   An existing database is upgraded with db/migrations/006_taking_it_further.sql.
+--
+-- Changes from rev. 6 (frontend review, 25 Oct 2026):
+--   1. course_feedback.is_anonymous, and at most one active review per person per course
+--      (uq_feedback_one_per_author). Upgrade: db/migrations/007_feedback_rules.sql.
 --
 -- Changes from rev. 4 (team review, 23 Oct 2026):
 --   1. Multiple photos: listing_photos, lost_report_photos and
@@ -415,10 +419,11 @@ CREATE TABLE course_materials (
 CREATE INDEX idx_materials_course ON course_materials(course_id) WHERE deleted_at IS NULL;   -- FR-11
 
 CREATE TABLE course_feedback (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    course_id  UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-    author_id  UUID NOT NULL REFERENCES users(id),
-    content    TEXT NOT NULL,
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_id    UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    author_id    UUID NOT NULL REFERENCES users(id),
+    content      TEXT NOT NULL,
+    is_anonymous BOOLEAN NOT NULL DEFAULT FALSE,     -- rev 7: name hidden from everyone but the author
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at TIMESTAMPTZ,
@@ -426,6 +431,8 @@ CREATE TABLE course_feedback (
     CONSTRAINT feedback_deleted_pair_chk CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))
 );
 CREATE INDEX idx_feedback_course ON course_feedback(course_id, created_at DESC) WHERE deleted_at IS NULL;  -- FR-11/12
+-- rev 7: one review per person per course, so repeat posts can't skew the survival guide.
+CREATE UNIQUE INDEX uq_feedback_one_per_author ON course_feedback(course_id, author_id) WHERE deleted_at IS NULL;
 
 -- ============================================================================
 -- PHASE 2 — PLACEMENT HUB  (FR-15, FR-16, FR-17)

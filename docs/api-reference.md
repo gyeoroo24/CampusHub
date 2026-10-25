@@ -1,10 +1,10 @@
 # CampusHub API Reference
 
-Last updated 24 Oct 2026. For the exact JSON of every request and response, run the backend and open Swagger at `http://localhost:8000/docs`.
+Last updated 25 Oct 2026. For the exact JSON of every request and response, run the backend and open Swagger at `http://localhost:8000/docs`.
 
 ## Overview
 
-The CampusHub backend exposes 88 endpoints under `/api/v1`. This page lists each one, who may call it, and the fields it takes and returns, so screens can be designed around real data.
+The CampusHub backend exposes 90 endpoints under `/api/v1`. This page lists each one, who may call it, and the fields it takes and returns, so screens can be designed around real data.
 
 - **Base URL (local):** `http://localhost:8000/api/v1`. The cloud host isn't set up yet; only the host part will change.
 - **Try it live:** `http://localhost:8000/docs` (Swagger) shows the exact JSON for every request and response, and lets you send real calls.
@@ -104,11 +104,12 @@ Ten endpoints cover the signed-in user's profile, other people's public profiles
 | GET | `/me` | user | My profile, `is_admin` and my active `moderator_grants` |
 | PATCH | `/me` | user | Edit my `name`, `phone`, `department_id`, `programme`, `graduation_year` |
 | GET | `/users/{user_id}` | guest | Someone's public profile; `contact` only for signed-in viewers |
+| GET | `/users/lookup?email=` | admin | Find an account by email; returns `id`, `email`, `name`, `is_active`, `is_admin`. 404 if nobody with that email has signed in yet. Use it before deactivating or handing over the admin role |
 | PATCH | `/users/{user_id}` | admin | Deactivate or reactivate an account: `{"is_active": false}`. Not your own. Returns `id`, `email`, `name`, `is_active`, `is_admin` |
 | POST | `/users/{user_id}/make-admin` | admin | Hand the admin role to this user. There is only ever one admin, so the caller becomes a normal signed-in user. 403 for anyone else; 422 for yourself or a deactivated account |
 | POST | `/moderators` | admin; department moderator (for their courses) | Make someone a moderator: `email`, `module`, `scope_type`, `department_id` or `course_id` |
 | GET | `/moderators` | admin, department moderator | List roles. Filters: `module`, `department_id`, `course_id`, `include_revoked` |
-| DELETE | `/moderators/{grant_id}` | same as POST | Revoke a role |
+| DELETE | `/moderators/{grant_id}` | same as POST, or the moderator themselves | Revoke a role. A moderator can step down by revoking their own role |
 | POST | `/uploads` | user | Get an upload ticket (see File uploads) |
 
 **Fields to design with:**
@@ -130,7 +131,7 @@ Guests can browse and search listings. Sellers create, edit and mark their own l
 | --- | --- | --- | --- |
 | GET | `/buy-sell/categories` | guest | All categories (`id`, `name`), A–Z |
 | POST | `/buy-sell/categories` | user | Add a category by `name` (the "Others" option). If the name already exists, ignoring case and spaces, the existing one comes back |
-| GET | `/listings` | guest | Browse, newest first. Filters: `q` (title and description), `category_id`, `min_price`, `max_price`, `status` (repeatable), `seller_id` |
+| GET | `/listings` | guest | Browse. Filters: `q` (title and description), `category_id`, `min_price`, `max_price`, `status` (repeatable), `seller_id`. `sort`: `newest` (default), `price_asc`, `price_desc` |
 | POST | `/listings` | user | Create: `title`, `price`, `category_id`, `description`, `location`, `photo_keys` (up to 10) |
 | GET | `/listings/{id}` | guest | One listing with all photos; `seller_contact` for signed-in users |
 | PATCH | `/listings/{id}` | owner, admin | Edit `title`, `description`, `price`, `category_id`, `location` |
@@ -157,7 +158,7 @@ Lost reports and found reports have identical endpoints. Swap `/lost-reports` fo
 | --- | --- | --- | --- |
 | GET | `/lost-found/categories` | guest | All categories, A–Z. A category names the item: ID card, Water bottle, Earbuds |
 | POST | `/lost-found/categories` | user | Add a category by `name`, or get the existing one with that name |
-| GET | `/lost-reports` | guest | Browse, newest first. Filters: `q` (description), `category_id`, `status` (repeatable), `reporter_id` |
+| GET | `/lost-reports` | guest | Browse. Filters: `q` (description), `category_id`, `status` (repeatable), `reporter_id`, `from_date` and `to_date` (when the item was lost or found; send a time zone). `sort`: `newest` (default) or `oldest`, by when the report was filed |
 | POST | `/lost-reports` | user | File a report: `description`, `category_id`, `occurred_at`, `location`, `photo_keys` (up to 10). The reply includes `possible_matches` |
 | GET | `/lost-reports/{id}` | guest | One report with photos; `reporter_contact` for signed-in users |
 | PATCH | `/lost-reports/{id}` | owner, admin | Edit `description`, `category_id`, `occurred_at`, `location` |
@@ -246,9 +247,10 @@ The screens go department → course → materials and feedback. Each course and
 | POST | `/courses/{id}/materials` | course moderator (that course), department moderator, admin | Add one: `title`, `material_type`, `s3_key` |
 | PATCH | `/materials/{id}` | same | Edit `title`, `material_type` |
 | DELETE | `/materials/{id}` | same | Remove. Optional `?reason=` |
-| GET | `/courses/{id}/feedback` | guest | Feedback, newest first |
-| POST | `/courses/{id}/feedback` | user | Post feedback: `content` |
-| PATCH | `/feedback/{id}` | owner, department moderator, admin | Edit `content` |
+| GET | `/courses/{id}/feedback` | guest | Feedback, newest first. Author names are shown only to signed-in viewers, and never for anonymous feedback |
+| GET | `/courses/{id}/feedback/mine` | user | My review of this course; 404 if I haven't written one |
+| POST | `/courses/{id}/feedback` | user | Post a review: `content`, `is_anonymous` (default false). One review per person per course: a second one returns 409 "You've already reviewed this course. Edit your feedback instead." |
+| PATCH | `/feedback/{id}` | owner, department moderator, admin | Edit `content`; only the author may change `is_anonymous` |
 | DELETE | `/feedback/{id}` | owner, course moderator (that course), department moderator, admin | Remove. Optional `?reason=` |
 
 **Fields to design with:**
@@ -258,7 +260,7 @@ The screens go department → course → materials and feedback. Each course and
 | Department | `id`, `name`, `course_count`, `created_at` |
 | Course | `id`, `department_id`, `code`, `name`, `material_count`, `feedback_count`, `has_content`, `created_at` |
 | Material | `id`, `course_id`, `title`, `material_type`, `download_url`, `uploaded_by` (`id`, `name`), `created_at` |
-| Feedback | `id`, `course_id`, `author` (`id`, `name`), `content`, `created_at`, `updated_at` |
+| Feedback | `id`, `course_id`, `author` (`id`, `name`; `null` for guests and for anonymous feedback, except to its author), `is_anonymous`, `is_mine` (the viewer wrote it: show Edit and Delete), `content`, `created_at`, `updated_at` |
 
 - **Empty courses:** `has_content: false` means show "No data yet".
 - **Material types:** `notes`, `slides`, `past_assignment`, `exam_material`, `other` (the default). These suit filter chips.
@@ -323,7 +325,7 @@ Any signed-in user can flag content. Moderators work through a queue limited to 
 | --- | --- | --- | --- |
 | POST | `/reports` | user | Flag an item: `target_type`, `target_id`, `reason` |
 | GET | `/me/reports` | user | Reports I've filed, newest first |
-| GET | `/reports` | moderator, admin | The queue for my scope, oldest first. Filters: `status` (default `open`), `module` |
+| GET | `/reports` | moderator, admin | The queue for my scope, oldest first. Filters: `status` (`open` by default; `actioned`, `dismissed`, or `all`), `module` |
 | POST | `/reports/{id}/resolve` | moderator in scope, admin | `action`: `actioned` or `dismissed`, plus an optional `note` and `remove_content` |
 
 **Fields to design with:**

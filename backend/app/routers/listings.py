@@ -23,6 +23,10 @@ from ..storage import delete_objects, file_url, mark_attached, verify_own_upload
 router = APIRouter(prefix="/listings", tags=["Buy & Sell"])
 
 ListingStatus = Literal["available", "reserved", "sold"]
+ListingSort = Literal["newest", "price_asc", "price_desc"]
+_ORDER = {"newest": "l.created_at DESC, l.id DESC",
+          "price_asc": "l.price ASC, l.created_at DESC, l.id DESC",
+          "price_desc": "l.price DESC, l.created_at DESC, l.id DESC"}
 MAX_PHOTOS = 10
 
 
@@ -143,11 +147,12 @@ async def list_listings(
     max_price: Decimal | None = Query(None, ge=0),
     status: list[ListingStatus] | None = Query(None, description="Repeat to allow several, e.g. status=available&status=reserved"),
     seller_id: UUID | None = None,
+    sort: ListingSort = Query("newest", description="newest, price_asc or price_desc"),
     page: PageParams = Depends(page_params),
     conn: asyncpg.Connection = Depends(get_conn),
 ):
     rows = await conn.fetch(
-        _SELECT + """
+        _SELECT + f"""
         WHERE l.deleted_at IS NULL
           AND ($1::int IS NULL OR l.category_id = $1)
           AND ($2::numeric IS NULL OR l.price >= $2)
@@ -156,7 +161,7 @@ async def list_listings(
           AND ($5::text IS NULL OR numnode(websearch_to_tsquery('english', $5)) = 0
                OR l.search_vector @@ websearch_to_tsquery('english', $5))
           AND ($6::uuid IS NULL OR l.seller_id = $6)
-        ORDER BY l.created_at DESC, l.id DESC
+        ORDER BY {_ORDER[sort]}
         LIMIT $7 OFFSET $8""",
         category_id, min_price, max_price, status, search_text(q), seller_id, page.limit + 1, page.offset)
     return make_page(rows, page, _summary)

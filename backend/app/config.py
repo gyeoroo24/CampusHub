@@ -43,6 +43,19 @@ class Settings(BaseSettings):
     cognito_app_client_id: str = ""
     jwks_timeout_seconds: float = 5.0
 
+    # --- Dev sign-in OTP email ---
+    # Only used in auth_mode="dev": the "send OTP" step on the sign-in dialog emails a real
+    # 6-digit code instead of accepting any value. Without SMTP configured, the code is logged
+    # to the server console instead, so local development still works with no mail account.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str = "CampusHub <no-reply@campushub.local>"
+    otp_ttl_seconds: int = 600
+    otp_resend_cooldown_seconds: int = 30
+    otp_max_attempts: int = 5
+
     # --- S3 uploads ---
     s3_bucket: str = "campushub-uploads"
     s3_region: str = "ap-south-1"

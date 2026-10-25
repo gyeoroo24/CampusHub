@@ -169,7 +169,7 @@ async def my_reports(page: PageParams = Depends(page_params), user: CurrentUser 
 
 
 @router.get("/reports", response_model=Page[Report], summary="Moderation queue (reports in my scope)")
-async def list_reports(status: Literal["open", "actioned", "dismissed"] | None = Query("open"),
+async def list_reports(status: Literal["open", "actioned", "dismissed", "all"] = Query("open", description="all = any status"),
                        module: Module | None = None, page: PageParams = Depends(page_params),
                        user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
     modules, departments, courses = await _moderator_scope(conn, user)
@@ -178,7 +178,8 @@ async def list_reports(status: Literal["open", "actioned", "dismissed"] | None =
     rows = await conn.fetch(
         _SCOPED + """ AND ($5::text IS NULL OR r.status::text = $5) AND ($6::text IS NULL OR r.module::text = $6)
         ORDER BY r.created_at, r.id LIMIT $7 OFFSET $8""",
-        user.is_admin, modules, departments, courses, status, module, page.limit + 1, page.offset)
+        user.is_admin, modules, departments, courses, None if status == "all" else status, module,
+        page.limit + 1, page.offset)
     return make_page(rows, page, _report)
 
 

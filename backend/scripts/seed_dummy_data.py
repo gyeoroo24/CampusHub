@@ -481,16 +481,21 @@ async def seed(conn: asyncpg.Connection, s3, bucket: str) -> dict:
         kind = rng.choice(TRAJECTORIES)
         workload = rng.choice(["light", "medium", "medium", "heavy"])
         offerings = semesters(course[3])
-        pool = by_dept[dept] + students if is_cds else by_dept.get(dept, []) + students
+        # Each student reviews a course once (uq_feedback_one_per_author), so draw without replacement.
+        pool = list(dict.fromkeys(by_dept[dept] + students if is_cds else by_dept.get(dept, []) + students))
+        rng.shuffle(pool)
         for i, (_, start, end) in enumerate(offerings):
             ongoing = start > NOW - timedelta(days=60)
             n = rng.randint(1, 3) if ongoing else rng.randint(4, 9) if is_cds else rng.randint(2, 4)
-            for author in rng.sample(pool, k=min(n, len(pool))):
+            authors, pool = pool[:n], pool[n:]
+            for author in authors:
                 score = trajectory_score(kind, i, len(offerings))
                 created = min(between(start, end), NOW - timedelta(hours=2))
-                fb_rows.append((course_ids[course[0]], author, feedback_text(course, score, workload), created))
+                fb_rows.append((course_ids[course[0]], author, feedback_text(course, score, workload), created,
+                                rng.random() < 0.2))
     await conn.executemany(
-        "INSERT INTO course_feedback (course_id, author_id, content, created_at, updated_at) VALUES ($1, $2, $3, $4, $4)",
+        "INSERT INTO course_feedback (course_id, author_id, content, is_anonymous, created_at, updated_at) "
+        "VALUES ($1, $2, $3, $5, $4, $4)",
         fb_rows)
     counts["course feedback"] = len(fb_rows)
 

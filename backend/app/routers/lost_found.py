@@ -225,20 +225,26 @@ def build_router(kind: Kind) -> APIRouter:
         status: list[ReportStatus] | None = Query(None),
         q: str | None = Query(None, max_length=200, description="Words in the description"),
         reporter_id: UUID | None = None,
+        from_date: datetime | None = Query(None, description=f"Only items {kind.name} at or after this time"),
+        to_date: datetime | None = Query(None, description=f"Only items {kind.name} at or before this time"),
+        sort: Literal["newest", "oldest"] = Query("newest", description="By when the report was filed"),
         page: PageParams = Depends(page_params),
         conn: asyncpg.Connection = Depends(get_conn),
     ):
+        order = "r.created_at DESC, r.id DESC" if sort == "newest" else "r.created_at ASC, r.id ASC"
         rows = await conn.fetch(
-            select + """
+            select + f"""
             WHERE r.deleted_at IS NULL
               AND ($1::int IS NULL OR r.category_id = $1)
               AND ($2::text[] IS NULL OR r.status::text = ANY($2::text[]))
               AND ($3::text IS NULL OR r.description ILIKE '%' || $3 || '%' ESCAPE '\\')
               AND ($4::uuid IS NULL OR r.reporter_id = $4)
-            ORDER BY r.created_at DESC, r.id DESC
+              AND ($7::timestamptz IS NULL OR r.{kind.when} >= $7)
+              AND ($8::timestamptz IS NULL OR r.{kind.when} <= $8)
+            ORDER BY {order}
             LIMIT $5 OFFSET $6""",
             category_id, status, _like_pattern(q) if (q := search_text(q)) else None, reporter_id,
-            page.limit + 1, page.offset)
+            page.limit + 1, page.offset, from_date, to_date)
         return make_page(rows, page, summary)
 
     @router.get("/{report_id}", response_model=ReportDetail, summary=f"One {kind.name} report")

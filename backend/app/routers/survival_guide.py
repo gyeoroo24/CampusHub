@@ -94,8 +94,8 @@ def _term_label(term: tuple[int, int]) -> str:
 def _sentiment(scores: list[float]) -> Sentiment:
     value = mean(scores)
     return Sentiment(score=round(value, 2), label=sentiment.label(value),
-                     positive_share=round(sum(s >= 0.25 for s in scores) / len(scores), 2),
-                     negative_share=round(sum(s <= -0.25 for s in scores) / len(scores), 2))
+                     positive_share=round(sum(sentiment.label(s) == "positive" for s in scores) / len(scores), 2),
+                     negative_share=round(sum(sentiment.label(s) == "negative" for s in scores) / len(scores), 2))
 
 
 def _themes(sentences: list[tuple[str, float]], limit: int | None = None) -> list[Theme]:
@@ -181,8 +181,8 @@ async def survival_guide(course_id: UUID, conn: asyncpg.Connection = Depends(get
         semesters.append(Semester(
             term=_term_label(term), starts_on=f"{term[0]}-{term[1]:02d}-01", in_progress=term == now_term,
             feedback_count=len(feedback), sentiment=_sentiment(scores), top_themes=_themes(sentences, 3),
-            highlights=Highlights(positive=best[0] if best[1] >= 0.25 else None,
-                                  negative=worst[0] if worst[1] <= -0.25 else None)))
+            highlights=Highlights(positive=best[0] if sentiment.label(best[1]) == "positive" else None,
+                                  negative=worst[0] if sentiment.label(worst[1]) == "negative" else None)))
         all_scores += scores
         all_sentences += sentences
 
