@@ -4,6 +4,8 @@ import '../../../../core/enums/date_preset.dart';
 import '../../../../core/enums/sort_option.dart';
 import '../../../../core/enums/view_mode.dart';
 import '../../../../core/widgets/compact_date_range_picker_dialog.dart';
+import '../../../alerts/domain/alerts_models.dart';
+import '../../../alerts/ui/save_search_dialog.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../../../auth/ui/auth_dialog.dart';
 import '../../domain/lost_found_item.dart';
@@ -106,7 +108,7 @@ class LostFoundFilterBar extends ConsumerWidget {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: categoryPills.map((pill) {
-                      final isSelected = filter.category == pill.name;
+                      final isSelected = filter.category.toLowerCase() == pill.name.toLowerCase();
                       return Padding(
                         padding: const EdgeInsets.only(right: 8.0),
                         child: ChoiceChip(
@@ -210,6 +212,29 @@ class LostFoundFilterBar extends ConsumerWidget {
                     }).toList(),
                   ),
                 ),
+              ),
+
+              // Save this search: alerts when a matching item is found
+              IconButton(
+                iconSize: 18,
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Alert me when a matching item is found',
+                icon: const Icon(Icons.notification_add_outlined),
+                onPressed: () {
+                  final categories = categoriesAsync.valueOrNull ?? const [];
+                  final picked = filter.category == 'All'
+                      ? null
+                      : categories.where((c) => c.name.toLowerCase() == filter.category.toLowerCase()).firstOrNull;
+                  SaveSearchDialog.show(
+                    context,
+                    ref,
+                    module: SavedSearchModule.lostFound,
+                    query: filter.query,
+                    categoryId: picked?.id,
+                    categoryName: picked?.name,
+                    unsavedCategoryName: filter.category != 'All' && picked == null ? filter.category : null,
+                  );
+                },
               ),
 
               // Sort Dropdown (Styled identically to Buy & Sell toolbar)

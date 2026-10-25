@@ -5,7 +5,11 @@ import '../../../core/enums/view_mode.dart';
 import '../../../core/widgets/compact_price_range_picker_dialog.dart';
 import '../../../core/widgets/skeleton_loader.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../alerts/domain/alerts_models.dart';
+import '../../alerts/ui/save_search_dialog.dart';
 import '../../auth/ui/auth_dialog.dart';
+import '../../wanted/ui/create_wanted_dialog.dart';
+import '../../wanted/ui/wanted_feed_sliver.dart';
 import '../domain/buy_sell_item.dart';
 import '../providers/buy_sell_providers.dart';
 import 'widgets/buy_sell_grid_card.dart';
@@ -74,6 +78,8 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
   Widget build(BuildContext context) {
     final paginatedState = ref.watch(buySellPaginationProvider);
     final filter = ref.watch(buySellFilterProvider);
+    final section = ref.watch(buySellSectionProvider);
+    final isWanted = section == BuySellSection.wanted;
     final showTrustedExchangeBanner = ref.watch(showTrustedExchangeBannerProvider);
     final categoriesAsync = ref.watch(buySellCategoriesProvider);
     final categoryPills = <({String name, String? icon})>[
@@ -109,9 +115,10 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
     return Scaffold(
       floatingActionButton: isMobile
           ? FloatingActionButton.extended(
-              onPressed: () => _handleCreateListing(context, ref),
-              icon: const Icon(Icons.add_shopping_cart_rounded),
-              label: const Text('Sell Item', style: TextStyle(fontWeight: FontWeight.bold)),
+              onPressed: () =>
+                  isWanted ? CreateWantedDialog.show(context, ref) : _handleCreateListing(context, ref),
+              icon: Icon(isWanted ? Icons.volunteer_activism_outlined : Icons.add_shopping_cart_rounded),
+              label: Text(isWanted ? 'Post Wanted' : 'Sell Item', style: const TextStyle(fontWeight: FontWeight.bold)),
             )
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
@@ -204,6 +211,16 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
               ),
             ),
 
+          // ── For sale | Wanted switch ──
+          SliverToBoxAdapter(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              color: theme.cardColor,
+              alignment: Alignment.centerLeft,
+              child: const BuySellSectionToggle(),
+            ),
+          ),
+
           // ── Category Pills (Horizontal Scroll with Dynamic Categories) & Sell Item Button ──
           SliverToBoxAdapter(
             child: Container(
@@ -216,7 +233,7 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: categoryPills.map((pill) {
-                          final isSelected = filter.category == pill.name;
+                          final isSelected = filter.category.toLowerCase() == pill.name.toLowerCase();
                           return Padding(
                             padding: const EdgeInsets.only(right: 8.0),
                             child: ChoiceChip(
@@ -247,11 +264,15 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      onPressed: () => _handleCreateListing(context, ref),
-                      icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
-                      label: const Text(
-                        'Sell Item',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                      onPressed: () =>
+                          isWanted ? CreateWantedDialog.show(context, ref) : _handleCreateListing(context, ref),
+                      icon: Icon(
+                        isWanted ? Icons.volunteer_activism_outlined : Icons.add_shopping_cart_rounded,
+                        size: 18,
+                      ),
+                      label: Text(
+                        isWanted ? 'Post Wanted' : 'Sell Item',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
                   ],
@@ -260,6 +281,10 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
             ),
           ),
 
+          // ── Wanted posts replace the toolbar and listings when the switch is on "Wanted" ──
+          if (isWanted)
+            const WantedFeedSliver()
+          else ...[
           // ── Quick Filter Toolbar (All | Price Presets + Custom | Status Chips | Sort | Custom Range | View mode) ─────────────
           SliverToBoxAdapter(
             child: Container(
@@ -417,6 +442,15 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                         ],
                       ),
                     ),
+                  ),
+
+                  // Save this search & get alerts for new matches
+                  IconButton(
+                    iconSize: 18,
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Save this search & get alerts',
+                    icon: const Icon(Icons.notification_add_outlined),
+                    onPressed: () => _handleSaveSearch(context, ref, filter),
                   ),
 
                   // Sort Dropdown
@@ -657,8 +691,27 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
               ),
             ),
           ],
+          ],
         ],
       ),
+    );
+  }
+
+  static Future<void> _handleSaveSearch(BuildContext context, WidgetRef ref, BuySellFilterState filter) async {
+    final categories = ref.read(buySellCategoriesProvider).valueOrNull ?? const [];
+    final picked = filter.category == 'All'
+        ? null
+        : categories.where((c) => c.name.toLowerCase() == filter.category.toLowerCase()).firstOrNull;
+    await SaveSearchDialog.show(
+      context,
+      ref,
+      module: SavedSearchModule.buySell,
+      query: filter.query,
+      categoryId: picked?.id,
+      categoryName: picked?.name,
+      minPrice: filter.minPrice,
+      maxPrice: filter.maxPrice,
+      unsavedCategoryName: filter.category != 'All' && picked == null ? filter.category : null,
     );
   }
 

@@ -114,6 +114,11 @@ class BuySellFilterState {
 
 final buySellFilterProvider = StateProvider<BuySellFilterState>((ref) => BuySellFilterState());
 
+/// Which part of the Buy & Sell tab is showing: items for sale, or Wanted posts (what buyers need).
+enum BuySellSection { listings, wanted }
+
+final buySellSectionProvider = StateProvider<BuySellSection>((ref) => BuySellSection.listings);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Paginated Feed State & Infinite Scrolling Notifier
 // ─────────────────────────────────────────────────────────────────────────────

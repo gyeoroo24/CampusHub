@@ -13,6 +13,8 @@ import '../../lost_found/domain/lost_found_item.dart';
 import '../../lost_found/providers/lost_found_providers.dart';
 import '../../lost_found/ui/widgets/edit_report_dialog.dart';
 import '../../lost_found/ui/widgets/lost_found_detail_dialog.dart';
+import '../../wanted/providers/wanted_providers.dart';
+import '../../wanted/ui/wanted_feed_sliver.dart';
 
 class UserProfileScreen extends ConsumerStatefulWidget {
   const UserProfileScreen({super.key});
@@ -36,7 +38,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
   @override
   void initState() {
     super.initState();
-    _postingsTabController = TabController(length: 4, vsync: this);
+    _postingsTabController = TabController(length: 5, vsync: this);
     final user = ref.read(currentUserProvider);
     _populateFields(user);
   }
@@ -534,6 +536,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
             Tab(text: 'Buy & Sell Listings'),
             Tab(text: 'Lost Reports'),
             Tab(text: 'Found Reports'),
+            Tab(text: 'Wanted Posts'),
             Tab(text: 'Academic & Placement'),
           ],
         ),
@@ -547,6 +550,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
               _buildMyBuySellList(user, isDark, theme),
               _buildMyLostReportsList(user, isDark, theme),
               _buildMyFoundReportsList(user, isDark, theme),
+              _buildMyWantedList(),
               _buildAcademicPlaceholder(isDark, theme),
             ],
           ),
@@ -915,6 +919,24 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
   }
 
   // ── Tab 4: Academic Placeholder ──
+  // ── Tab 4: My Wanted posts (open, fulfilled and closed) ──
+  Widget _buildMyWantedList() {
+    return ref.watch(myWantedPostsProvider).when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('Failed to load Wanted posts: $e')),
+          data: (posts) => posts.isEmpty
+              ? _buildEmptyState(
+                  'No Wanted Posts Yet',
+                  'Switch Buy & Sell to "Wanted" to tell sellers what you are looking for.',
+                )
+              : ListView.separated(
+                  itemCount: posts.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (_, i) => SizedBox(height: 150, child: WantedCard(post: posts[i])),
+                ),
+        );
+  }
+
   Widget _buildAcademicPlaceholder(bool isDark, ThemeData theme) {
     return _buildEmptyState(
       'No Academic Help or Placement Posts Yet',

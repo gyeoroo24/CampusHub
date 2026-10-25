@@ -5,6 +5,7 @@ import '../../../core/utils/date_time_formatter.dart';
 import '../../auth/domain/user.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../buy_sell/providers/buy_sell_providers.dart';
+import '../../campus_services/ui/campus_services_admin_panel.dart';
 import '../../lost_found/providers/lost_found_providers.dart';
 import '../providers/admin_providers.dart';
 
@@ -40,7 +41,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
     super.initState();
     final user = ref.read(currentUserProvider);
     final initialIndex = (user != null && !user.isAdmin && user.isModerator) ? 2 : 0;
-    _tabController = TabController(length: 5, vsync: this, initialIndex: initialIndex);
+    _tabController = TabController(length: 6, vsync: this, initialIndex: initialIndex);
   }
 
   @override
@@ -169,6 +170,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
             Tab(icon: Icon(Icons.report_gmailerrorred_rounded, size: 18), text: 'Reports Queue (FR-10)'),
             Tab(icon: Icon(Icons.category_outlined, size: 18), text: 'Categories'),
             Tab(icon: Icon(Icons.dns_outlined, size: 18), text: 'System & Health'),
+            Tab(icon: Icon(Icons.health_and_safety_outlined, size: 18), text: 'Campus Services'),
           ],
         ),
       ),
@@ -180,6 +182,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
           _buildReportsQueueTab(isDark, theme),
           _buildCategoriesTab(isDark, theme),
           _buildSystemHealthTab(isDark, theme),
+          CampusServicesAdminPanel(isAdmin: currentUser.isAdmin),
         ],
       ),
     );

@@ -60,6 +60,22 @@ class ApiEndpoints {
   static String course(String id) => '$version/courses/$id';
   static String courseMaterials(String courseId) => '$version/courses/$courseId/materials';
   static String courseFeedback(String courseId) => '$version/courses/$courseId/feedback';
+  static String courseSurvivalGuide(String courseId) => '$version/courses/$courseId/survival-guide';
+
+  // --- Saved Searches & Alerts (rev 6) ---
+  static const String savedSearches = '$version/me/saved-searches';
+  static String savedSearch(String id) => '$version/me/saved-searches/$id';
+  static String savedSearchSeen(String id) => '$version/me/saved-searches/$id/seen';
+
+  // --- Wanted Posts (rev 6) ---
+  static const String wanted = '$version/wanted';
+  static String wantedPost(String id) => '$version/wanted/$id';
+  static String wantedStatus(String id) => '$version/wanted/$id/status';
+  static String wantedMatches(String id) => '$version/wanted/$id/matches';
+
+  // --- Campus Services (rev 6) ---
+  static const String campusServices = '$version/campus-services';
+  static String campusService(String id) => '$version/campus-services/$id';
 
   // --- Backwards-compatible aliases ---
   static const String authMe = me;

@@ -12,6 +12,14 @@ import '../../features/lost_found/providers/lost_found_providers.dart';
 import '../../features/lost_found/ui/lost_found_feed_screen.dart';
 import '../../features/admin/ui/admin_controls_screen.dart';
 import '../../features/profile/ui/user_profile_screen.dart';
+import '../../features/academics/providers/academics_providers.dart';
+import '../../features/academics/ui/course_guide_screen.dart';
+import '../../features/academics/ui/courses_screen.dart';
+import '../../features/alerts/providers/alerts_providers.dart';
+import '../../features/alerts/ui/notifications_button.dart';
+import '../../features/campus_services/providers/campus_services_providers.dart';
+import '../../features/campus_services/ui/campus_services_dialog.dart';
+import '../../features/wanted/providers/wanted_providers.dart';
 
 // ---------------------------------------------------------------------------
 // Tab index provider — drives in-app tab switching WITHOUT browser history
@@ -43,6 +51,10 @@ final GoRouter appRouter = GoRouter(
           path: '/admin',
           builder: (context, state) => const AdminControlsScreen(),
         ),
+        GoRoute(
+          path: '/courses/:id',
+          builder: (context, state) => CourseGuideScreen(courseId: state.pathParameters['id']!),
+        ),
       ],
     ),
   ],
@@ -63,11 +75,17 @@ const _tabDestinations = [
     selectedIcon: Icons.find_in_page_rounded,
     label: 'Lost & Found',
   ),
+  (
+    icon: Icons.school_outlined,
+    selectedIcon: Icons.school_rounded,
+    label: 'Courses',
+  ),
 ];
 
 const _tabScreens = [
   BuySellFeedScreen(),
   LostFoundFeedScreen(),
+  CoursesScreen(),
 ];
 
 // ---------------------------------------------------------------------------
@@ -118,6 +136,13 @@ class _AppRefreshButtonState extends ConsumerState<AppRefreshButton>
       ref.read(lostReportsPaginationProvider.notifier).loadInitial();
       ref.read(foundReportsPaginationProvider.notifier).loadInitial();
       ref.invalidate(lostFoundCategoriesProvider);
+
+      // 4. Refetch Wanted posts, saved searches, notifications, campus services and courses
+      ref.invalidate(wantedPostsProvider);
+      ref.invalidate(savedSearchesProvider);
+      ref.invalidate(notificationsProvider);
+      ref.invalidate(campusServicesProvider);
+      ref.invalidate(departmentsProvider);
 
       if (mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -185,6 +210,69 @@ class ThemeToggleButton extends ConsumerWidget {
         ref.read(themeModeProvider.notifier).state =
             isDark ? ThemeMode.light : ThemeMode.dark;
       },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Phone overflow menu: campus services, theme, admin / moderator panel
+// ---------------------------------------------------------------------------
+class _MobileMoreMenu extends ConsumerWidget {
+  final User? currentUser;
+
+  const _MobileMoreMenu({required this.currentUser});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = ref.watch(themeModeProvider) == ThemeMode.dark;
+    final user = currentUser;
+    final panel = user == null
+        ? null
+        : user.isAdmin
+            ? 'Admin Panel'
+            : user.isModerator
+                ? 'Moderator Panel'
+                : null;
+    return PopupMenuButton<String>(
+      tooltip: 'More',
+      icon: const Icon(Icons.more_vert_rounded, size: 20),
+      onSelected: (value) {
+        switch (value) {
+          case 'services':
+            showDialog(context: context, builder: (_) => const CampusServicesDialog());
+          case 'theme':
+            ref.read(themeModeProvider.notifier).state = isDark ? ThemeMode.light : ThemeMode.dark;
+          case 'panel':
+            context.push('/admin');
+        }
+      },
+      itemBuilder: (_) => [
+        const PopupMenuItem(
+          value: 'services',
+          child: ListTile(
+            leading: Icon(Icons.health_and_safety_outlined),
+            title: Text('Campus services'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        PopupMenuItem(
+          value: 'theme',
+          child: ListTile(
+            leading: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
+            title: Text(isDark ? 'Light mode' : 'Dark mode'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        if (panel != null)
+          PopupMenuItem(
+            value: 'panel',
+            child: ListTile(
+              leading: Icon(user!.isAdmin ? Icons.admin_panel_settings_rounded : Icons.shield_outlined),
+              title: Text(panel),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+      ],
     );
   }
 }
@@ -315,13 +403,20 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
               )
             : const SuperSearchBar(),
         actions: [
+          if (isDesktop) const CampusServicesButton(),
+          const NotificationsButton(),
           const AppRefreshButton(),
-          const SizedBox(width: 4),
-          const ThemeToggleButton(),
-          const SizedBox(width: 8),
+          if (isDesktop) ...[
+            const SizedBox(width: 4),
+            const ThemeToggleButton(),
+            const SizedBox(width: 8),
+          ] else
+            // Phones: campus services, theme and the admin/moderator panel share one menu,
+            // so the search box keeps its width.
+            _MobileMoreMenu(currentUser: isGuest ? null : currentUser),
 
           // Admin Controls Quick Access
-          if (!isGuest && currentUser.isAdmin)
+          if (isDesktop && !isGuest && currentUser.isAdmin)
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: FilledButton.tonalIcon(
@@ -334,7 +429,7 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
                 onPressed: () => context.push('/admin'),
               ),
             )
-          else if (!isGuest && currentUser.isModerator)
+          else if (isDesktop && !isGuest && currentUser.isModerator)
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: FilledButton.tonalIcon(
@@ -410,7 +505,7 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
                 }
               },
             ),
-          const SizedBox(width: 16),
+          SizedBox(width: isDesktop ? 16 : 4),
         ],
       ),
       body: Row(
