@@ -167,6 +167,7 @@ Lost reports and found reports have identical endpoints. Swap `/lost-reports` fo
 | PATCH | `/lost-reports/{id}/status` | owner, admin | Set `status`: `open` or `closed` |
 | PUT | `/lost-reports/{id}/photos` | owner, admin | Replace the photo list |
 | DELETE | `/lost-reports/{id}` | owner, Lost & Found moderator, admin | Remove. Moderators can add `?reason=` |
+| GET | `/lost-reports/{id}/matches` | owner, admin | Possible matches for your own report, best first (up to 10). Anyone else gets 403 |
 
 **Fields to design with:**
 
@@ -174,10 +175,12 @@ Lost reports and found reports have identical endpoints. Swap `/lost-reports` fo
 | --- | --- |
 | Report card (in lists) | `id`, `kind` (`lost` or `found`), `description`, `category`, `occurred_at`, `location`, `status`, `reporter` (`id`, `name`), `cover_photo_url`, `created_at` |
 | Report detail | Everything on the card, plus `photos`, `reporter_contact` (`null` for guests), `updated_at` |
-| Create reply only | `possible_matches`: up to 10 open reports of the other kind, same category, by other people, with compatible times |
+| Create reply only | `possible_matches`: up to 10 open reports of the other kind, same category, by other people, with compatible times (kept for older clients; use `/matches` instead) |
+| Matches reply | `status`: `ready`, `pending` (still being matched: ask again in ~2 s) or `unavailable` (no matcher on this server: same-category reports, unranked). `matches`: list of `report` (a card), `score` (0–1), `strength` (`strong` or `possible`; `null` when unavailable), `reasons` (e.g. "Similar description", "Similar photo", "Photo fits the description", "Same category") |
 
 - **`occurred_at`** is when the item was lost or found, as entered by the user. It's separate from `created_at`, so the form needs a date-and-time picker.
-- **Matching:** filing a found report notifies everyone with an open lost report in that category, lost on or before that time. They get a `lost_found_match` notification. Changing a found report's category or time, or reopening it, checks again; nobody is notified twice about the same found report.
+- **Matching:** every new report is compared, in the background, with open reports of the other kind by someone else, lost no later than a day after the item was found, in **any** category. It compares the descriptions, the photos, and each description with the other report's photos (three small embedding models; future plan §1.2). Pairs that score as possible are listed under `/matches`. A **strong** pair sends the lost report's owner a `lost_found_match` notification (`found_report_id`, `lost_report_ids`, `message`), whichever report came second. Editing the description, category or time, replacing photos, or reopening matches again. Nobody is notified twice about the same found report.
+- **Without the matcher** (a server without the models): filing a found report notifies everyone with an open lost report in that category, lost on or before that time, and `/matches` answers `unavailable`.
 - There is no `matched` status (removed in rev 11): a report stays `open` until its owner closes it.
 - **Limits:** description 1–2,000 characters, location up to 200, up to 10 photos.
 

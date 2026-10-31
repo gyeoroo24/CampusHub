@@ -1,5 +1,5 @@
 -- ============================================================================
--- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 11
+-- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 12
 -- DS252 Introduction to Cloud Computing — Team "Order of Phoenix"
 --
 -- Permission modules (FR-2, NFR-6): buy_sell, lost_found, academic_help,
@@ -16,6 +16,13 @@
 --   4. No table for the course survival guide: it is computed from
 --      course_feedback when requested.
 --   An existing database is upgraded with db/migrations/006_taking_it_further.sql.
+--
+-- Changes from rev. 11 (Lost & Found matching by description and photo, 1 Nov 2026):
+--   1. lost_reports / found_reports: match_rev (bumped when the description, category, time or
+--      photos change, or the report reopens) and matched_rev (the rev the matcher last finished).
+--   2. lf_embeddings: one vector per report description / photo and model (app/matching).
+--   3. lf_matches: scored lost-found pairs above the "possible match" bar.
+--   Upgrade: db/migrations/012_lf_matching.sql.
 --
 -- Changes from rev. 7 (in-app messaging, 31 Oct 2026):
 --   1. End-to-end encrypted buyer–seller chat per listing: chat_keys,
@@ -336,6 +343,8 @@ CREATE TABLE lost_reports (
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at         TIMESTAMPTZ,
     deleted_by         UUID REFERENCES users(id),
+    match_rev          INT NOT NULL DEFAULT 1,   -- bumped when what matching looks at changes
+    matched_rev        INT,                      -- match_rev the matcher last finished; NULL = never
     CONSTRAINT lost_deleted_pair_chk CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))
 );
 CREATE INDEX idx_lost_feed     ON lost_reports(created_at DESC) WHERE deleted_at IS NULL;
@@ -363,6 +372,8 @@ CREATE TABLE found_reports (
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at         TIMESTAMPTZ,
     deleted_by         UUID REFERENCES users(id),
+    match_rev          INT NOT NULL DEFAULT 1,   -- bumped when what matching looks at changes
+    matched_rev        INT,                      -- match_rev the matcher last finished; NULL = never
     CONSTRAINT found_deleted_pair_chk CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))
 );
 CREATE INDEX idx_found_feed     ON found_reports(created_at DESC) WHERE deleted_at IS NULL;
@@ -377,6 +388,38 @@ CREATE TABLE found_report_photos (          -- same rules as listing_photos
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT found_report_photos_order_uq UNIQUE (found_report_id, sort_order) DEFERRABLE INITIALLY DEFERRED
 );
+
+-- Lost & Found matching (app/matching). One vector per (report, model, description or photo).
+-- Vectors are plain REAL[] and compared in Python: open reports number in the hundreds, so
+-- pgvector isn't needed.
+CREATE TABLE lf_embeddings (
+    id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    lost_report_id  UUID REFERENCES lost_reports(id) ON DELETE CASCADE,
+    found_report_id UUID REFERENCES found_reports(id) ON DELETE CASCADE,
+    model           TEXT NOT NULL,         -- e.g. minilm-l6-v2, mobileclip-s0-image
+    s3_key          TEXT,                  -- the photo; NULL = the description
+    source_hash     TEXT NOT NULL,         -- SHA-256 of the description (or the photo key)
+    vec             REAL[] NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT lf_embeddings_one_report_chk CHECK ((lost_report_id IS NULL) <> (found_report_id IS NULL))
+);
+CREATE UNIQUE INDEX uq_lf_embeddings ON lf_embeddings
+    (COALESCE(lost_report_id, found_report_id), model, COALESCE(s3_key, ''));
+
+-- A lost and a found report that may be the same item; only pairs at or above the "possible" bar.
+CREATE TABLE lf_matches (
+    lost_report_id  UUID NOT NULL REFERENCES lost_reports(id) ON DELETE CASCADE,
+    found_report_id UUID NOT NULL REFERENCES found_reports(id) ON DELETE CASCADE,
+    score           REAL NOT NULL CHECK (score BETWEEN 0 AND 1),
+    text_sim        REAL,                  -- raw cosine similarities, kept for tuning
+    photo_sim       REAL,
+    cross_sim       REAL,
+    reasons         TEXT[] NOT NULL DEFAULT '{}',
+    computed_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    notified_at     TIMESTAMPTZ,           -- when the lost report's owner was alerted
+    PRIMARY KEY (lost_report_id, found_report_id)
+);
+CREATE INDEX idx_lf_matches_found ON lf_matches(found_report_id);
 
 -- ============================================================================
 -- SAVED SEARCHES AND ALERTS (rev 6)

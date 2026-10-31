@@ -6,6 +6,7 @@ import '../../../../core/models/page.dart';
 import '../../../../core/models/photo.dart';
 import '../../../../core/models/user_ref.dart';
 import '../domain/lost_found_item.dart';
+import '../domain/possible_match.dart';
 import 'lost_found_repository.dart';
 
 /// In-memory mock repository for Lost & Found reports.
@@ -558,16 +559,29 @@ class MockLostFoundRepository implements ILostFoundRepository {
   }
 
   @override
-  Future<List<LostFoundItem>> getPossibleMatches(LostFoundItem item) async {
-    final oppositeKind = item.kind == PostType.lost ? PostType.found : PostType.lost;
-    return _mockReports
-        .where(
-          (r) =>
-              r.id != item.id &&
-              r.kind == oppositeKind &&
-              r.category.id == item.category.id &&
-              r.status == ReportStatus.open,
-        )
-        .toList();
+  Future<MatchResult> getPossibleMatches(String id, PostType kind) async {
+    final item = _mockReports.firstWhere((r) => r.id == id && r.kind == kind,
+        orElse: () => throw Exception('Report not found'));
+    final oppositeKind = kind == PostType.lost ? PostType.found : PostType.lost;
+    // Stand-in for the server's ranking: share of description words in common, same category.
+    Set<String> words(String s) => s.toLowerCase().split(RegExp(r'[^a-z0-9]+')).where((w) => w.length > 2).toSet();
+    final mine = words(item.description);
+    final matches = <PossibleMatch>[];
+    for (final r in _mockReports) {
+      if (r.kind != oppositeKind || r.status != ReportStatus.open || r.reporter.id == item.reporter.id) continue;
+      final theirs = words(r.description);
+      final overlap = mine.isEmpty || theirs.isEmpty ? 0.0 : mine.intersection(theirs).length / mine.union(theirs).length;
+      final sameCategory = r.category.id == item.category.id;
+      final score = (overlap * 2 + (sameCategory ? 0.3 : 0)).clamp(0.0, 1.0);
+      if (score < 0.4) continue;
+      matches.add(PossibleMatch(
+        item: r,
+        score: score,
+        strength: score >= 0.75 ? MatchStrength.strong : MatchStrength.possible,
+        reasons: [if (overlap > 0.2) 'Similar description', if (sameCategory) 'Same category'],
+      ));
+    }
+    matches.sort((a, b) => b.score!.compareTo(a.score!));
+    return MatchResult(status: MatchStatus.ready, matches: matches.take(10).toList());
   }
 }

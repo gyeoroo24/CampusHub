@@ -12,6 +12,7 @@ import '../../auth/providers/auth_providers.dart';
 import '../../buy_sell/providers/buy_sell_providers.dart' show PaginatedFeedState;
 import '../data/lost_found_repository.dart';
 import '../domain/lost_found_item.dart';
+import '../domain/possible_match.dart';
 
 class LostFoundFilterState {
   final String query;
@@ -235,10 +236,27 @@ final foundReportsProvider = FutureProvider<List<LostFoundItem>>((ref) async {
   );
 });
 
-final possibleMatchesForItemProvider =
-    FutureProvider.family<List<LostFoundItem>, LostFoundItem>((ref, item) async {
-  return ref.watch(lostFoundRepositoryProvider).getPossibleMatches(item);
+/// Possible matches for one of your own reports. While the server is still matching (a report
+/// just filed or edited), asks again every 2 s for up to 30 s; the UI shows "Looking for matches"
+/// meanwhile. Only watch this for reports the signed-in user owns (or as an admin): the server
+/// answers 403 to anyone else.
+final possibleMatchesProvider =
+    FutureProvider.autoDispose.family<MatchResult, ({String id, PostType kind})>((ref, key) async {
+  ref.watch(currentUserProvider);
+  final repo = ref.watch(lostFoundRepositoryProvider);
+  var disposed = false;
+  ref.onDispose(() => disposed = true);
+  var result = await repo.getPossibleMatches(key.id, key.kind);
+  for (var attempt = 0; result.isPending && attempt < 15 && !disposed; attempt++) {
+    await Future<void>.delayed(matchPollInterval);
+    if (disposed) break;
+    result = await repo.getPossibleMatches(key.id, key.kind);
+  }
+  return result;
 });
+
+@visibleForTesting
+Duration matchPollInterval = const Duration(seconds: 2);
 
 /// Every report the signed-in user filed of one kind, newest first. Asked for by reporter_id,
 /// page by page (the API returns at most 50 per page), so older reports are included too.

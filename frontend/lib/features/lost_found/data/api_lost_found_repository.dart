@@ -5,6 +5,7 @@ import '../../../../core/enums/sort_option.dart';
 import '../../../../core/models/category_ref.dart';
 import '../../../../core/models/page.dart';
 import '../domain/lost_found_item.dart';
+import '../domain/possible_match.dart';
 import 'lost_found_dto.dart';
 import 'lost_found_repository.dart';
 
@@ -272,21 +273,20 @@ class ApiLostFoundRepository implements ILostFoundRepository {
 
 
   @override
-  Future<List<LostFoundItem>> getPossibleMatches(LostFoundItem item) async {
-    if (item.possibleMatches != null && item.possibleMatches!.isNotEmpty) {
-      return item.possibleMatches!;
-    }
-    try {
-      final oppositeType = item.kind == PostType.lost ? PostType.found : PostType.lost;
-      final response = await fetchReportsPage(
-        type: oppositeType,
-        categoryId: item.category.id,
-        statusList: [ReportStatus.open],
-        limit: 10,
-      );
-      return response.items.where((r) => r.id != item.id).toList();
-    } catch (_) {
-      return [];
-    }
+  Future<MatchResult> getPossibleMatches(String id, PostType kind) async {
+    final path = kind == PostType.lost ? ApiEndpoints.lostReportMatches(id) : ApiEndpoints.foundReportMatches(id);
+    final data = (await apiClient.get(path)).data as Map<String, dynamic>;
+    return MatchResult(
+      status: MatchStatus.fromString(data['status'] as String?),
+      matches: [
+        for (final m in (data['matches'] as List? ?? const []).cast<Map<String, dynamic>>())
+          PossibleMatch(
+            item: LostFoundReportDto.fromJson(m['report'] as Map<String, dynamic>).toDomain(),
+            score: (m['score'] as num?)?.toDouble(),
+            strength: MatchStrength.fromString(m['strength'] as String?),
+            reasons: (m['reasons'] as List? ?? const []).cast<String>(),
+          ),
+      ],
+    );
   }
 }

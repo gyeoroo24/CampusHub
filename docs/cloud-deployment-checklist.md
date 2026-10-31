@@ -1,6 +1,6 @@
 # Deploying CampusHub to the cloud: what still has to change
 
-*Last updated 1 Nov 2026 (database revision 11)*
+*Last updated 1 Nov 2026 (database revision 12)*
 
 Local development takes shortcuts that must not reach a real deployment. This page lists them,
 plus the cloud work each feature still needs. How to build and wire the Lambda, RDS Proxy, S3,
@@ -9,12 +9,13 @@ Update this page whenever a new shortcut or cloud dependency is added.
 
 ## Must do before going live
 
-1. **Run the database migrations** on RDS, in order, if the database is older than revision 11.
+1. **Run the database migrations** on RDS, in order, if the database is older than revision 12.
    A brand-new database only needs `backend/db/schema.sql`.
    - `008_encrypted_chat`
    - `009_server_held_chat_keys`
    - `010_chat_per_person`
    - `011_drop_matched_status`
+   - `012_lf_matching` (then invoke the matcher once with `{"backfill": true}`)
 
    `010` merges older per-listing chats into one chat per person. Back up the `chat_*` tables
    first.
@@ -66,6 +67,29 @@ Update this page whenever a new shortcut or cloud dependency is added.
   logs pushes. Plug in SNS or FCM / Web Push.
 - **Rate limit:** 30 messages per user per minute, counted in Postgres. Add WAF or API Gateway
   throttling for abuse at scale.
+
+## Lost & Found matching
+
+- **Deploy the matcher Lambda** from `backend/Dockerfile.matcher` (handler
+  `app.matching.handler.handler`; arm64, 1536 MB, 30 s, async retries 2). Steps are in
+  [backend/README.md → Deploying on AWS](../backend/README.md#deploying-on-aws).
+  - Give it the API's database, S3 and VPC settings. Its role needs `s3:GetObject` and
+    `secretsmanager:GetSecretValue`.
+  - On the API: set `CAMPUSHUB_MATCH_FUNCTION` and allow `lambda:InvokeFunction` on it. From
+    private subnets the API needs a `lambda` interface endpoint (or NAT) for that call.
+- **If the matcher isn't deployed, matching silently falls back** to the old same-category
+  rule (`match_mode` resolves to `off` because the API image has no models). Check
+  `GET /lost-reports/{id}/matches` answers `ready`/`pending`, not `unavailable`.
+- **Retry missed work:** an EventBridge schedule (e.g. every 15 minutes) sending
+  `{"backfill": true}` re-matches any report a failed invocation left pending.
+- **Latency and cost:** about 7 ms per description and 40 ms per photo on one Mac thread;
+  expect 2–3× on Graviton, plus ~0.3 s to load the models on a cold start. It runs after the
+  API has answered, so users don't wait for it.
+- **Tuning:** `CAMPUSHUB_MATCH_POSSIBLE` (0.4) and `CAMPUSHUB_MATCH_STRONG` (0.75) set what is
+  listed and what alerts. `lf_matches` keeps the raw similarities for re-tuning;
+  `backend/scripts/calibrate_matching.py` re-measures them.
+- **Licence:** the MobileCLIP-S0 weights are under Apple's ML research licence (fine for this
+  course project; check it before any commercial use). all-MiniLM-L6-v2 is Apache-2.0.
 
 ## Phone verification
 

@@ -91,6 +91,29 @@ for m in 008_encrypted_chat 009_server_held_chat_keys 010_chat_per_person 011_dr
 done
 ```
 
+A database created before revision 12 (1 Nov 2026: Lost & Found matching by description and
+photo) needs `012_lf_matching`, then one backfill once the matcher is set up (next section):
+
+```bash
+docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub < db/migrations/012_lf_matching.sql
+python -m app.matching --backfill
+```
+
+### Lost & Found matching (optional locally)
+
+Reports are matched by description and photo with three small ONNX models (future plan §1.2;
+code in `app/matching`). Without them the API keeps the old same-category rule, so this step is
+optional. To turn it on locally:
+
+```bash
+uv pip install -r requirements-matching.txt          # or pip install
+python scripts/fetch_match_models.py                  # ~305 MB into backend/models (gitignored)
+```
+
+Restart the API: with `CAMPUSHUB_MATCH_MODE=auto` (the default) it finds the models and matches
+in a background task. `python scripts/calibrate_matching.py <photo dir>` prints the similarity
+scores the thresholds in `app/matching/engine.py` were chosen from.
+
 ### Share it on your network
 
 To let teammates on the same Wi-Fi use your running backend (no cloud needed):
@@ -245,9 +268,10 @@ New, edited or re-opened listings alert matching saved searches and Wanted posts
 |---|---|---|
 | GET, POST /lost-found/categories | guest / user | Categories name the item (ID card, Water bottle…) |
 | GET /lost-reports | guest | Browse. Filters: `category_id`, `status`, `q`, `reporter_id`, `from_date`/`to_date` (when lost or found); `sort` newest / oldest |
-| POST /lost-reports | user | File a report. The response lists `possible_matches`. Filing a *found* report notifies everyone with an open lost report in that category; so does changing a found report's category or time, or reopening it (each person is told once) |
+| POST /lost-reports | user | File a report. The response lists same-category `possible_matches`. The matcher then compares it by description and photo with open reports of the other kind (any category) and alerts the lost report's owner about a strong match; editing, new photos and reopening match again (each person is told once per found report). Without the matcher, filing a *found* report notifies everyone with an open lost report in that category |
+| GET /lost-reports/{id}/matches | reporter, admin | Possible matches, best first: `status` ready / pending / unavailable, each with `score`, `strength` (strong / possible) and `reasons` |
 | GET, PATCH, DELETE /lost-reports/{id} | guest / reporter or admin / reporter, Lost & Found moderator or admin | |
-| PATCH /lost-reports/{id}/status | reporter, admin | open / matched / closed |
+| PATCH /lost-reports/{id}/status | reporter, admin | open / closed |
 | PUT /lost-reports/{id}/photos | reporter, admin | Replace photos |
 
 **Academic Help**
@@ -345,6 +369,24 @@ providers, new migrations) is listed in [docs/cloud-deployment-checklist.md](../
   - On Lambda, push lookups and S3 cleanup (background tasks) finish before the response is
     returned, so they add to its latency; pushes are capped at `CAMPUSHUB_PUSH_TIMEOUT_SECONDS`
     (3 s). Keep this in mind when comparing Lambda with EC2, where they run after the response.
+- **Matcher:** a separate function from `Dockerfile.matcher` (handler
+  `app.matching.handler.handler`; arm64, 1536 MB, 30 s timeout, async retries 2). It holds
+  ONNX Runtime and the three models (~305 MB), so the API image stays small and starts fast.
+
+  ```bash
+  docker buildx build --platform linux/arm64 --provenance=false -f Dockerfile.matcher -t campushub-matcher .
+  ```
+
+  - Give it the same database, S3 and VPC settings as the API. Its role needs `s3:GetObject`
+    on the bucket and `secretsmanager:GetSecretValue`.
+  - Set `CAMPUSHUB_MATCH_FUNCTION` on the API to the matcher's name, and allow the API role
+    `lambda:InvokeFunction` on it. The API then invokes it asynchronously after each change
+    (`{"kind", "report_id"}`). A Lambda in private subnets needs a `lambda` interface endpoint
+    or NAT for that call.
+  - Run `{"backfill": true}` once after migration 012, and optionally every 15 minutes from
+    EventBridge to retry anything a failed invocation left pending.
+  - Measured locally (one thread): ~7 ms per description and ~40 ms per photo; expect 2–3×
+    on Graviton, plus loading the models (~0.3 s) on a cold start.
 - **Purge job:** a second function from the same image with handler `app.jobs.purge_handler`,
   run daily by an EventBridge schedule, deletes notifications older than 30 days.
 - **Network:** a Lambda in private subnets needs

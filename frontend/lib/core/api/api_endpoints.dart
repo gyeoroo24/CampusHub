@@ -38,12 +38,14 @@ class ApiEndpoints {
   static String lostReport(String id) => '$version/lost-reports/$id';
   static String lostReportStatus(String id) => '$version/lost-reports/$id/status';
   static String lostReportPhotos(String id) => '$version/lost-reports/$id/photos';
+  static String lostReportMatches(String id) => '$version/lost-reports/$id/matches';
 
   // Found Reports
   static const String foundReports = '$version/found-reports';
   static String foundReport(String id) => '$version/found-reports/$id';
   static String foundReportStatus(String id) => '$version/found-reports/$id/status';
   static String foundReportPhotos(String id) => '$version/found-reports/$id/photos';
+  static String foundReportMatches(String id) => '$version/found-reports/$id/matches';
 
   // --- Moderators & Roles ---
   static const String moderators = '$version/moderators';

@@ -17,6 +17,7 @@ import 'package:campus_hub/core/router/app_router.dart';
 import 'package:campus_hub/features/buy_sell/providers/buy_sell_providers.dart';
 import 'package:campus_hub/features/lost_found/data/mock_lost_found_repository.dart';
 import 'package:campus_hub/features/lost_found/domain/lost_found_item.dart';
+import 'package:campus_hub/features/lost_found/domain/possible_match.dart';
 import 'package:campus_hub/features/lost_found/providers/lost_found_providers.dart';
 import 'package:campus_hub/features/lost_found/ui/widgets/lost_found_detail_dialog.dart';
 import 'package:campus_hub/features/profile/ui/user_profile_screen.dart';
@@ -216,7 +217,14 @@ void main() {
         ProviderScope(
           overrides: [
             lostFoundRepositoryProvider.overrideWithValue(MockLostFoundRepository()),
-            possibleMatchesForItemProvider(lostItem).overrideWith((ref) => [foundItem]),
+            // Possible matches are shown on your own report only.
+            currentUserProvider.overrideWith((ref) => User(
+                  id: 'usr_rep_1', email: 'sam@iisc.ac.in', name: 'Student Sam', createdAt: DateTime.now())),
+            possibleMatchesProvider((id: lostItem.id, kind: lostItem.kind)).overrideWith((ref) => MatchResult(
+                  status: MatchStatus.ready,
+                  matches: [PossibleMatch(item: foundItem, score: 0.9, strength: MatchStrength.strong,
+                      reasons: const ['Similar description'])],
+                )),
           ],
           child: MaterialApp(
             home: Scaffold(

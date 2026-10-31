@@ -3,6 +3,7 @@ import '../../../../core/enums/sort_option.dart';
 import '../../../../core/models/category_ref.dart';
 import '../../../../core/models/page.dart';
 import '../domain/lost_found_item.dart';
+import '../domain/possible_match.dart';
 
 export 'api_lost_found_repository.dart';
 export 'mock_lost_found_repository.dart';
@@ -78,6 +79,7 @@ abstract class ILostFoundRepository {
   /// Deletes or removes a category.
   Future<void> deleteCategory(int id);
 
-  /// Retrieves potential matches for an item (open reports of opposite kind in same category).
-  Future<List<LostFoundItem>> getPossibleMatches(LostFoundItem item);
+  /// Possible matches for one of the signed-in user's own reports, best first
+  /// (`GET /{kind}-reports/{id}/matches`). Owners and admins only.
+  Future<MatchResult> getPossibleMatches(String id, PostType kind);
 }

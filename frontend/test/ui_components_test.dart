@@ -15,6 +15,7 @@ import 'package:campus_hub/features/buy_sell/providers/buy_sell_providers.dart';
 import 'package:campus_hub/features/buy_sell/ui/widgets/buy_sell_detail_dialog.dart';
 import 'package:campus_hub/features/lost_found/data/mock_lost_found_repository.dart';
 import 'package:campus_hub/features/lost_found/domain/lost_found_item.dart';
+import 'package:campus_hub/features/lost_found/domain/possible_match.dart';
 import 'package:campus_hub/features/lost_found/providers/lost_found_providers.dart';
 import 'package:campus_hub/features/lost_found/ui/widgets/lost_found_detail_dialog.dart';
 import 'package:campus_hub/features/lost_found/ui/widgets/report_item_dialog.dart';
@@ -274,6 +275,13 @@ void main() {
       ProviderScope(
         overrides: [
           lostFoundRepositoryProvider.overrideWithValue(MockLostFoundRepository()),
+          // The ranked list the server returns once it has matched the new report.
+          possibleMatchesProvider((id: sampleWithMatches.id, kind: sampleWithMatches.kind)).overrideWith(
+            (ref) => MatchResult(status: MatchStatus.ready, matches: [
+              PossibleMatch(item: sampleWithMatches.possibleMatches!.first, score: 0.6,
+                  strength: MatchStrength.possible, reasons: const ['Similar description']),
+            ]),
+          ),
         ],
         child: MaterialApp(
           home: Scaffold(
@@ -310,13 +318,14 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify Possible Matches Found modal rendered and displays matches without intrinsic dimension error
-    expect(find.text('Possible Matches Found!'), findsOneWidget);
+    expect(find.text('Report filed'), findsOneWidget);
+    expect(find.text('Possible match'), findsOneWidget);
     expect(find.text('Found Black Laptop Bag'), findsOneWidget);
     expect(find.text('Close'), findsOneWidget);
 
     // Close matches modal
     await tester.tap(find.text('Close'));
     await tester.pumpAndSettle();
-    expect(find.text('Possible Matches Found!'), findsNothing);
+    expect(find.text('Report filed'), findsNothing);
   });
 }

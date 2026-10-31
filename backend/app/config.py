@@ -72,6 +72,18 @@ class Settings(BaseSettings):
     # On Lambda, background tasks finish before the response is returned, so cap their time.
     push_timeout_seconds: float = 3.0
 
+    # --- Lost & Found matching (app/matching) ---
+    # "lambda": the API asynchronously invokes match_function (the matcher Lambda, Dockerfile.matcher).
+    # "inline": the API runs the models itself in a background task (local dev; needs
+    #           requirements-matching.txt and scripts/fetch_match_models.py).
+    # "off":    the old rule only: same category, compatible times.
+    # "auto":   lambda if match_function is set, else inline if the models are installed, else off.
+    match_mode: Literal["auto", "lambda", "inline", "off"] = "auto"
+    match_function: str | None = None
+    match_model_dir: str | None = None   # default: backend/models
+    match_possible: float = 0.4           # listed under "Possible matches"
+    match_strong: float = 0.75            # "Strong match": the lost report's owner is alerted
+
     # --- HTTP ---
     api_prefix: str = "/api/v1"
     cors_allow_origins: list[str] = Field(default_factory=lambda: ["*"])

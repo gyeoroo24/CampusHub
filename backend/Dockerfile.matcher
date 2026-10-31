@@ -1,0 +1,15 @@
+# Lost & Found matcher Lambda (app/matching): same code as the API, plus ONNX Runtime and the
+# three small embedding models (~305 MB, fetched and checksum-checked at build time).
+# Build:  docker buildx build --platform linux/arm64 --provenance=false -f Dockerfile.matcher -t campushub-matcher .
+# Lambda handler: app.matching.handler.handler   (suggested: arm64, 1536 MB, 30 s, async retries 2)
+FROM public.ecr.aws/lambda/python:3.12
+
+COPY requirements.txt requirements-matching.txt ${LAMBDA_TASK_ROOT}/
+RUN pip install --no-cache-dir -r ${LAMBDA_TASK_ROOT}/requirements-matching.txt --target ${LAMBDA_TASK_ROOT}
+
+COPY scripts/fetch_match_models.py /tmp/
+RUN python /tmp/fetch_match_models.py ${LAMBDA_TASK_ROOT}/models && rm /tmp/fetch_match_models.py
+
+COPY app ${LAMBDA_TASK_ROOT}/app
+
+CMD ["app.matching.handler.handler"]

@@ -9,7 +9,7 @@ import '../../../../core/models/user_ref.dart';
 import '../../../../core/utils/web_history_support.dart';
 import '../../domain/lost_found_item.dart';
 import '../../providers/lost_found_providers.dart';
-import 'lost_found_detail_dialog.dart';
+import 'possible_matches_section.dart';
 
 class ReportItemDialog extends ConsumerStatefulWidget {
   final PostType postType;
@@ -415,24 +415,19 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
       if (!mounted) return;
       Navigator.of(context).pop();
 
-      // If backend returns possible matches (FR-9), present them in a modal!
-      if (createdReport != null &&
-          createdReport.possibleMatches != null &&
-          createdReport.possibleMatches!.isNotEmpty &&
-          hostContext != null &&
-          hostContext.mounted) {
-        _showPossibleMatchesModal(hostContext, createdReport);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              widget.postType == PostType.lost
-                  ? 'Lost report filed successfully.'
-                  : 'Found report filed successfully.',
-            ),
-            backgroundColor: Colors.teal.shade700,
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.postType == PostType.lost
+                ? 'Lost report filed successfully.'
+                : 'Found report filed successfully.',
           ),
-        );
+          backgroundColor: Colors.teal.shade700,
+        ),
+      );
+      // FR-9: the server ranks possible matches in the background; show them as they arrive.
+      if (createdReport != null && hostContext != null && hostContext.mounted) {
+        _showPossibleMatchesModal(hostContext, createdReport);
       }
     } catch (e) {
       if (mounted) {
@@ -448,99 +443,16 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
   }
 
   void _showPossibleMatchesModal(BuildContext parentContext, LostFoundItem report) {
-    final matches = report.possibleMatches!;
-    final otherKindLabel = report.kind == PostType.lost ? 'Found Items' : 'Lost Items';
-
     showDialog(
       context: parentContext,
-      builder: (ctx) {
-        final screenWidth = MediaQuery.sizeOf(ctx).width;
-        final dialogWidth = (screenWidth - 48).clamp(280.0, 480.0);
-        final dialogHeight = (matches.length * 70.0 + 80.0).clamp(160.0, 420.0);
-
-        return AlertDialog(
-          title: Row(
-            children: [
-              Icon(Icons.auto_awesome, color: Colors.amber.shade700, size: 24),
-              const SizedBox(width: 8),
-              const Text('Possible Matches Found!'),
-            ],
-          ),
-          content: SizedBox(
-            width: dialogWidth,
-            height: dialogHeight,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Your report was submitted. We discovered ${matches.length} active $otherKindLabel in category "${report.category.name}" that might match your item:',
-                  style: const TextStyle(fontSize: 13),
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: ListView.separated(
-                    shrinkWrap: false,
-                    itemCount: matches.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, idx) {
-                      final match = matches[idx];
-                      return ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: match.imageUrl.isNotEmpty
-                              ? Image.network(
-                                  match.imageUrl,
-                                  width: 44,
-                                  height: 44,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => Container(
-                                    width: 44,
-                                    height: 44,
-                                    color: Colors.grey.shade200,
-                                    child: const Icon(Icons.inventory_2_outlined, size: 20),
-                                  ),
-                                )
-                              : Container(
-                                  width: 44,
-                                  height: 44,
-                                  color: Colors.grey.shade200,
-                                  child: const Icon(Icons.inventory_2_outlined, size: 20),
-                                ),
-                        ),
-                        title: Text(
-                          match.description,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                        ),
-                        subtitle: Text(
-                          '${match.location} • ${_formatDateTime(match.occurredAt)}',
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-                        onTap: () {
-                          Navigator.pop(ctx);
-                          showDialog(
-                            context: parentContext,
-                            builder: (_) => LostFoundDetailDialog(item: match),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
+      builder: (ctx) => AlertDialog(
+        title: const Text('Report filed'),
+        content: SizedBox(
+          width: (MediaQuery.sizeOf(ctx).width - 48).clamp(280.0, 480.0),
+          child: SingleChildScrollView(child: PossibleMatchesSection(item: report)),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+      ),
     );
   }
 }

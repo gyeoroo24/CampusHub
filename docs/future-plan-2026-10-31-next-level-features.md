@@ -22,7 +22,7 @@ This is a planning document capturing the feature ideas discussed and the user's
   - **Moving existing users over:** the app creates the passkey, encrypts the same private key with it and re-uploads it (`PUT /me/chat-key` with the same public key keeps every message readable), then the server deletes the plain copy. Until every user has moved, the server can still read their chats.
   - Alternatives considered: a short PIN guarded by AWS KMS / Nitro Enclaves with a limited number of guesses (WhatsApp's encrypted backups work this way; strong, but the most work); one key per device with no server history (WhatsApp's default; loses history on a new browser).
 
-### 1.2 Lost & Found matching upgrade: photo similarity + description similarity — Approved, pending latency numbers
+### 1.2 Lost & Found matching upgrade: photo similarity + description similarity — Built (1 Nov 2026)
 
 Today's matcher is category + time-ordering only. Two upgrades, both approved in principle:
 
@@ -30,6 +30,26 @@ Today's matcher is category + time-ordering only. Two upgrades, both approved in
 - **Description similarity**: also match on the free-text description field (not just for found reports — explicitly requested to extend this to **lost** reports too), since category alone is coarse (e.g. "Electronics" covers earbuds and laptops equally).
 
 User's condition: *"if there is not much latency introduced... tell me the model name, its size and expected latency first beforehand."* Candidate models and honest latency estimates below (§4) — this needs a sign-off on the specific model before any implementation.
+
+**Status (1 Nov 2026): built** (`backend/app/matching`, migration `012_lf_matching`), after a local benchmark and sign-off:
+
+| Model | Size | Measured (ONNX Runtime, fp32, 1 thread, M-series Mac) |
+|---|---|---|
+| all-MiniLM-L6-v2 (description vs description) | 90 MB | ~7 ms per description |
+| MobileCLIP-S0 image encoder (photo vs photo) | 45 MB | ~36–43 ms per photo |
+| MobileCLIP-S0 text encoder (description vs photo) | 170 MB | ~6 ms per description |
+
+The int8 builds were slower on ARM, and the int8 image model lost accuracy, so fp32 is used. Expect 2–3× these times on a 1-vCPU Graviton Lambda.
+
+Decisions taken:
+- **Where it runs:** a separate matcher Lambda (`Dockerfile.matcher`), invoked asynchronously by the API, so the API image stays small. Locally it runs in-process.
+- **Who gets alerted:** only the owner of a lost report with a **strong** match, in either direction, and across categories.
+- **Text↔photo:** added. Lost-report descriptions can match found-report photos, and the reverse.
+- **Where matches show:** a ranked "Possible matches" list with Strong/Possible badges and reasons, on the owner's own report and right after filing it.
+
+Without the models the API falls back to the old same-category rule.
+
+**Calibration** (`backend/scripts/calibrate_matching.py`, 20 description pairs, 8 look-alikes, 34 photos of everyday lost items). On descriptions alone, the chosen thresholds alert 14 of 20 true pairs and list the other 6. Of the 8 look-alikes, 1 alerts. None of 364 unrelated pairs alert. Photos add evidence on top. Text↔photo similarity is weak on its own (CLIP scores of 0.1–0.35), so it is capped and only reaches "strong" together with another signal.
 
 ### 1.3 Claim-verification step before revealing contact info (Lost & Found) — Deferred
 
@@ -195,8 +215,8 @@ So the realistic footprint is now **4 small models total** (one text-embedding m
 |---|---|---|
 | In-app messaging (Buy & Sell) | Built (31 Oct); E2E pending | Server can read chats for now; E2E via passkey + QR linking, §1.1. No SLM — security decision |
 | Keep email/phone visible to signed-in users | Approved (no change) | Already the behavior today |
-| Lost & Found photo matching | Approved, pending latency check | MobileCLIP-S0, §4.2 |
-| Lost & Found description matching (lost **and** found) | Approved, pending latency check | all-MiniLM-L6-v2, §4.2 |
+| Lost & Found photo matching | Built (1 Nov) | MobileCLIP-S0 image + text (text↔photo), separate matcher Lambda, §1.2 |
+| Lost & Found description matching (lost **and** found) | Built (1 Nov) | all-MiniLM-L6-v2, any category; alerts only strong matches, §1.2 |
 | Claim-verification step | Deferred | Revisit if abuse becomes a problem |
 | Per-instructor reviews / follow list | Deferred | "Maybe in the future" |
 | Seller trust score / "Negative Seller" tag | Approved | No SLM — moderator-removal counter, §1.5 |

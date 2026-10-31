@@ -3,14 +3,15 @@
 Lost reports and found reports work the same way, so one factory builds both routers:
   /lost-reports   and   /found-reports
 
-Matching (FR-9): the category says what the item is ("ID card"). When someone files a
-found report, every open lost report in the same category, lost no later than the
-item was found, by someone else, gets an in-app notification plus a push. Matching runs
-again when a found report's category or time is edited, or it is reopened; nobody is told
-twice about the same found report. A found report also alerts matching saved Lost & Found
-searches (app/alerts.py).
+Matching (FR-9, future plan §1.2): when the matcher is available (app/matching), every new,
+edited or reopened report, or one with new photos, is compared by description and photo with
+open reports of the other kind, in any category. Likely pairs are stored and shown to the
+report's owner (GET /{kind}-reports/{id}/matches); a strong one alerts the lost report's owner.
+Without it (match_mode "off") the old rule applies: a found report alerts every open lost report
+in the same category, lost no later than the item was found, by someone else. Either way nobody
+is told twice about the same found report. A found report also alerts matching saved Lost &
+Found searches (app/alerts.py).
 """
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 from uuid import UUID
@@ -24,6 +25,8 @@ from ..auth import CurrentUser, current_user, optional_user
 from ..common import (MAX_INT_ID, CategoryId, CategoryRef, Contact, Page, PageParams, Photo, UserRef, forbidden,
                       make_page, not_found, page_params, search_text, set_clause, text)
 from ..db import get_conn
+from ..lf_kinds import FOUND, LOST, Kind, other_kind
+from ..matching.trigger import match_mode, request_match, strength
 from ..notify import create_notifications, deliver_push
 from ..permissions import close_reports, is_module_moderator, log_moderation
 from ..storage import delete_objects, file_url, mark_attached, verify_own_uploads
@@ -31,20 +34,6 @@ from .listings import PhotoKeys
 
 # "matched" was dropped (rev 11): a report is open until its owner closes it.
 ReportStatus = Literal["open", "closed"]
-
-
-@dataclass(frozen=True)
-class Kind:
-    name: str          # "lost" or "found"
-    table: str         # lost_reports
-    photos: str        # lost_report_photos
-    photo_fk: str      # lost_report_id
-    when: str          # lost_at
-    upload_kind: str   # lost_report_photo
-
-
-LOST = Kind("lost", "lost_reports", "lost_report_photos", "lost_report_id", "lost_at", "lost_report_photo")
-FOUND = Kind("found", "found_reports", "found_report_photos", "found_report_id", "found_at", "found_report_photo")
 
 
 def _not_in_future(value: datetime | None) -> datetime | None:
@@ -101,12 +90,27 @@ class ReportDetail(ReportSummary):
     reporter_contact: Contact | None = Field(description="Shown to signed-in users only")
     updated_at: datetime
     possible_matches: list[ReportSummary] | None = Field(
-        None, description="Only on create: open reports of the other kind in the same category")
+        None, description="Only on create: open reports of the other kind in the same category. "
+                          "The ranked list is GET /{kind}-reports/{id}/matches.")
 
 
-def select_for(k: Kind) -> str:
+class PossibleMatch(BaseModel):
+    report: ReportSummary
+    score: float | None = Field(description="0-1; null when ranking is unavailable")
+    strength: Literal["strong", "possible"] | None
+    reasons: list[str] = Field(description='e.g. "Similar description", "Similar photo"')
+
+
+class MatchList(BaseModel):
+    status: Literal["ready", "pending", "unavailable"] = Field(
+        description="pending: still being matched, ask again shortly; "
+                    "unavailable: no matcher, so the list is same-category reports, unranked")
+    matches: list[PossibleMatch]
+
+
+def select_for(k: Kind, extra_columns: str = "") -> str:
     return f"""
-    SELECT r.id, r.description, r.{k.when} AS occurred_at, r.location, r.status::text AS status,
+    SELECT {extra_columns}r.id, r.description, r.{k.when} AS occurred_at, r.location, r.status::text AS status,
            r.created_at, r.updated_at, r.reporter_id,
            c.id AS category_id, c.name AS category_name,
            u.name AS reporter_name, u.email::text AS reporter_email, u.phone AS reporter_phone,
@@ -149,7 +153,7 @@ async def notify_lost_reporters(conn: asyncpg.Connection, found_report_id: UUID,
 
 
 def build_router(kind: Kind) -> APIRouter:
-    other = FOUND if kind is LOST else LOST
+    other = other_kind(kind)
     router = APIRouter(prefix=f"/{kind.name}-reports", tags=["Lost & Found"])
 
     select = select_for(kind)
@@ -191,18 +195,24 @@ def build_router(kind: Kind) -> APIRouter:
         return row
 
     async def rematch(conn: asyncpg.Connection, report_id: UUID, background: BackgroundTasks) -> None:
-        """Run FR-9 matching and saved-search alerts again for a found report that changed or reopened."""
+        """Saved-search alerts again for a found report that changed or reopened, plus the old FR-9
+        category rule when there's no matcher (the matcher is started by the caller)."""
         r = await conn.fetchrow(
             f"""SELECT category_id, {kind.when} AS occurred_at, reporter_id FROM {kind.table}
                 WHERE id = $1 AND status = 'open' AND deleted_at IS NULL""", report_id)
         if r is None:
             return
-        notified, message = await notify_lost_reporters(conn, report_id, r["category_id"], r["occurred_at"],
-                                                        r["reporter_id"])
-        if notified:
-            background.add_task(deliver_push, notified, "lost_found_match",
-                                {"found_report_id": str(report_id), "message": message})
+        if match_mode() == "off":
+            notified, message = await notify_lost_reporters(conn, report_id, r["category_id"], r["occurred_at"],
+                                                            r["reporter_id"])
+            if notified:
+                background.add_task(deliver_push, notified, "lost_found_match",
+                                    {"found_report_id": str(report_id), "message": message})
         push_alerts(background, await found_report_alerts(conn, report_id))
+
+    async def needs_rematch(conn: asyncpg.Connection, report_id: UUID) -> None:
+        """What matching looks at changed: the matcher's last result is out of date."""
+        await conn.execute(f"UPDATE {kind.table} SET match_rev = match_rev + 1 WHERE id = $1", report_id)
 
     async def insert_photos(conn: asyncpg.Connection, report_id: UUID, keys: list[str]) -> None:
         await conn.executemany(
@@ -268,15 +278,17 @@ def build_router(kind: Kind) -> APIRouter:
                 user.id, body.description, body.category_id, body.occurred_at, body.location)
             await insert_photos(conn, report_id, body.photo_keys)
             if kind is FOUND:
-                # FR-9: tell everyone who lost this kind of item.
-                notified, message = await notify_lost_reporters(conn, report_id, body.category_id,
-                                                                body.occurred_at, user.id)
+                if match_mode() == "off":
+                    # FR-9 without the matcher: tell everyone who lost this kind of item.
+                    notified, message = await notify_lost_reporters(conn, report_id, body.category_id,
+                                                                    body.occurred_at, user.id)
                 pushes = await found_report_alerts(conn, report_id)
         await mark_attached(body.photo_keys)
         if notified:
             background.add_task(deliver_push, notified, "lost_found_match",
                                 {"found_report_id": str(report_id), "message": message})
         push_alerts(background, pushes)
+        request_match(background, kind.name, report_id)
         result = await detail(conn, report_id, user)
         result.possible_matches = await possible_matches(conn, body.category_id, body.occurred_at, user.id)
         return result
@@ -290,10 +302,11 @@ def build_router(kind: Kind) -> APIRouter:
             if required in changes and changes[required] is None:
                 raise HTTPException(422, f"{required} can't be empty.")
         # A new description can match saved keyword searches too (each person is still told once).
-        rematch_needed = kind is FOUND and (
+        content_changed = (
             changes.get("category_id", before["category_id"]) != before["category_id"]
             or changes.get("occurred_at", before["occurred_at"]) != before["occurred_at"]
             or "description" in changes)
+        rematch_needed = kind is FOUND and content_changed
         if "occurred_at" in changes:
             changes[kind.when] = changes.pop("occurred_at")
         sql, values = set_clause(changes, start=2)
@@ -301,8 +314,12 @@ def build_router(kind: Kind) -> APIRouter:
             await conn.execute(f"UPDATE {kind.table} SET {sql} WHERE id = $1", report_id, *values)
             if before["by_admin"]:
                 await log_moderation(conn, user.id, f"edit_{kind.name}_report", f"{kind.name}_report", report_id)
+            if content_changed:
+                await needs_rematch(conn, report_id)
             if rematch_needed:
                 await rematch(conn, report_id, background)
+        if content_changed:
+            request_match(background, kind.name, report_id)
         return await detail(conn, report_id, user)
 
     @router.patch("/{report_id}/status", response_model=ReportDetail,
@@ -315,8 +332,13 @@ def build_router(kind: Kind) -> APIRouter:
             if before["by_admin"]:
                 await log_moderation(conn, user.id, f"change_{kind.name}_report_status", f"{kind.name}_report",
                                      report_id, body.status)
-            if kind is FOUND and body.status == "open" and before["status"] != "open":
+            reopened = body.status == "open" and before["status"] != "open"
+            if reopened:
+                await needs_rematch(conn, report_id)
+            if kind is FOUND and reopened:
                 await rematch(conn, report_id, background)
+        if reopened:
+            request_match(background, kind.name, report_id)
         return await detail(conn, report_id, user)
 
     @router.put("/{report_id}/photos", response_model=ReportDetail,
@@ -332,13 +354,41 @@ def build_router(kind: Kind) -> APIRouter:
         async with conn.transaction():
             await conn.execute(f"DELETE FROM {kind.photos} WHERE {kind.photo_fk} = $1", report_id)
             await insert_photos(conn, report_id, body.photo_keys)
-            await conn.execute(f"UPDATE {kind.table} SET updated_at = now() WHERE id = $1", report_id)
+            await conn.execute(f"UPDATE {kind.table} SET updated_at = now(), match_rev = match_rev + 1 WHERE id = $1",
+                               report_id)
             if before["by_admin"]:
                 await log_moderation(conn, user.id, f"replace_{kind.name}_report_photos", f"{kind.name}_report",
                                      report_id)
         await mark_attached(new_keys)
         background.add_task(delete_objects, sorted(old_keys - set(body.photo_keys)))
+        request_match(background, kind.name, report_id)
         return await detail(conn, report_id, user)
+
+    @router.get("/{report_id}/matches", response_model=MatchList,
+                summary="Possible matches for your own report, best first (reporter or admin)")
+    async def list_matches(report_id: UUID, user: CurrentUser = Depends(current_user),
+                           conn: asyncpg.Connection = Depends(get_conn)):
+        r = await conn.fetchrow(
+            f"""SELECT reporter_id, category_id, {kind.when} AS occurred_at, status::text AS status,
+                       match_rev, matched_rev FROM {kind.table} WHERE id = $1 AND deleted_at IS NULL""", report_id)
+        if r is None:
+            raise not_found(f"{kind.name.capitalize()} report")
+        if r["reporter_id"] != user.id and not user.is_admin:
+            raise forbidden("Only the person who filed this report can see its possible matches.")
+        if match_mode() == "off":
+            legacy = await possible_matches(conn, r["category_id"], r["occurred_at"], r["reporter_id"])
+            return MatchList(status="unavailable",
+                             matches=[PossibleMatch(report=m, score=None, strength=None, reasons=[]) for m in legacy])
+        rows = await conn.fetch(
+            select_for(other, "m.score, m.reasons, ") + f"""
+            JOIN lf_matches m ON m.{other.photo_fk} = r.id AND m.{kind.photo_fk} = $1
+            WHERE r.status = 'open' AND r.deleted_at IS NULL
+            ORDER BY m.score DESC, r.created_at DESC LIMIT 10""", report_id)
+        pending = r["status"] == "open" and r["matched_rev"] != r["match_rev"]
+        return MatchList(
+            status="pending" if pending else "ready",
+            matches=[PossibleMatch(report=summary(m, other), score=m["score"], strength=strength(m["score"]),
+                                   reasons=list(m["reasons"])) for m in rows])
 
     @router.delete("/{report_id}", status_code=204,
                    summary="Remove a report (reporter, Lost & Found moderator or admin; FR-10)")

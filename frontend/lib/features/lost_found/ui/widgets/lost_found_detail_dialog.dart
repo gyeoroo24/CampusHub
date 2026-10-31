@@ -12,6 +12,7 @@ import '../../../messages/ui/messages_screen.dart';
 import '../../domain/lost_found_item.dart';
 import '../../providers/lost_found_providers.dart';
 import 'edit_report_dialog.dart';
+import 'possible_matches_section.dart';
 
 class LostFoundDetailDialog extends ConsumerWidget {
   final LostFoundItem item;
@@ -213,127 +214,8 @@ class LostFoundDetailDialog extends ConsumerWidget {
                     ),
                     const Divider(height: 28),
 
-                    // ── Possible Matches Section (FR-9, shown for both Lost & Found) ──
-                    ref.watch(possibleMatchesForItemProvider(item)).when(
-                          data: (matches) {
-                            if (matches.isEmpty) return const SizedBox.shrink();
-                            final otherKind = isLost ? 'Found' : 'Lost';
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: isDark ? const Color(0xFF1E293B) : const Color(0xFFFEF3C7),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: isDark ? const Color(0xFF475569) : const Color(0xFFFDE68A),
-                                    ),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Icon(Icons.auto_awesome, size: 18, color: Colors.amber.shade800),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            'Possible Matches (${matches.length})',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13,
-                                              color: isDark ? Colors.amber.shade200 : Colors.amber.shade900,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Active $otherKind reports in "${item.category.name}" that might correspond to this item. Tap a match to inspect details:',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: isDark ? Colors.grey.shade400 : Colors.brown.shade700,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 10),
-                                      for (final match in matches) ...[
-                                        InkWell(
-                                          borderRadius: BorderRadius.circular(8),
-                                          onTap: () {
-                                            showDialog(
-                                              context: context,
-                                              builder: (_) => LostFoundDetailDialog(item: match),
-                                            );
-                                          },
-                                          child: Container(
-                                            margin: const EdgeInsets.only(bottom: 6),
-                                            padding: const EdgeInsets.all(8),
-                                            decoration: BoxDecoration(
-                                              color: isDark ? const Color(0xFF0F172A) : Colors.white,
-                                              borderRadius: BorderRadius.circular(8),
-                                              border: Border.all(
-                                                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                                              ),
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                ClipRRect(
-                                                  borderRadius: BorderRadius.circular(6),
-                                                  child: match.imageUrl.isNotEmpty
-                                                      ? Image.network(
-                                                          match.imageUrl,
-                                                          width: 42,
-                                                          height: 42,
-                                                          fit: BoxFit.cover,
-                                                          errorBuilder: (_, __, ___) => Container(
-                                                            width: 42,
-                                                            height: 42,
-                                                            color: Colors.grey.shade200,
-                                                            child: const Icon(Icons.inventory_2_outlined, size: 18),
-                                                          ),
-                                                        )
-                                                      : Container(
-                                                          width: 42,
-                                                          height: 42,
-                                                          color: Colors.grey.shade200,
-                                                          child: const Icon(Icons.inventory_2_outlined, size: 18),
-                                                        ),
-                                                ),
-                                                const SizedBox(width: 10),
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Text(
-                                                        match.description,
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow.ellipsis,
-                                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                                                      ),
-                                                      const SizedBox(height: 2),
-                                                      Text(
-                                                        '${match.location} • ${DateTimeFormatter.timeAgo(match.occurredAt)}',
-                                                        style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                                const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Colors.grey),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                              ],
-                            );
-                          },
-                          loading: () => const SizedBox.shrink(),
-                          error: (_, __) => const SizedBox.shrink(),
-                        ),
+                    // ── Possible matches (FR-9): only on your own report ──
+                    if (isOwner || (currentUser?.isAdmin ?? false)) PossibleMatchesSection(item: item),
 
                     // ── Status & Owner Controls (Original Reporter Only) ───────────────
                     // The backend lets the admin edit anyone's report too.
