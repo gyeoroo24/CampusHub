@@ -60,6 +60,7 @@ def test_reports_with_photos_and_status(client, s3):
     url = f"{API}/lost-reports/{lost['id']}/status"
     assert client.patch(url, headers=RAVI, json={"status": "closed"}).status_code == 403
     assert client.patch(url, headers=ASHA, json={"status": "closed"}).json()["status"] == "closed"
+    assert client.patch(url, headers=ASHA, json={"status": "matched"}).status_code == 422   # removed in rev 11
 
 
 def test_future_time_rejected(client):

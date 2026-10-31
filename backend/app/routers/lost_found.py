@@ -29,7 +29,8 @@ from ..permissions import close_reports, is_module_moderator, log_moderation
 from ..storage import delete_objects, file_url, mark_attached, verify_own_uploads
 from .listings import PhotoKeys
 
-ReportStatus = Literal["open", "matched", "closed"]
+# "matched" was dropped (rev 11): a report is open until its owner closes it.
+ReportStatus = Literal["open", "closed"]
 
 
 @dataclass(frozen=True)
@@ -305,7 +306,7 @@ def build_router(kind: Kind) -> APIRouter:
         return await detail(conn, report_id, user)
 
     @router.patch("/{report_id}/status", response_model=ReportDetail,
-                  summary="Mark open / matched / closed (reporter or admin)")
+                  summary="Mark open / closed (reporter or admin)")
     async def update_status(report_id: UUID, body: StatusUpdate, background: BackgroundTasks,
                             user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
         before = await editable(conn, report_id, user)

@@ -9,8 +9,8 @@ What it adds: ~50 students, departments and courses (CDS courses from
 https://cds.iisc.ac.in/courses/descriptions/ plus a few CSA / EE / ECE ones), three years of
 course feedback, materials (small placeholder PDFs uploaded to MinIO), forum threads, Buy & Sell
 listings, Wanted posts, saved searches, Lost & Found reports, companies with placement records
-and interview experiences, events, bookmarks, reports for the moderation queue, notifications
-and chat messages.
+and interview experiences, events, bookmarks, reports for the moderation queue and notifications.
+No chat messages: those are end-to-end encrypted, so only people's own apps can write them.
 
 Every dummy user has an email from SEED_USERS and signs in like any dev user, e.g.
     X-Dev-User: ananya.rao@iisc.ac.in
@@ -396,7 +396,8 @@ async def remove_seed(conn: asyncpg.Connection) -> list[str]:
         ("DELETE FROM bookmarks WHERE target_id = ANY($1::uuid[])", listing_ids + event_ids),
         ("DELETE FROM reports WHERE reporter_id = ANY($1::uuid[]) OR handled_by = ANY($1::uuid[])", ids),
         ("DELETE FROM moderation_log WHERE moderator_id = ANY($1::uuid[])", ids),
-        ("DELETE FROM chat_messages WHERE sender_id = ANY($1::uuid[]) OR receiver_id = ANY($1::uuid[])", ids),
+        # Their chats (messages and topics go with them), including real users' chats with them.
+        ("DELETE FROM chat_conversations WHERE user_a = ANY($1::uuid[]) OR user_b = ANY($1::uuid[])", ids),
         ("DELETE FROM events WHERE created_by = ANY($1::uuid[])", ids),
         ("DELETE FROM comments WHERE user_id = ANY($1::uuid[])", ids),
         ("DELETE FROM threads WHERE author_id = ANY($1::uuid[])", ids),
@@ -805,31 +806,11 @@ async def seed(conn: asyncpg.Connection, s3, bucket: str) -> dict:
             n_reports += 1
     counts["reports"] = n_reports
 
-    # notifications collected above, and a few buyer-seller chats
+    # notifications collected above
     await conn.executemany(
         "INSERT INTO notifications (user_id, type, payload, is_read, created_at) VALUES ($1, $2, $3, $4, $5)",
         notif_rows)
     counts["notifications"] = len(notif_rows)
-    chats = [("Hi, is the {item} still available?", "Yes, it is. You can come see it this evening."),
-             ("Would you take a bit less for the {item}?", "I can do a small discount if you pick it up today."),
-             ("Can I see the {item} near the library tomorrow?", "Sure, 5 pm at the library entrance works.")]
-    n_chat = 0
-    for row in (await conn.fetch("SELECT id, seller_id, title, created_at FROM listings "
-                                 "WHERE seller_id = ANY($1::uuid[]) AND status <> 'sold' ORDER BY random() LIMIT 12",
-                                 users)):
-        buyer = rng.choice([u for u in students if u != row["seller_id"]])
-        ask, answer = rng.choice(chats)
-        t = max(row["created_at"], NOW - timedelta(days=10)) + timedelta(hours=rng.uniform(1, 30))
-        if t > NOW:
-            t = NOW - timedelta(minutes=rng.randint(5, 300))
-        await conn.execute("INSERT INTO chat_messages (sender_id, receiver_id, content, sent_at, read_at) "
-                           "VALUES ($1, $2, $3, $4, $4)", buyer, row["seller_id"],
-                           ask.format(item=row["title"]), t)
-        await conn.execute("INSERT INTO chat_messages (sender_id, receiver_id, content, sent_at) "
-                           "VALUES ($1, $2, $3, $4)", row["seller_id"], buyer, answer,
-                           min(t + timedelta(minutes=rng.randint(5, 120)), NOW))
-        n_chat += 2
-    counts["chat messages"] = n_chat
     return counts
 
 

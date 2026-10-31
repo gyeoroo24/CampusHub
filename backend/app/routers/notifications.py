@@ -56,6 +56,33 @@ async def mark_all_read(user: CurrentUser = Depends(current_user), conn: asyncpg
     return {"updated": int(result.split()[-1])}
 
 
+class DeleteNotifications(BaseModel):
+    ids: list[UUID] = Field(min_length=1, max_length=200)
+
+
+@router.delete("/notifications/{notification_id}", status_code=204, summary="Delete one of my notifications")
+async def delete_notification(notification_id: UUID, user: CurrentUser = Depends(current_user),
+                              conn: asyncpg.Connection = Depends(get_conn)):
+    # Someone else's id (or one already gone) is silently ignored, so nobody can probe for ids.
+    await conn.execute("DELETE FROM notifications WHERE id = $1 AND user_id = $2", notification_id, user.id)
+    return Response(status_code=204)
+
+
+@router.post("/notifications/delete", summary="Delete several of my notifications at once")
+async def delete_notifications(body: DeleteNotifications, user: CurrentUser = Depends(current_user),
+                               conn: asyncpg.Connection = Depends(get_conn)) -> dict:
+    result = await conn.execute("DELETE FROM notifications WHERE id = ANY($1::uuid[]) AND user_id = $2",
+                                body.ids, user.id)
+    return {"deleted": int(result.split()[-1])}
+
+
+@router.delete("/notifications", summary="Clear all my notifications")
+async def clear_notifications(user: CurrentUser = Depends(current_user),
+                              conn: asyncpg.Connection = Depends(get_conn)) -> dict:
+    result = await conn.execute("DELETE FROM notifications WHERE user_id = $1", user.id)
+    return {"deleted": int(result.split()[-1])}
+
+
 @router.post("/devices", status_code=204, summary="Register this device for push notifications")
 async def register_device(body: DeviceIn, user: CurrentUser = Depends(current_user),
                           conn: asyncpg.Connection = Depends(get_conn)):

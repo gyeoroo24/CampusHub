@@ -3,9 +3,10 @@ from datetime import datetime
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 
+from .. import otp
 from ..auth import CurrentUser, current_user, optional_user
 from ..common import Contact, forbidden, not_found, set_clause, text
 from ..db import get_conn
@@ -43,12 +44,31 @@ class MyProfile(BaseModel):
     updated_at: datetime
 
 
+# E.164: + country code + number, 8 to 15 digits in all. India (+91) numbers are 10 digits from 6-9.
+PHONE_PATTERN = r"^\+[1-9][0-9]{7,14}$"
+
+
+def _check_phone(phone: str) -> str:
+    if phone.startswith("+91") and not (len(phone) == 13 and phone[3] in "6789"):
+        raise HTTPException(422, "An Indian mobile number has 10 digits and starts with 6, 7, 8 or 9.")
+    return phone
+
+
 class ProfileUpdate(BaseModel):
     name: text(100) | None = None
-    phone: str | None = Field(None, pattern=r"^\+?[0-9]{10,15}$", description="Optional; send null to remove it")
+    phone: None = Field(None, description="Only null (removes it). A new number is set by verifying it: "
+                                          "POST /me/phone/code, then POST /me/phone/verify")
     department_id: UUID | None = None
     programme: str | None = Field(None, max_length=100)
     graduation_year: int | None = Field(None, ge=1950, le=2100)
+
+
+class PhoneIn(BaseModel):
+    phone: str = Field(pattern=PHONE_PATTERN, description="E.164, e.g. +919876543210")
+
+
+class PhoneVerify(PhoneIn):
+    code: str = Field(min_length=6, max_length=6, pattern=r"^[0-9]{6}$")
 
 
 class PublicProfile(BaseModel):
@@ -100,6 +120,21 @@ async def update_me(body: ProfileUpdate, user: CurrentUser = Depends(current_use
         raise HTTPException(422, "Name can't be empty.")
     sql, values = set_clause(changes, start=2)
     await conn.execute(f"UPDATE users SET {sql} WHERE id = $1", user.id, *values)
+    return await _my_profile(conn, user.id)
+
+
+@router.post("/me/phone/code", status_code=204, summary="Text a code to a phone number I want on my profile")
+async def request_phone_code(body: PhoneIn, user: CurrentUser = Depends(current_user)):
+    otp.request_phone_otp(str(user.id), _check_phone(body.phone))
+    return Response(status_code=204)
+
+
+@router.post("/me/phone/verify", response_model=MyProfile,
+             summary="Check the code and save the phone number on my profile")
+async def verify_phone_code(body: PhoneVerify, user: CurrentUser = Depends(current_user),
+                            conn: asyncpg.Connection = Depends(get_conn)):
+    otp.verify_phone_otp(str(user.id), _check_phone(body.phone), body.code)
+    await conn.execute("UPDATE users SET phone = $2 WHERE id = $1", user.id, body.phone)
     return await _my_profile(conn, user.id)
 
 

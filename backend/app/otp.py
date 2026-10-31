@@ -62,7 +62,24 @@ def _send_email(to: str, code: str) -> None:
         raise HTTPException(503, "Couldn't send the sign-in email right now. Try again in a moment.")
 
 
-def request_otp(email: str) -> None:
+def _send_sms(to: str, code: str) -> None:
+    """No SMS provider is set up yet (Amazon SNS would be the AWS choice), so the code is logged,
+    the same way sign-in codes are when SMTP isn't configured."""
+    log.warning("No SMS provider — CampusHub phone verification code for %s is %s (valid %d min)",
+                to, code, get_settings().otp_ttl_seconds // 60)
+
+
+def request_phone_otp(user_id: str, phone: str) -> None:
+    """A code to prove the user owns [phone] before it goes on their profile."""
+    request_otp(f"phone:{user_id}:{phone}", send=lambda _key, code: _send_sms(phone, code))
+
+
+def verify_phone_otp(user_id: str, phone: str, code: str) -> bool:
+    return verify_otp(f"phone:{user_id}:{phone}", code)
+
+
+def request_otp(email: str, send=None) -> None:
+    """[email] is the key codes are kept under; [send] delivers the code (email by default)."""
     email = email.strip().lower()
     s = get_settings()
     now = time.monotonic()
@@ -74,7 +91,7 @@ def request_otp(email: str) -> None:
     code = f"{secrets.randbelow(1_000_000):06d}"
     _store[email] = _Entry(code_hash=_hash(email, code), expires_at=now + s.otp_ttl_seconds,
                            attempts=0, sent_at=now)
-    _send_email(email, code)
+    (send or _send_email)(email, code)
 
 
 def verify_otp(email: str, code: str) -> bool:

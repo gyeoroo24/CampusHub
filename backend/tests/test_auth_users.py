@@ -19,10 +19,32 @@ def test_guest_cannot_see_me(client):
 def test_first_request_creates_user_and_profile_update(client):
     me = client.get(f"{API}/me", headers=ASHA).json()
     assert me["email"] == "asha@iisc.ac.in" and me["is_admin"] is False and me["moderator_grants"] == []
-    r = client.patch(f"{API}/me", headers=ASHA, json={"phone": "+919876543210", "programme": "M.Tech CSA"})
-    assert r.status_code == 200 and r.json()["phone"] == "+919876543210"
-    assert client.patch(f"{API}/me", headers=ASHA, json={"phone": "call me"}).status_code == 422
+    r = client.patch(f"{API}/me", headers=ASHA, json={"programme": "M.Tech CSA"})
+    assert r.status_code == 200 and r.json()["programme"] == "M.Tech CSA"
     assert client.patch(f"{API}/me", headers=ASHA, json={"name": None}).status_code == 422
+
+
+def test_phone_is_added_only_after_verifying_a_code(client, monkeypatch):
+    # The code is random; pin it so the test knows what was "texted".
+    monkeypatch.setattr("app.otp.secrets.randbelow", lambda _n: 123456)
+    sign_in(client, ASHA)
+    # A number can't be set directly, only removed.
+    assert client.patch(f"{API}/me", headers=ASHA, json={"phone": "+919876543210"}).status_code == 422
+    for bad in ("9876543210", "call me", "+91987654321", "+915876543210", "+0123456789"):
+        assert client.post(f"{API}/me/phone/code", headers=ASHA, json={"phone": bad}).status_code == 422, bad
+    assert client.post(f"{API}/me/phone/code", json={"phone": "+919876543210"}).status_code == 401
+
+    assert client.post(f"{API}/me/phone/code", headers=ASHA, json={"phone": "+919876543210"}).status_code == 204
+    wrong = client.post(f"{API}/me/phone/verify", headers=ASHA, json={"phone": "+919876543210", "code": "000000"})
+    assert wrong.status_code == 401 and client.get(f"{API}/me", headers=ASHA).json()["phone"] is None
+    r = client.post(f"{API}/me/phone/verify", headers=ASHA, json={"phone": "+919876543210", "code": "123456"})
+    assert r.status_code == 200 and r.json()["phone"] == "+919876543210"
+    # Other countries just need a valid international number.
+    client.post(f"{API}/me/phone/code", headers=RAVI, json={"phone": "+14155550123"})
+    assert client.post(f"{API}/me/phone/verify", headers=RAVI,
+                       json={"phone": "+14155550123", "code": "123456"}).json()["phone"] == "+14155550123"
+
+    assert client.patch(f"{API}/me", headers=ASHA, json={"phone": None}).json()["phone"] is None
 
 
 @pytest.mark.parametrize("email", ["someone@gmail.com", "x@fakeiisc.ac.in"])
@@ -34,9 +56,11 @@ def test_alumni_subdomain_accepted(client):
     assert client.get(f"{API}/me", headers=as_user("Old.Student@ALUM.IISC.AC.IN")).status_code == 200
 
 
-def test_contact_details_only_for_signed_in_users(client):
+def test_contact_details_only_for_signed_in_users(client, monkeypatch):
+    monkeypatch.setattr("app.otp.secrets.randbelow", lambda _n: 123456)   # the texted code
     asha_id = sign_in(client, ASHA)
-    client.patch(f"{API}/me", headers=ASHA, json={"phone": "+919876543210"})
+    client.post(f"{API}/me/phone/code", headers=ASHA, json={"phone": "+919876543210"})
+    client.post(f"{API}/me/phone/verify", headers=ASHA, json={"phone": "+919876543210", "code": "123456"})
     assert client.get(f"{API}/users/{asha_id}").json()["contact"] is None
     contact = client.get(f"{API}/users/{asha_id}", headers=RAVI).json()["contact"]
     assert contact == {"email": "asha@iisc.ac.in", "phone": "+919876543210"}

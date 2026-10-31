@@ -1,5 +1,5 @@
 -- ============================================================================
--- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 7
+-- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 11
 -- DS252 Introduction to Cloud Computing — Team "Order of Phoenix"
 --
 -- Permission modules (FR-2, NFR-6): buy_sell, lost_found, academic_help,
@@ -16,6 +16,12 @@
 --   4. No table for the course survival guide: it is computed from
 --      course_feedback when requested.
 --   An existing database is upgraded with db/migrations/006_taking_it_further.sql.
+--
+-- Changes from rev. 7 (in-app messaging, 31 Oct 2026):
+--   1. End-to-end encrypted buyer–seller chat per listing: chat_keys,
+--      chat_conversations, chat_messages (replaces the unused plaintext
+--      placeholder chat_messages table), chat_blocks. New notification type
+--      chat_message. Upgrade: db/migrations/008_encrypted_chat.sql.
 --
 -- Changes from rev. 6 (frontend review, 25 Oct 2026):
 --   1. course_feedback.is_anonymous, and at most one active review per person per course
@@ -74,13 +80,13 @@ CREATE TYPE user_role            AS ENUM ('signed_in', 'admin');   -- "moderator
 CREATE TYPE module_name          AS ENUM ('buy_sell', 'lost_found', 'academic_help', 'placement_hub');
 CREATE TYPE mod_scope_type       AS ENUM ('module', 'department', 'course');
 CREATE TYPE listing_status       AS ENUM ('available', 'reserved', 'sold');
-CREATE TYPE lost_found_status    AS ENUM ('open', 'matched', 'closed');
+CREATE TYPE lost_found_status    AS ENUM ('open', 'matched', 'closed');  -- 'matched' unused since rev 11
 CREATE TYPE material_type        AS ENUM ('notes', 'slides', 'past_assignment', 'exam_material', 'other');
 CREATE TYPE forum_scope_type     AS ENUM ('course', 'department', 'company');
 CREATE TYPE bookmark_target_type AS ENUM ('listing', 'event');
 CREATE TYPE notification_type    AS ENUM ('lost_found_match', 'forum_reply', 'listing_status_change',
                                           'bookmarked_event_update', 'followed_tag_event', 'moderation_action',
-                                          'saved_search_match', 'wanted_post_match');
+                                          'saved_search_match', 'wanted_post_match', 'chat_message');
 CREATE TYPE report_target_type   AS ENUM ('listing', 'lost_report', 'found_report', 'course_material',
                                           'course_feedback', 'thread', 'comment', 'interview_experience',
                                           'wanted_post');
@@ -88,6 +94,9 @@ CREATE TYPE wanted_status        AS ENUM ('open', 'fulfilled', 'closed');
 CREATE TYPE campus_service_category AS ENUM ('health', 'wellbeing', 'grievance', 'safety', 'other');
 CREATE TYPE report_status        AS ENUM ('open', 'actioned', 'dismissed');
 CREATE TYPE device_platform      AS ENUM ('android', 'ios', 'web', 'desktop');
+CREATE TYPE chat_message_kind    AS ENUM ('text', 'offer');
+CREATE TYPE chat_offer_status    AS ENUM ('pending', 'accepted', 'declined', 'withdrawn', 'superseded');
+CREATE TYPE chat_topic_kind      AS ENUM ('listing', 'lost_report', 'found_report');
 
 -- ============================================================================
 -- SHARED HELPERS
@@ -834,18 +843,127 @@ CREATE TABLE push_devices (
 CREATE INDEX idx_push_devices_user ON push_devices(user_id);
 
 -- ============================================================================
--- PHASE 2 (stretch) — 1-to-1 CHAT  (FR-23)
+-- MESSAGES (rev 8) — end-to-end encrypted buyer–seller chat about a listing
+--   Every message is encrypted on the sender's device and decrypted on the
+--   recipient's. The server stores ciphertext, but (rev 9) it also holds each
+--   user's private key, so it is not end-to-end encrypted yet.
+--
+--   chat_keys           one X25519 public key per user (plus retired ones, so
+--                       old messages still say which key they used). Since rev 9
+--                       the app stores the private key here in plain form
+--                       (backup_kdf 'none') so any browser can open messages
+--                       without a passphrase. That means the SERVER CAN READ
+--                       MESSAGES for now: true end-to-end encryption is future
+--                       work (docs/future-plan-2026-10-31-next-level-features.md).
+--                       Old 'pbkdf2-sha256' rows are passphrase-encrypted backups.
+--   chat_conversations  one per pair of people (rev 10), like a WhatsApp chat:
+--                       user_a < user_b. last_seq numbers every change in it;
+--                       clients sync with "changes after N".
+--   chat_topics         what part of a chat is about: a listing, a lost report
+--                       or a found report. A message has at most one topic (none
+--                       for general chat); an offer always has a listing topic.
+--   chat_messages       nonce + AES-256-GCM ciphertext; offers carry their
+--                       amount inside the ciphertext and a status the server
+--                       tracks (only the other person can accept or decline).
+--   chat_blocks         a blocked person can't send to (or start chats with)
+--                       the person who blocked them.
 -- ============================================================================
-CREATE TABLE chat_messages (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    sender_id   UUID NOT NULL REFERENCES users(id),
-    receiver_id UUID NOT NULL REFERENCES users(id),
-    content     TEXT NOT NULL,
-    sent_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    read_at     TIMESTAMPTZ
+CREATE TABLE chat_keys (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    public_key        BYTEA NOT NULL CHECK (octet_length(public_key) = 32),   -- X25519
+    key_backup        BYTEA NOT NULL,
+    backup_salt       BYTEA,
+    backup_kdf        TEXT NOT NULL,       -- 'none' (rev 9): key_backup is the plain private key
+    backup_iterations INT,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    retired_at        TIMESTAMPTZ,                                            -- replaced by a newer key
+    CONSTRAINT chat_keys_backup_check CHECK (
+        (backup_kdf = 'pbkdf2-sha256'
+            AND octet_length(key_backup) BETWEEN 44 AND 512
+            AND octet_length(backup_salt) BETWEEN 16 AND 64
+            AND backup_iterations BETWEEN 100000 AND 10000000)
+        OR (backup_kdf = 'none'
+            AND octet_length(key_backup) = 32
+            AND backup_salt IS NULL
+            AND backup_iterations IS NULL))
 );
-CREATE INDEX idx_chat_thread ON chat_messages(least(sender_id, receiver_id), greatest(sender_id, receiver_id), sent_at);
-CREATE INDEX idx_chat_inbox  ON chat_messages(receiver_id, sent_at DESC);
+CREATE UNIQUE INDEX uq_chat_key_active ON chat_keys(user_id) WHERE retired_at IS NULL;
+
+CREATE TABLE chat_conversations (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_a               UUID NOT NULL REFERENCES users(id),
+    user_b               UUID NOT NULL REFERENCES users(id),
+    created_by           UUID NOT NULL REFERENCES users(id),
+    last_seq             BIGINT NOT NULL DEFAULT 0,
+    user_a_last_read_seq BIGINT NOT NULL DEFAULT 0,
+    user_b_last_read_seq BIGINT NOT NULL DEFAULT 0,
+    last_message_at      TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chat_pair_ordered CHECK (user_a < user_b),
+    CONSTRAINT chat_pair_unique UNIQUE (user_a, user_b)
+);
+CREATE INDEX idx_chat_conv_user_b ON chat_conversations(user_b, last_message_at DESC NULLS LAST);
+
+CREATE TABLE chat_topics (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
+    kind            chat_topic_kind NOT NULL,
+    listing_id      UUID REFERENCES listings(id),
+    lost_report_id  UUID REFERENCES lost_reports(id),
+    found_report_id UUID REFERENCES found_reports(id),
+    started_by      UUID NOT NULL REFERENCES users(id),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chat_topic_one_ref CHECK (
+        (kind = 'listing')      = (listing_id IS NOT NULL) AND
+        (kind = 'lost_report')  = (lost_report_id IS NOT NULL) AND
+        (kind = 'found_report') = (found_report_id IS NOT NULL)),
+    UNIQUE (conversation_id, listing_id),
+    UNIQUE (conversation_id, lost_report_id),
+    UNIQUE (conversation_id, found_report_id)
+);
+
+-- id is chosen by the sender's app: it is part of what the ciphertext is bound to, and
+-- resending after a network error can't create a duplicate.
+CREATE TABLE chat_messages (
+    id               UUID PRIMARY KEY,
+    conversation_id  UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
+    seq              BIGINT NOT NULL,                  -- order within the conversation
+    changed_seq      BIGINT NOT NULL,                  -- last change (sent, offer answered, unsent)
+    sender_id        UUID NOT NULL REFERENCES users(id),
+    kind             chat_message_kind NOT NULL DEFAULT 'text',
+    sender_key_id    UUID NOT NULL REFERENCES chat_keys(id),
+    recipient_key_id UUID NOT NULL REFERENCES chat_keys(id),
+    nonce            BYTEA CHECK (octet_length(nonce) = 12),
+    ciphertext       BYTEA CHECK (octet_length(ciphertext) BETWEEN 17 AND 16400),   -- includes the 16-byte tag
+    offer_status     chat_offer_status,
+    offer_answered_at TIMESTAMPTZ,
+    sent_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_at       TIMESTAMPTZ,                      -- unsent: the ciphertext is erased
+    topic_id         UUID REFERENCES chat_topics(id),  -- null: general chat
+    -- The id the ciphertext is bound to (key derivation and associated data): the conversation
+    -- id, except for messages from before rev 10, which keep their old per-listing chat's id.
+    crypto_context_id UUID NOT NULL,
+    CONSTRAINT chat_offer_has_status CHECK ((kind = 'offer') = (offer_status IS NOT NULL)),
+    CONSTRAINT chat_offer_has_topic CHECK (kind <> 'offer' OR topic_id IS NOT NULL),
+    CONSTRAINT chat_content_until_unsent CHECK
+        ((deleted_at IS NULL) = (nonce IS NOT NULL AND ciphertext IS NOT NULL)),
+    UNIQUE (conversation_id, seq)
+);
+CREATE INDEX idx_chat_messages_changes ON chat_messages(conversation_id, changed_seq);
+CREATE INDEX idx_chat_messages_sender  ON chat_messages(sender_id, sent_at DESC);         -- send rate limit
+CREATE UNIQUE INDEX uq_chat_one_pending_offer ON chat_messages(topic_id) WHERE offer_status = 'pending';
+CREATE INDEX idx_chat_messages_topic ON chat_messages(topic_id, seq);
+
+CREATE TABLE chat_blocks (
+    blocker_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    blocked_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (blocker_id, blocked_id),
+    CONSTRAINT chat_block_not_self CHECK (blocker_id <> blocked_id)
+);
+CREATE INDEX idx_chat_blocks_blocked ON chat_blocks(blocked_id);
 
 -- ============================================================================
 -- CAMPUS SERVICES (rev 6) — Health Centre, Wellness Centre, grievance portals
@@ -890,3 +1008,4 @@ CREATE TRIGGER trg_push_devices_updated_at          BEFORE UPDATE ON push_device
 CREATE TRIGGER trg_wanted_posts_updated_at          BEFORE UPDATE ON wanted_posts          FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_saved_searches_updated_at        BEFORE UPDATE ON saved_searches        FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_campus_services_updated_at       BEFORE UPDATE ON campus_services       FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_chat_keys_updated_at             BEFORE UPDATE ON chat_keys             FOR EACH ROW EXECUTE FUNCTION set_updated_at();
