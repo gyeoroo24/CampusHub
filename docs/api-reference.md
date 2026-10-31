@@ -102,7 +102,9 @@ Ten endpoints cover the signed-in user's profile, other people's public profiles
 | --- | --- | --- | --- |
 | GET | `/health` | guest | Health check; returns `{"status": "ok"}` |
 | GET | `/me` | user | My profile, `is_admin` and my active `moderator_grants` |
-| PATCH | `/me` | user | Edit my `name`, `phone`, `department_id`, `programme`, `graduation_year` |
+| PATCH | `/me` | user | Edit my `name`, `department_id`, `programme`, `graduation_year`. `phone` only accepts `null` (removes it) |
+| POST | `/me/phone/code` | user | `{"phone": "+919876543210"}` (E.164): sends a 6-digit code to that number. No SMS provider yet, so the code is logged; while sign-in codes are hard-coded for testing, it is `123456` |
+| POST | `/me/phone/verify` | user | `{"phone", "code"}`: saves the number on my profile and returns it. 401 for a wrong code |
 | GET | `/users/{user_id}` | guest | Someone's public profile; `contact` only for signed-in viewers |
 | GET | `/users/lookup?email=` | admin | Find an account by email; returns `id`, `email`, `name`, `is_active`, `is_admin`. 404 if nobody with that email has signed in yet. Use it before deactivating or handing over the admin role |
 | PATCH | `/users/{user_id}` | admin | Deactivate or reactivate an account: `{"is_active": false}`. Not your own. Returns `id`, `email`, `name`, `is_active`, `is_admin` |
@@ -120,7 +122,7 @@ Ten endpoints cover the signed-in user's profile, other people's public profiles
 | Public profile | `id`, `name`, `department_id`, `programme`, `graduation_year`, `contact` (`email`, `phone`; signed-in viewers only) |
 | Moderator role | `id`, `user_email`, `user_name`, `module`, `scope_type`, `department_id`, `course_id`, `granted_at`, `revoked_at` |
 
-- **Limits:** name 1–100 characters, programme up to 100, graduation year 1950–2100. Send `phone: null` to remove a phone number.
+- **Limits:** name 1–100 characters, programme up to 100, graduation year 1950–2100. Send `phone: null` to remove a phone number. A phone number is E.164 (`+` country code and 8–15 digits); Indian (`+91`) numbers have 10 digits starting with 6–9.
 - **Granting a role** only works for someone who has signed in at least once; otherwise it returns 404 with a message saying so.
 
 ## Buy & Sell
@@ -162,7 +164,7 @@ Lost reports and found reports have identical endpoints. Swap `/lost-reports` fo
 | POST | `/lost-reports` | user | File a report: `description`, `category_id`, `occurred_at`, `location`, `photo_keys` (up to 10). The reply includes `possible_matches` |
 | GET | `/lost-reports/{id}` | guest | One report with photos; `reporter_contact` for signed-in users |
 | PATCH | `/lost-reports/{id}` | owner, admin | Edit `description`, `category_id`, `occurred_at`, `location` |
-| PATCH | `/lost-reports/{id}/status` | owner, admin | Set `status`: `open`, `matched` or `closed` |
+| PATCH | `/lost-reports/{id}/status` | owner, admin | Set `status`: `open` or `closed` |
 | PUT | `/lost-reports/{id}/photos` | owner, admin | Replace the photo list |
 | DELETE | `/lost-reports/{id}` | owner, Lost & Found moderator, admin | Remove. Moderators can add `?reason=` |
 
@@ -176,7 +178,7 @@ Lost reports and found reports have identical endpoints. Swap `/lost-reports` fo
 
 - **`occurred_at`** is when the item was lost or found, as entered by the user. It's separate from `created_at`, so the form needs a date-and-time picker.
 - **Matching:** filing a found report notifies everyone with an open lost report in that category, lost on or before that time. They get a `lost_found_match` notification. Changing a found report's category or time, or reopening it, checks again; nobody is notified twice about the same found report.
-- **`matched`** is never set automatically; the reporter chooses it.
+- There is no `matched` status (removed in rev 11): a report stays `open` until its owner closes it.
 - **Limits:** description 1–2,000 characters, location up to 200, up to 10 photos.
 
 ## Wanted posts
@@ -341,6 +343,39 @@ Any signed-in user can flag content. Moderators work through a queue limited to 
 - **Resolving one report closes every open report on that item.** With `remove_content: true` it also removes the item in the same step. If another moderator resolved it first, you get 409. Removing an item with its DELETE endpoint also closes its reports.
 - **Limits:** reason 1–1,000 characters, resolution note up to 1,000.
 
+## Messages (encrypted, not yet end-to-end)
+
+One chat per pair of people, like WhatsApp (since rev 10). What part of a chat is about is a **topic**: a Buy & Sell listing, a lost report or a found report. Each message has at most one topic (none for general chat, e.g. academic help), and an offer always has a listing topic. Messages are encrypted on the sender's device and decrypted on the recipient's, and the API only stores ciphertext. **But the server also holds each user's private key** (no passphrase, so any browser opens messages straight away), so **the server can read chats right now**. Moderators and admins have no way to view them in the app. True end-to-end encryption is planned: see §1.1 of `future-plan-2026-10-31-next-level-features.md`. The Flutter app does the cryptography in `lib/features/messages/crypto/chat_crypto.dart`; `backend/tests/chat_crypto.py` is a reference implementation of the same protocol, and the two are tested to agree byte for byte.
+
+| Method | Path | Who | What it does |
+| --- | --- | --- | --- |
+| GET | `/me/chat-key` | user | My messaging key: `public_key`, `key_backup`, `backup_kdf`, `backup_salt`, `backup_iterations`. With `backup_kdf` `none` (what the app uses), `key_backup` is the plain 32-byte private key and salt/iterations are `null`; older keys may still have a `pbkdf2-sha256` passphrase backup. 404 until set up. Only ever returned to its owner |
+| PUT | `/me/chat-key` | user | Set up messaging (201). The same `public_key` with a new backup only replaces the backup (200), which is how the app moves an old passphrase backup to `none`; a different one replaces the key (201) and messages sent to the old key can't be read any more |
+| GET | `/users/{id}/chat-key` | user | Someone's current public key (`id`, `user_id`, `public_key`, `created_at`, `is_current`) |
+| GET | `/chat/conversations` | user | My conversations, one per person, most recent first (`limit` up to 100, `offset`). The person who opened a chat sees it at once; the other from the first message |
+| GET | `/chat/unread` | user | `{"unread_messages": n, "conversations": n}` for the app-bar badge |
+| POST | `/chat/conversations` | user | Exactly one of `listing_id`, `lost_report_id`, `found_report_id` (adds that topic to my chat with its owner) or `user_id` (general chat). Returns `{conversation, topic_id}`: 201 if the chat or topic is new, 200 if both existed. 422 for your own post or yourself, 404 if removed, 403 if either of you blocked the other |
+| GET | `/chat/conversations/{id}` | participant | One conversation |
+| GET | `/chat/conversations/{id}/messages` | participant | The latest page; `before=<seq>` for older history; `after=<changed_seq>` for every change since (new messages, answered offers, unsent messages). Returns `conversation`, `items`, `keys` (every key the items use) and `has_more` |
+| POST | `/chat/conversations/{id}/messages` | participant | Send: `id` (a UUID the app makes), `kind` (`text` or `offer`), `topic_id` (optional; required for an offer, and must be one of this chat's listing topics), `sender_key_id`, `recipient_key_id`, `nonce`, `ciphertext` (base64). 409 if a key changed (reload and re-encrypt); resending the same message returns it (200); 429 after 30 messages a minute |
+| POST | `/chat/conversations/{id}/read` | participant | `{"seq": n}`: I've read up to `n` (read receipts and unread counts) |
+| POST | `/chat/messages/{id}/offer` | participant | `{"action": "accept" \| "decline" \| "withdraw"}`. Only the other person accepts or declines; only the maker withdraws. Accepting reserves the offer's listing. One open offer per listing: a new one supersedes it |
+| DELETE | `/chat/messages/{id}` | sender | Unsend: the ciphertext is erased for both people (a pending offer becomes withdrawn) |
+| GET | `/chat/blocks` | user | People I've blocked |
+| PUT / DELETE | `/chat/blocks/{user_id}` | user | Block / unblock. A blocked person can't send to you or start chats with you, and isn't told why |
+
+| Object | Fields |
+| --- | --- |
+| Conversation | `id`, `peer` (`id`, `name`, `is_active`, `key`), `topics` (oldest first), `my_key_id`, `last_seq`, `my_last_read_seq`, `peer_last_read_seq`, `unread_count`, `last_message`, `last_message_at`, `created_at`, `blocked_by_me`, `can_send`, `cant_send_reason` |
+| Topic | `id`, `kind` (`listing`, `lost_report`, `found_report`), `ref_id`, `owner_id` (seller or reporter), `title` (listing title, or `Lost: <category>` / `Found: <category>`), `description` (reports), `price` (listings), `status`, `cover_photo_url`, `is_removed`, `started_by`, `created_at` |
+| Message | `id`, `conversation_id`, `crypto_context_id`, `topic_id`, `seq`, `changed_seq`, `sender_id`, `kind`, `sender_key_id`, `recipient_key_id`, `nonce`, `ciphertext` (both `null` once unsent), `offer_status` (`pending`, `accepted`, `declined`, `withdrawn`, `superseded`; offers only), `offer_answered_at`, `sent_at`, `deleted_at` |
+
+- **Encryption (protocol `campushub-chat-v1`):** each user has an X25519 key pair. Both people derive an AES-256-GCM key with HKDF-SHA256 from their X25519 shared secret, bound to the message's `crypto_context_id` and both public keys. `crypto_context_id` is the conversation id, except for messages from before rev 10, which keep the id of the per-listing chat they were written in (migration `010_chat_per_person.sql` merged those chats per person). Each message has a random 12-byte nonce, and its associated data binds it to that context, message id, sender and kind, so the server can't move it, relabel the sender, or turn text into an offer. Offer amounts are inside the ciphertext too.
+- **Keys for people who haven't opened Messages:** opening a chat (or loading one) gives either person a key if they have none, made on the server with `backup_kdf` `none`, so anyone can be messaged right away.
+- **Multiple devices:** the app makes a key on first use and uploads the private key with `backup_kdf` `none`; any other browser the user signs in on downloads it. Nothing to remember, but the server (or anyone with database access) can decrypt messages. Accounts that set a passphrase before it was removed enter it once more on a device that never unlocked it; the app then re-uploads the same key as `none`.
+- **Notifications:** `chat_message`, payload `conversation_id` and a `message` saying who wrote about which listing, never the text. One per unread stretch, plus one per offer or offer answer.
+- **Also visible to the server:** who talks to whom, about which listing, when, and message sizes are visible to the server. There's no forward secrecy (a stolen private key opens past messages of that key); a Double Ratchet would add it.
+
 ## Notifications and devices
 
 Every notification lands in the user's in-app inbox. Push to phones is registered but not delivered yet, so design the inbox first.
@@ -350,6 +385,9 @@ Every notification lands in the user's in-app inbox. Push to phones is registere
 | GET | `/me/notifications` | user | My inbox, newest first. Filter: `unread_only` |
 | POST | `/me/notifications/{id}/read` | user | Mark one read |
 | POST | `/me/notifications/read-all` | user | Mark all read; returns `{"updated": <count>}` |
+| DELETE | `/me/notifications/{id}` | user | Delete one (204; someone else's id is ignored) |
+| POST | `/me/notifications/delete` | user | `{"ids": [...]}` (1–200): delete several; returns `{"deleted": <count>}` |
+| DELETE | `/me/notifications` | user | Clear all; returns `{"deleted": <count>}` |
 | POST | `/me/devices` | user | Register this device for push: `platform` (`android`, `ios`, `web`, `desktop`) and `push_token` |
 | DELETE | `/me/devices` | user | Unregister this device; body `{"push_token": "..."}`. Call it on sign-out |
 
@@ -361,6 +399,7 @@ A notification has `id`, `type`, `payload`, `is_read` and `created_at`. Every `p
 | `lost_found_match` | Someone files a found report matching your open lost report | `found_report_id`, `lost_report_ids` | The found report |
 | `saved_search_match` | A new item matches one of your saved searches | `saved_search_id`, and `listing_id` or `found_report_id` | The listing or found report |
 | `wanted_post_match` | A new listing matches one of your open Wanted posts | `wanted_post_id`, `listing_id` | The listing |
+| `chat_message` | A new message, offer or offer answer, or a buyer wants to chat before you've set up messaging | `conversation_id` | The conversation |
 
 - **Unread badge:** call with `unread_only=true` and check whether `items` is empty. There's no unread-count endpoint.
 - **Shared devices:** registering a token another account used moves it to the current user.
@@ -393,5 +432,4 @@ These parts of the app have database tables but no endpoints yet (Phase 2). Desi
 | Community Events | Events with tags, shown as Past, Present or Upcoming; following tags for alerts |
 | Bookmarks | Saving listings and events. Guests keep bookmarks on the device only |
 | Landing page highlights | Featured items across modules (FR-21). Campus services links are ready (see Campus services) |
-| Chat | One-to-one messages (stretch goal) |
 | Push delivery | Devices register today, but pushes are only logged; the inbox works |

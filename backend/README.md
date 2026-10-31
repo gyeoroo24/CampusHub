@@ -82,6 +82,15 @@ per course) also needs:
 docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub < db/migrations/007_feedback_rules.sql
 ```
 
+A database created before revision 11 (31 Oct–1 Nov 2026: in-app messaging, one chat per
+person, no "matched" Lost & Found status) needs these, in order:
+
+```bash
+for m in 008_encrypted_chat 009_server_held_chat_keys 010_chat_per_person 011_drop_matched_status; do
+  docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub < db/migrations/$m.sql
+done
+```
+
 ### Share it on your network
 
 To let teammates on the same Wi-Fi use your running backend (no cloud needed):
@@ -182,7 +191,8 @@ takes and returns, written for frontend design, see [docs/api-reference.md](../d
 | Method & path | Who | What |
 |---|---|---|
 | GET /health | guest | Health check (CloudWatch canary) |
-| GET, PATCH /me | user | My profile, admin flag and active moderator roles; update profile (phone is optional) |
+| GET, PATCH /me | user | My profile, admin flag and active moderator roles; update profile (a phone number can only be removed here) |
+| POST /me/phone/code, POST /me/phone/verify | user | Add or change my phone number: a 6-digit code is sent to it, then checked |
 | GET /users/{id} | guest | Public profile; email and phone only for signed-in viewers |
 | GET /users/lookup?email= | admin | Find an account by email (for deactivating or handing over the admin role) |
 | PATCH /users/{id} | admin | Deactivate or reactivate an account (`is_active`); not your own |
@@ -289,8 +299,21 @@ New, edited or re-opened listings alert matching saved searches and Wanted posts
 | GET /me/notifications | user | Inbox (`unread_only` filter) |
 | POST /me/notifications/{id}/read | user | Mark one notification read |
 | POST /me/notifications/read-all | user | Mark all read |
+| DELETE /me/notifications/{id}, POST /me/notifications/delete, DELETE /me/notifications | user | Delete one, several (`ids`), or all of my notifications |
 | POST /me/devices | user | Register a device's push token |
 | DELETE /me/devices | user | Unregister it; body `{"push_token": "..."}` (kept out of the URL and access logs) |
+
+**Messages** (one chat per person; topics are the listings and Lost & Found posts discussed)
+
+| Method & path | Who | What |
+|---|---|---|
+| GET, PUT /me/chat-key; GET /users/{id}/chat-key | user | My messaging key (with its private key, only for me); someone's public key |
+| GET, POST /chat/conversations | user | My chats, one per person; open a chat about a `listing_id`, `lost_report_id`, `found_report_id`, or with a `user_id` |
+| GET /chat/unread | user | Unread count for the badge |
+| GET /chat/conversations/{id}, GET /chat/conversations/{id}/messages | participant | One chat; its encrypted messages (`after=` to sync, `before=` for history) |
+| POST /chat/conversations/{id}/messages, POST …/read | participant | Send a message or offer (about a `topic_id`); mark read |
+| POST /chat/messages/{id}/offer, DELETE /chat/messages/{id} | participant | Accept (reserves the listing), decline or withdraw an offer; unsend |
+| GET /chat/blocks, PUT, DELETE /chat/blocks/{user_id} | user | Blocked people; block or unblock |
 
 **Campus services** (landing page)
 
@@ -301,6 +324,9 @@ New, edited or re-opened listings alert matching saved searches and Wanted posts
 | PATCH, DELETE /campus-services/{id} | admin | Edit, hide (`is_active: false`) or delete |
 
 ## Deploying on AWS
+
+What still has to change before a real cloud deployment (temporary dev shortcuts, missing
+providers, new migrations) is listed in [docs/cloud-deployment-checklist.md](../docs/cloud-deployment-checklist.md).
 
 - **Lambda:** build `Dockerfile.lambda` for one architecture and without attestations, push it
   to ECR, and create the function from the image (handler `app.main.handler`, the same
@@ -343,5 +369,5 @@ New, edited or re-opened listings alert matching saved searches and Wanted posts
 ## Not built yet (Phase 2)
 
 Placement Hub (companies, JDs, PPTs, interview experiences, bulk import, hiring stats),
-Community Events (tags, follows, bookmarks), real push delivery, and 1-to-1 chat. The
+Community Events (tags, follows, bookmarks) and real push delivery. The
 database tables already exist in `db/schema.sql`.

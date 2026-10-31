@@ -9,10 +9,13 @@ Cognito for IISc sign-in.
 
 ```
 backend/                FastAPI backend: code, tests, Docker files, database schema
-  db/schema.sql         PostgreSQL schema (revision 5)
+  db/schema.sql         PostgreSQL schema (revision 11)
+frontend/               Flutter web app
 docs/
   CampusHub-PRD-v1.pdf  Product requirements document (v1, 30 Sep 2026)
   api-reference.md      Every API endpoint, for frontend design
+  cloud-deployment-checklist.md  What to change before deploying to AWS
+  session-notes-*.md    What each work session added and fixed
   schema/               Database diagrams (PNG and SVG), one per module
 ```
 
@@ -22,7 +25,11 @@ docs/
   Academic Help, forums, reports and moderation, notifications. 71 endpoints, 80 passing tests.
 - **Review fixes (24 Oct 2026):** the bugs from the 23 Oct backend review are fixed and covered
   by `backend/tests/test_review_fixes.py`.
-- **Not built yet:** Placement Hub and Events APIs, real push delivery, chat, Terraform, frontend.
+- **1 Nov 2026:** in-app messaging (one chat per person, offers that reserve listings), notification
+  deletion, phone verification, a filter panel for Buy & Sell and Lost & Found, and fixes. See
+  [docs/session-notes-2026-11-01-messaging-and-fixes.md](docs/session-notes-2026-11-01-messaging-and-fixes.md).
+- **Not built yet:** Placement Hub and Events APIs, real push delivery, real-time (WebSocket)
+  messaging, end-to-end encryption for messages, Terraform.
 
 ## Run the backend locally
 
