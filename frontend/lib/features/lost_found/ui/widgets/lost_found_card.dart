@@ -5,6 +5,7 @@ import '../../../../core/utils/date_time_formatter.dart';
 import '../../../../core/widgets/no_photo_placeholder.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../../domain/lost_found_item.dart';
+import '../../../messages/ui/messages_screen.dart';
 import 'lost_found_detail_dialog.dart';
 
 class LostFoundCard extends StatefulWidget {
@@ -296,100 +297,9 @@ class _LostFoundCardState extends State<LostFoundCard> {
                     ),
                     const SizedBox(height: 6),
 
-                    // Contact Button(s) at very bottom (Email + Phone if available) —
-                    // signed-in users only; guests get nothing rendered here at all.
-                    Consumer(
-                      builder: (context, ref, _) {
-                        final isGuest = ref.watch(isGuestUserProvider);
-                        if (isGuest) return const SizedBox.shrink();
-                        return item.reporterContact?.phone != null &&
-                                item.reporterContact!.phone!.trim().isNotEmpty
-                            ? SizedBox(
-                                height: 30,
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: OutlinedButton.icon(
-                                        onPressed: () {
-                                          final email = item.reporterContact?.email ??
-                                              '${item.reporter.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
-                                          contactBy(context, email: email);
-                                        },
-                                        icon: Icon(Icons.email_outlined, size: 13, color: badgeColor),
-                                        label: Text(
-                                          'Email',
-                                          style: TextStyle(
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: badgeColor,
-                                          ),
-                                        ),
-                                        style: OutlinedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                          side: BorderSide(
-                                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: OutlinedButton.icon(
-                                        onPressed: () {
-                                          final phone = item.reporterContact!.phone!;
-                                          contactBy(context, phone: phone);
-                                        },
-                                        icon: Icon(Icons.phone_outlined, size: 13, color: badgeColor),
-                                        label: Text(
-                                          'Call',
-                                          style: TextStyle(
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: badgeColor,
-                                          ),
-                                        ),
-                                        style: OutlinedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                          side: BorderSide(
-                                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : SizedBox(
-                                width: double.infinity,
-                                height: 30,
-                                child: OutlinedButton.icon(
-                                  onPressed: () {
-                                    final email = item.reporterContact?.email ??
-                                        '${item.reporter.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
-                                    contactBy(context, email: email);
-                                  },
-                                  icon: Icon(Icons.email_outlined, size: 13, color: badgeColor),
-                                  label: Text(
-                                    'Email',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: badgeColor,
-                                    ),
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    side: BorderSide(
-                                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                                    ),
-                                  ),
-                                ),
-                              );
-                      },
-                    ),
+                    // Message the owner/finder (in-app chat) first; email and phone as small extras.
+                    // Signed-in users only; not on your own post.
+                    _ContactBar(item: item, isDark: isDark),
                   ],
                 ),
               ),
@@ -397,6 +307,68 @@ class _LostFoundCardState extends State<LostFoundCard> {
           ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The card's contact row: a "Message" button that opens the chat with whoever posted this report,
+/// about it, plus email and (if given) phone as icon buttons.
+class _ContactBar extends ConsumerWidget {
+  final LostFoundItem item;
+  final bool isDark;
+
+  const _ContactBar({required this.item, required this.isDark});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    if (user == null || user.isGuest || user.isOwnerOf(item.reporter.id)) return const SizedBox.shrink();
+    final primary = Theme.of(context).colorScheme.primary;
+    final phone = item.reporterContact?.phone?.trim() ?? '';
+    final side = BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0));
+    Widget iconButton(IconData icon, String tooltip, VoidCallback onPressed) => SizedBox(
+          width: 34,
+          height: 30,
+          child: OutlinedButton(
+            onPressed: onPressed,
+            style: OutlinedButton.styleFrom(
+              padding: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              side: side,
+            ),
+            child: Tooltip(message: tooltip, child: Icon(icon, size: 15, color: primary)),
+          ),
+        );
+    return SizedBox(
+      height: 30,
+      child: Row(
+        children: [
+          Expanded(
+            child: FilledButton.tonalIcon(
+              key: ValueKey('card_message_${item.id}'),
+              onPressed: () => openChatAbout(context, ref, {
+                item.kind == PostType.lost ? 'lost_report_id' : 'found_report_id': item.id,
+              }),
+              icon: const Icon(Icons.chat_bubble_outline_rounded, size: 14),
+              label: const Text('Message', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          iconButton(Icons.email_outlined, 'Email', () {
+            final email = item.reporterContact?.email ??
+                '${item.reporter.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
+            contactBy(context, email: email);
+          }),
+          if (phone.isNotEmpty) ...[
+            const SizedBox(width: 6),
+            iconButton(Icons.phone_outlined, 'Call', () => contactBy(context, phone: phone)),
+          ],
+        ],
       ),
     );
   }
