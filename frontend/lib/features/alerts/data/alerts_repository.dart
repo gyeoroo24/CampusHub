@@ -28,6 +28,12 @@ abstract class IAlertsRepository {
   Future<void> markRead(String id);
 
   Future<void> markAllRead();
+
+  /// Deletes my notifications with these ids (one or several).
+  Future<void> deleteNotifications(List<String> ids);
+
+  /// Deletes all my notifications.
+  Future<void> clearNotifications();
 }
 
 class ApiAlertsRepository implements IAlertsRepository {
@@ -103,6 +109,20 @@ class ApiAlertsRepository implements IAlertsRepository {
   @override
   Future<void> markAllRead() async {
     await apiClient.post(ApiEndpoints.notificationsReadAll);
+  }
+
+  @override
+  Future<void> deleteNotifications(List<String> ids) async {
+    if (ids.length == 1) {
+      await apiClient.delete(ApiEndpoints.notification(ids.single));
+    } else if (ids.isNotEmpty) {
+      await apiClient.post(ApiEndpoints.notificationsDelete, data: {'ids': ids});
+    }
+  }
+
+  @override
+  Future<void> clearNotifications() async {
+    await apiClient.delete(ApiEndpoints.notifications);
   }
 }
 
@@ -237,4 +257,11 @@ class MockAlertsRepository implements IAlertsRepository {
       _notifications[i] = _notifications[i].markedRead();
     }
   }
+
+  @override
+  Future<void> deleteNotifications(List<String> ids) async =>
+      _notifications.removeWhere((n) => ids.contains(n.id));
+
+  @override
+  Future<void> clearNotifications() async => _notifications.clear();
 }

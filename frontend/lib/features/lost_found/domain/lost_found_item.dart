@@ -5,9 +5,10 @@ import '../../../../core/models/user_ref.dart';
 
 enum PostType { lost, found }
 
+/// A report is open until its owner resolves it. (There used to be a "matched" status; it was
+/// dropped, and an old "matched" value reads as open.)
 enum ReportStatus {
   open('Open'),
-  matched('Matched'),
   closed('Resolved');
 
   /// The one name used for this status everywhere: filters, cards and dialogs.
@@ -16,8 +17,6 @@ enum ReportStatus {
 
   static ReportStatus fromString(String val) {
     switch (val.toLowerCase()) {
-      case 'matched':
-        return ReportStatus.matched;
       case 'closed':
       case 'resolved':
         return ReportStatus.closed;

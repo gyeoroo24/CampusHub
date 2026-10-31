@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../utils/error_text.dart';
 import 'package:go_router/go_router.dart';
 import '../config/server_config.dart';
 import '../theme/app_theme.dart';
@@ -8,21 +7,15 @@ import '../widgets/super_search_bar.dart';
 import '../../features/auth/domain/user.dart';
 import '../../features/auth/providers/auth_providers.dart';
 import '../../features/auth/ui/account_menu_button.dart';
-import '../../features/buy_sell/providers/buy_sell_providers.dart';
 import '../../features/buy_sell/ui/buy_sell_feed_screen.dart';
-import '../../features/lost_found/providers/lost_found_providers.dart';
 import '../../features/lost_found/ui/lost_found_feed_screen.dart';
-import '../../features/admin/providers/admin_providers.dart';
 import '../../features/admin/ui/admin_controls_screen.dart';
 import '../../features/profile/ui/user_profile_screen.dart';
-import '../../features/academics/providers/academics_providers.dart';
 import '../../features/academics/ui/course_guide_screen.dart';
 import '../../features/academics/ui/courses_screen.dart';
-import '../../features/alerts/providers/alerts_providers.dart';
 import '../../features/alerts/ui/notifications_button.dart';
-import '../../features/campus_services/providers/campus_services_providers.dart';
+import '../../features/messages/ui/messages_screen.dart';
 import '../../features/campus_services/ui/campus_services_dialog.dart';
-import '../../features/wanted/providers/wanted_providers.dart';
 
 // ---------------------------------------------------------------------------
 // Tab index provider — drives in-app tab switching WITHOUT browser history
@@ -32,6 +25,12 @@ final tabIndexProvider = StateProvider<int>((ref) => 0);
 // ---------------------------------------------------------------------------
 // GoRouter — direct routes for /buy and /lost-found with clean path strategy
 // ---------------------------------------------------------------------------
+// The three tabs share one page (same key), so switching tabs updates the shell in place instead
+// of building a new page with a route transition.
+const _shellPageKey = ValueKey('app-shell');
+// Same idea for the inbox and an open conversation: opening a chat swaps the pane, no slide.
+const _messagesPageKey = ValueKey('messages');
+
 final GoRouter appRouter = GoRouter(
   initialLocation: '/buy',
   routes: [
@@ -41,11 +40,11 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/buy',
-      builder: (context, state) => const AppShellLayout(initialTab: 0),
+      pageBuilder: (context, state) => const NoTransitionPage(key: _shellPageKey, child: AppShellLayout(initialTab: 0)),
     ),
     GoRoute(
       path: '/lost-found',
-      builder: (context, state) => const AppShellLayout(initialTab: 1),
+      pageBuilder: (context, state) => const NoTransitionPage(key: _shellPageKey, child: AppShellLayout(initialTab: 1)),
     ),
     // Aliases and subpath redirects
     GoRoute(
@@ -76,7 +75,7 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/courses',
-      builder: (context, state) => const AppShellLayout(initialTab: 2),
+      pageBuilder: (context, state) => const NoTransitionPage(key: _shellPageKey, child: AppShellLayout(initialTab: 2)),
     ),
     GoRoute(
       path: '/courses/:id',
@@ -87,13 +86,27 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const UserProfileScreen(),
     ),
     GoRoute(
-      path: '/admin',
-      builder: (context, state) {
-        final tabParam = state.uri.queryParameters['tab'];
-        final initialTab = tabParam != null ? int.tryParse(tabParam) : null;
-        return AdminControlsScreen(initialTab: initialTab);
-      },
+      path: '/messages',
+      pageBuilder: (context, state) => const NoTransitionPage(key: _messagesPageKey, child: MessagesScreen()),
     ),
+    GoRoute(
+      path: '/messages/:id',
+      pageBuilder: (context, state) => NoTransitionPage(
+        key: _messagesPageKey,
+        child: MessagesScreen(
+            conversationId: state.pathParameters['id'], topicId: state.uri.queryParameters['topic']),
+      ),
+    ),
+    // Admins use /admin; moderators /moderator (the screen moves anyone on the wrong one).
+    for (final path in ['/admin', '/moderator'])
+      GoRoute(
+        path: path,
+        builder: (context, state) {
+          final tabParam = state.uri.queryParameters['tab'];
+          final initialTab = tabParam != null ? int.tryParse(tabParam) : null;
+          return AdminControlsScreen(initialTab: initialTab, path: path);
+        },
+      ),
   ],
   errorBuilder: (context, state) => const AppShellLayout(initialTab: 0),
 );
@@ -124,112 +137,6 @@ const _tabScreens = [
   LostFoundFeedScreen(),
   CoursesScreen(),
 ];
-
-// ---------------------------------------------------------------------------
-// App Refresh Button — Refetches all data and permissions from server
-// ---------------------------------------------------------------------------
-class AppRefreshButton extends ConsumerStatefulWidget {
-  const AppRefreshButton({super.key});
-
-  @override
-  ConsumerState<AppRefreshButton> createState() => _AppRefreshButtonState();
-}
-
-class _AppRefreshButtonState extends ConsumerState<AppRefreshButton>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  bool _isRefreshing = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 700),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleRefresh() async {
-    if (_isRefreshing) return;
-    setState(() => _isRefreshing = true);
-    _controller.repeat();
-
-    try {
-      // 1. Refetch user profile & updated authority from backend
-      await ref.read(authRepositoryProvider).getCurrentUser();
-      ref.invalidate(authStateProvider);
-      ref.invalidate(moderatorGrantsProvider);
-      ref.invalidate(registeredUsersProvider);
-
-      // 2. Refetch Buy & Sell feeds & categories
-      ref.read(buySellPaginationProvider.notifier).loadInitial();
-      ref.invalidate(buySellCategoriesProvider);
-
-      // 3. Refetch Lost & Found feeds & categories
-      ref.read(lostReportsPaginationProvider.notifier).loadInitial();
-      ref.read(foundReportsPaginationProvider.notifier).loadInitial();
-      ref.invalidate(lostFoundCategoriesProvider);
-
-      // 4. Refetch Wanted posts, saved searches, notifications, campus services and courses
-      ref.invalidate(wantedPostsProvider);
-      ref.invalidate(savedSearchesProvider);
-      ref.invalidate(notificationsProvider);
-      ref.invalidate(campusServicesProvider);
-      ref.invalidate(departmentsProvider);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 18),
-                SizedBox(width: 8),
-                Text('All feeds and user permissions refreshed from server.'),
-              ],
-            ),
-            duration: Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to refresh data: ${errorText(e)}'),
-            backgroundColor: Colors.red.shade700,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        _controller.stop();
-        _controller.reset();
-        setState(() => _isRefreshing = false);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return RotationTransition(
-      turns: _controller,
-      child: IconButton(
-        tooltip: 'Refresh all data from server',
-        icon: const Icon(Icons.refresh_rounded, size: 20),
-        onPressed: _isRefreshing ? null : _handleRefresh,
-      ),
-    );
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Theme toggle button
@@ -282,7 +189,7 @@ class _MobileMoreMenu extends ConsumerWidget {
           case 'theme':
             ref.read(themeModeProvider.notifier).state = isDark ? ThemeMode.light : ThemeMode.dark;
           case 'panel':
-            context.push('/admin');
+            context.push(user!.controlsPath);
         }
       },
       itemBuilder: (_) => [
@@ -327,23 +234,10 @@ class AppShellLayout extends ConsumerStatefulWidget {
   ConsumerState<AppShellLayout> createState() => _AppShellLayoutState();
 }
 
-class _AppShellLayoutState extends ConsumerState<AppShellLayout>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _animController;
-  late Animation<Offset> _slideAnimation;
-
+class _AppShellLayoutState extends ConsumerState<AppShellLayout> {
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 350),
-    );
-    _slideAnimation = Tween<Offset>(
-      begin: Offset.zero,
-      end: Offset.zero,
-    ).animate(_animController);
-
     // Sync tab with initialTab on startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && ref.read(tabIndexProvider) != widget.initialTab) {
@@ -355,36 +249,22 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
   @override
   void didUpdateWidget(AppShellLayout oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialTab != oldWidget.initialTab &&
-        widget.initialTab != ref.read(tabIndexProvider)) {
-      _switchTab(widget.initialTab, updateUrl: false);
+    // The URL changed (e.g. browser back): show that tab. Providers can't change during a build.
+    if (widget.initialTab != oldWidget.initialTab) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && ref.read(tabIndexProvider) != widget.initialTab) {
+          ref.read(tabIndexProvider.notifier).state = widget.initialTab;
+        }
+      });
     }
-  }
-
-  @override
-  void dispose() {
-    _animController.dispose();
-    super.dispose();
   }
 
   void _switchTab(int newIndex, {bool updateUrl = true}) {
     final currentIndex = ref.read(tabIndexProvider);
     if (newIndex == currentIndex) return;
 
-    final isDesktop = MediaQuery.of(context).size.width > 750;
-    final bool goingForward = newIndex > currentIndex;
-
-    final Offset beginOffset = isDesktop
-        ? (goingForward ? const Offset(0, 0.08) : const Offset(0, -0.08))
-        : (goingForward ? const Offset(0.12, 0) : const Offset(-0.12, 0));
-
-    _slideAnimation = Tween<Offset>(
-      begin: beginOffset,
-      end: Offset.zero,
-    ).chain(CurveTween(curve: Curves.easeOutCubic)).animate(_animController);
-
+    // No slide animation: tabs switch instantly.
     ref.read(tabIndexProvider.notifier).state = newIndex;
-    _animController.forward(from: 0);
 
     if (updateUrl) {
       context.go(const ['/buy', '/lost-found', '/courses'][newIndex]);
@@ -401,12 +281,7 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    Widget content = SlideTransition(
-      position: _slideAnimation,
-      child: RepaintBoundary(
-        child: _tabScreens[tabIndex],
-      ),
-    );
+    Widget content = RepaintBoundary(child: _tabScreens[tabIndex]);
 
     return Scaffold(
       appBar: AppBar(
@@ -465,8 +340,8 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
             : const SuperSearchBar(),
         actions: [
           if (isDesktop) const CampusServicesButton(),
+          const MessagesButton(),
           const NotificationsButton(),
-          const AppRefreshButton(),
           if (isDesktop) ...[
             const SizedBox(width: 4),
             const ThemeToggleButton(),
@@ -555,7 +430,7 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout>
                 ),
                 icon: const Icon(Icons.shield_outlined, size: 16, color: Colors.blue),
                 label: const Text('Moderator', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                onPressed: () => context.push('/admin'),
+                onPressed: () => context.push('/moderator'),
               ),
             ),
 

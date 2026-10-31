@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/enums/date_preset.dart';
@@ -5,6 +6,7 @@ import '../../../../core/enums/sort_option.dart';
 import '../../../../core/enums/view_mode.dart';
 import '../../../../core/utils/category_emoji_helper.dart';
 import '../../../../core/widgets/compact_date_range_picker_dialog.dart';
+import '../../../../core/widgets/filter_sheet.dart';
 import '../../../alerts/domain/alerts_models.dart';
 import '../../../alerts/ui/save_search_dialog.dart';
 import '../../../auth/providers/auth_providers.dart';
@@ -86,259 +88,29 @@ class LostFoundFilterBar extends ConsumerWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final isMobile = MediaQuery.of(context).size.width <= 750;
+    final active = _activeFilters(filter, categoryPills);
+    final notifier = ref.read(lostFoundFilterProvider.notifier);
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // ── Category Pills (Horizontal Scroll with Icons) & Report Buttons ──
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          color: theme.cardColor,
-          child: Row(
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        border: Border(bottom: BorderSide(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0))),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Expanded(
-                // Fades the trailing chip out instead of hard-clipping it where the
-                // scrollable row meets the Report buttons, so it reads as "scroll for
-                // more" rather than a layout glitch.
-                child: ShaderMask(
-                  shaderCallback: (bounds) => const LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    colors: [Colors.black, Colors.black, Colors.transparent],
-                    stops: [0.0, 0.9, 1.0],
-                  ).createShader(bounds),
-                  blendMode: BlendMode.dstIn,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.only(right: 20),
-                    child: Row(
-                      children: categoryPills.map((pill) {
-                        final isSelected = filter.category.toLowerCase() == pill.name.toLowerCase();
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8.0),
-                          child: ChoiceChip(
-                            avatar: pill.icon != null
-                                ? Text(pill.icon!, style: const TextStyle(fontSize: 13))
-                                : null,
-                            label: Text(pill.name),
-                            selected: isSelected,
-                            onSelected: (selected) {
-                              if (selected) {
-                                ref.read(lostFoundFilterProvider.notifier).update(
-                                      (s) => s.copyWith(category: pill.name),
-                                    );
-                              }
-                            },
-                            visualDensity: VisualDensity.compact,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ),
+              FiltersButton(
+                activeCount: active.length,
+                onPressed: () => _openFilters(context, ref, filter, categoryPills),
               ),
-              if (!isMobile) ...[
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFBE185D), // Deep Rose/Pink
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onPressed: () => handleReport(context, ref, PostType.lost),
-                  icon: const Icon(Icons.add_rounded, size: 16),
-                  label: const Text(
-                    'Report Lost',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F766E), // Deep Teal
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onPressed: () => handleReport(context, ref, PostType.found),
-                  icon: const Icon(Icons.add_rounded, size: 16),
-                  label: const Text(
-                    'Report Found',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-
-        // ── Quick Filter Toolbar (Date Presets, Sort, Custom Date, View Mode) ─
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-            border: Border(
-              top: BorderSide(
-                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-              ),
-              bottom: BorderSide(
-                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-              ),
-            ),
-          ),
-          child: Row(
-            children: [
-              // Quick Filter Chips: All | Date Presets + Custom | Status Chips
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      // "All" Chip
-                      Padding(
-                        padding: const EdgeInsets.only(right: 6.0),
-                        child: FilterChip(
-                          label: const Text('All', style: TextStyle(fontSize: 11)),
-                          selected: filter.isAllSelected,
-                          showCheckmark: false,
-                          visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          onSelected: (_) {
-                            ref.read(lostFoundFilterProvider.notifier).update(
-                                  (s) => s.copyWith(
-                                    datePreset: DatePresetFilter.all,
-                                    clearCustomDateRange: true,
-                                    selectedStatuses: {
-                                      ReportStatus.open,
-                                      ReportStatus.matched,
-                                      ReportStatus.closed,
-                                    },
-                                  ),
-                                );
-                          },
-                        ),
-                      ),
-
-                      // Vertical Divider
-                      Container(
-                        height: 18,
-                        width: 1,
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
-                      ),
-                      const SizedBox(width: 4),
-
-                      // Date Presets
-                      ...[
-                        DatePresetFilter.today,
-                        DatePresetFilter.yesterday,
-                        DatePresetFilter.last3Days,
-                        DatePresetFilter.thisWeek,
-                        DatePresetFilter.thisMonth,
-                      ].map((preset) {
-                        final isSelected = filter.customDateRange == null && filter.datePreset == preset;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 6.0),
-                          child: FilterChip(
-                            label: Text(preset.label, style: const TextStyle(fontSize: 11)),
-                            selected: isSelected,
-                            showCheckmark: false,
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            onSelected: (_) {
-                              if (isSelected) {
-                                ref.read(lostFoundFilterProvider.notifier).update(
-                                      (s) => s.copyWith(
-                                        datePreset: DatePresetFilter.all,
-                                        clearCustomDateRange: true,
-                                      ),
-                                    );
-                              } else {
-                                ref.read(lostFoundFilterProvider.notifier).update(
-                                      (s) => s.copyWith(
-                                        datePreset: preset,
-                                        clearCustomDateRange: true,
-                                      ),
-                                    );
-                              }
-                            },
-                          ),
-                        );
-                      }),
-
-                      // Custom Date Range Chip (if active)
-                      if (filter.customDateRange != null)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6.0),
-                          child: FilterChip(
-                            label: Text(
-                              '${filter.customDateRange!.start.day}/${filter.customDateRange!.start.month} - ${filter.customDateRange!.end.day}/${filter.customDateRange!.end.month}',
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                            selected: true,
-                            showCheckmark: false,
-                            avatar: const Icon(Icons.close_rounded, size: 14),
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            onSelected: (_) {
-                              ref.read(lostFoundFilterProvider.notifier).update(
-                                    (s) => s.copyWith(clearCustomDateRange: true),
-                                  );
-                            },
-                          ),
-                        ),
-
-                      // Vertical Divider
-                      Container(
-                        height: 18,
-                        width: 1,
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
-                      ),
-                      const SizedBox(width: 4),
-
-                      // Status Filter Chips (Toggles: Open, Matched, Resolved)
-                      ...[
-                        (label: 'Open', status: ReportStatus.open),
-                        (label: 'Matched', status: ReportStatus.matched),
-                        (label: 'Resolved', status: ReportStatus.closed),
-                      ].map((st) {
-                        final isSelected = filter.selectedStatuses.contains(st.status);
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 6.0),
-                          child: FilterChip(
-                            label: Text(st.label, style: const TextStyle(fontSize: 11)),
-                            selected: isSelected,
-                            showCheckmark: false,
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            onSelected: (_) {
-                              final updated = Set<ReportStatus>.from(filter.selectedStatuses);
-                              if (isSelected) {
-                                updated.remove(st.status);
-                                if (updated.isEmpty) {
-                                  updated.add(ReportStatus.open);
-                                }
-                              } else {
-                                updated.add(st.status);
-                              }
-                              ref.read(lostFoundFilterProvider.notifier).update(
-                                    (s) => s.copyWith(selectedStatuses: updated),
-                                  );
-                            },
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-              ),
-
+              const Spacer(),
               // Save this search: alerts when a matching item is found
               IconButton(
-                iconSize: 18,
+                iconSize: 20,
                 visualDensity: VisualDensity.compact,
                 tooltip: 'Alert me when a matching item is found',
                 icon: const Icon(Icons.notification_add_outlined),
@@ -358,115 +130,186 @@ class LostFoundFilterBar extends ConsumerWidget {
                   );
                 },
               ),
-
-              // Sort Dropdown (Styled identically to Buy & Sell toolbar)
-              PopupMenuButton<SortOption>(
-                tooltip: 'Sort Reports',
-                initialValue: filter.sortOption,
-                onSelected: (option) {
-                  ref.read(lostFoundFilterProvider.notifier).update(
-                        (s) => s.copyWith(sortOption: option),
-                      );
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.sort_rounded, size: 16, color: theme.colorScheme.primary),
-                      const SizedBox(width: 4),
-                      Text(
-                        filter.sortOption == SortOption.newest ? 'Newest First' : 'Oldest First',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                itemBuilder: (ctx) => [
-                  const PopupMenuItem(
-                    value: SortOption.newest,
-                    child: Text('Newest First', style: TextStyle(fontSize: 12)),
-                  ),
-                  const PopupMenuItem(
-                    value: SortOption.oldest,
-                    child: Text('Oldest First', style: TextStyle(fontSize: 12)),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 4),
-
-              // Custom Date Range Picker button
-              IconButton(
-                iconSize: 18,
-                visualDensity: VisualDensity.compact,
-                tooltip: filter.customDateRange != null
-                    ? 'Custom: ${filter.customDateRange!.start.day}/${filter.customDateRange!.start.month} - ${filter.customDateRange!.end.day}/${filter.customDateRange!.end.month}'
-                    : 'Pick Custom Date Range',
-                icon: Icon(
-                  Icons.date_range_rounded,
-                  color: filter.customDateRange != null ? theme.colorScheme.primary : null,
-                ),
-                onPressed: () async {
-                  final result = await showDialog(
-                    context: context,
-                    builder: (ctx) => CompactDateRangePickerDialog(
-                      initialDateRange: filter.customDateRange,
-                    ),
-                  );
-                  if (result == 'CLEAR') {
-                    ref.read(lostFoundFilterProvider.notifier).update(
-                          (s) => s.copyWith(clearCustomDateRange: true),
-                        );
-                  } else if (result is DateTimeRange) {
-                    ref.read(lostFoundFilterProvider.notifier).update(
-                          (s) => s.copyWith(customDateRange: result),
-                        );
-                  }
-                },
-              ),
-              const SizedBox(width: 4),
-
-              // View Mode Toggle (Large vs Compact)
               IconButton(
                 iconSize: 20,
                 visualDensity: VisualDensity.compact,
                 tooltip: filter.viewMode == ViewMode.grid ? 'Compact view' : 'Large view',
-                icon: Icon(
-                  filter.viewMode == ViewMode.grid
-                      ? Icons.density_medium_rounded
-                      : Icons.view_agenda_outlined,
+                icon: Icon(filter.viewMode == ViewMode.grid ? Icons.density_medium_rounded : Icons.view_agenda_outlined),
+                onPressed: () => notifier.update(
+                  (s) => s.copyWith(viewMode: filter.viewMode == ViewMode.grid ? ViewMode.list : ViewMode.grid),
                 ),
-                onPressed: () {
-                  ref.read(lostFoundFilterProvider.notifier).update(
-                        (s) => s.copyWith(
-                          viewMode: filter.viewMode == ViewMode.grid
-                              ? ViewMode.list
-                              : ViewMode.grid,
-                        ),
-                      );
-                },
               ),
-
-              // Clear All Filters Button (if active)
-              if (filter.hasActiveFilters) ...[
-                const SizedBox(width: 4),
-                IconButton(
-                  iconSize: 18,
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Reset all filters',
-                  icon: const Icon(Icons.filter_alt_off_rounded, color: Colors.red),
-                  onPressed: () {
-                    ref.read(lostFoundFilterProvider.notifier).state = LostFoundFilterState(
-                      viewMode: filter.viewMode,
-                    );
-                  },
+              if (!isMobile) ...[
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFBE185D), // Deep Rose/Pink
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () => handleReport(context, ref, PostType.lost),
+                  icon: const Icon(Icons.add_rounded, size: 16),
+                  label: const Text('Report Lost', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F766E), // Deep Teal
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () => handleReport(context, ref, PostType.found),
+                  icon: const Icon(Icons.add_rounded, size: 16),
+                  label: const Text('Report Found', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                 ),
               ],
             ],
+          ),
+          // What's filtered, each removable on its own.
+          if (active.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final f in active) ActiveFilterChip(label: f.label, onRemove: () => notifier.update(f.remove)),
+                  if (active.length > 1)
+                    TextButton(
+                      onPressed: () => notifier.update(_defaults),
+                      child: const Text('Clear all', style: TextStyle(fontSize: 12)),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// A fresh feed, keeping the search text and the chosen layout.
+  static LostFoundFilterState _defaults(LostFoundFilterState s) =>
+      LostFoundFilterState(query: s.query, viewMode: s.viewMode, typeFilter: s.typeFilter);
+
+  static const _statusOptions = [
+    (value: ReportStatus.open, label: 'Open', icon: null),
+    (value: ReportStatus.closed, label: 'Resolved', icon: null),
+  ];
+
+  static const _datePresets = [
+    DatePresetFilter.all,
+    DatePresetFilter.today,
+    DatePresetFilter.yesterday,
+    DatePresetFilter.last3Days,
+    DatePresetFilter.thisWeek,
+    DatePresetFilter.thisMonth,
+  ];
+
+  static const _sortOptions = [
+    (value: SortOption.newest, label: 'Newest first', icon: null),
+    (value: SortOption.oldest, label: 'Oldest first', icon: null),
+  ];
+
+  static String _range(DateTimeRange r) => '${r.start.day}/${r.start.month} – ${r.end.day}/${r.end.month}';
+
+  static String _dateLabel(DatePresetFilter p) => p == DatePresetFilter.all ? 'Any time' : p.label;
+
+  /// The filters that differ from a fresh feed, as chips: what to show and how to undo each one.
+  static List<({String label, LostFoundFilterState Function(LostFoundFilterState) remove})> _activeFilters(
+    LostFoundFilterState f,
+    List<({String name, String? icon})> categories,
+  ) {
+    final icon = categories.where((c) => c.name.toLowerCase() == f.category.toLowerCase()).firstOrNull?.icon;
+    final statuses = _statusOptions.where((o) => f.selectedStatuses.contains(o.value)).map((o) => o.label);
+    return [
+      if (f.category != 'All') (label: '${icon ?? ''} ${f.category}'.trim(), remove: (s) => s.copyWith(category: 'All')),
+      if (f.customDateRange != null)
+        (label: _range(f.customDateRange!), remove: (s) => s.copyWith(clearCustomDateRange: true))
+      else if (f.datePreset != DatePresetFilter.all)
+        (label: f.datePreset.label, remove: (s) => s.copyWith(datePreset: DatePresetFilter.all)),
+      if (!setEquals(f.selectedStatuses, LostFoundFilterState.defaultStatuses))
+        (
+          label: 'Status: ${statuses.join(', ')}',
+          remove: (s) => s.copyWith(selectedStatuses: LostFoundFilterState.defaultStatuses),
+        ),
+      if (f.sortOption != SortOption.newest)
+        (label: 'Oldest first', remove: (s) => s.copyWith(sortOption: SortOption.newest)),
+    ];
+  }
+
+  void _openFilters(
+    BuildContext context,
+    WidgetRef ref,
+    LostFoundFilterState filter,
+    List<({String name, String? icon})> categories,
+  ) {
+    showFilterSheet<LostFoundFilterState>(
+      context,
+      title: 'Filter Lost & Found',
+      initial: filter,
+      defaults: _defaults(filter),
+      onApply: (next) => ref.read(lostFoundFilterProvider.notifier).state = next,
+      sections: (context, draft, update) => [
+        FilterSection(
+          title: 'Category',
+          child: FilterChoices<String>(
+            options: [for (final c in categories) (value: c.name, label: c.name, icon: c.icon)],
+            selected: {draft.category},
+            onTap: (c) => update(draft.copyWith(category: c)),
+          ),
+        ),
+        FilterSection(
+          title: 'When',
+          trailing: TextButton(
+            onPressed: () async {
+              final result = await showDialog(
+                context: context,
+                builder: (_) => CompactDateRangePickerDialog(initialDateRange: draft.customDateRange),
+              );
+              if (result == 'CLEAR') {
+                update(draft.copyWith(clearCustomDateRange: true));
+              } else if (result is DateTimeRange) {
+                update(draft.copyWith(customDateRange: result));
+              }
+            },
+            child: const Text('Custom range…'),
+          ),
+          child: FilterChoices<String>(
+            options: [
+              for (final p in _datePresets) (value: p.name, label: _dateLabel(p), icon: null),
+              if (draft.customDateRange != null)
+                (value: 'custom', label: _range(draft.customDateRange!), icon: null),
+            ],
+            selected: {draft.customDateRange != null ? 'custom' : draft.datePreset.name},
+            onTap: (name) {
+              if (name == 'custom') return;
+              update(draft.copyWith(
+                datePreset: DatePresetFilter.values.byName(name),
+                clearCustomDateRange: true,
+              ));
+            },
+          ),
+        ),
+        FilterSection(
+          title: 'Status',
+          child: FilterChoices<ReportStatus>(
+            options: _statusOptions,
+            selected: draft.selectedStatuses,
+            onTap: (st) {
+              final next = {...draft.selectedStatuses};
+              if (!next.remove(st)) next.add(st);
+              if (next.isNotEmpty) update(draft.copyWith(selectedStatuses: next)); // keep at least one
+            },
+          ),
+        ),
+        FilterSection(
+          title: 'Sort by',
+          child: FilterChoices<SortOption>(
+            options: _sortOptions,
+            selected: {draft.sortOption},
+            onTap: (o) => update(draft.copyWith(sortOption: o)),
           ),
         ),
       ],

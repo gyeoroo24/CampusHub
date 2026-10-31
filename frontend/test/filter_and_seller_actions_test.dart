@@ -14,13 +14,9 @@ import 'package:campus_hub/features/lost_found/ui/widgets/lost_found_card.dart';
 
 void main() {
   group('Buy & Sell Filter & Toolbar State Tests', () {
-    test('Default filter state includes all 3 statuses and no price constraints', () {
+    test('Default filter state shows available and reserved (not sold), no price constraints', () {
       final state = BuySellFilterState();
-      expect(state.selectedStatuses, containsAll([
-        ListingStatus.available,
-        ListingStatus.reserved,
-        ListingStatus.sold,
-      ]));
+      expect(state.selectedStatuses, {ListingStatus.available, ListingStatus.reserved});
       expect(state.minPrice, isNull);
       expect(state.maxPrice, isNull);
       expect(state.hasActiveCustomFilters, isFalse);
@@ -29,13 +25,13 @@ void main() {
     test('Selecting status filters updates selectedStatuses as multi-select toggles', () {
       var state = BuySellFilterState();
 
-      // Toggle off sold
+      // Toggle on sold (all three): differs from the default, so it counts as a filter
       state = state.copyWith(selectedStatuses: {
         ListingStatus.available,
         ListingStatus.reserved,
+        ListingStatus.sold,
       });
-      expect(state.selectedStatuses.length, 2);
-      expect(state.selectedStatuses.contains(ListingStatus.sold), isFalse);
+      expect(state.selectedStatuses.length, 3);
       expect(state.hasActiveCustomFilters, isTrue);
 
       // Toggle off reserved (only available left)
@@ -50,13 +46,14 @@ void main() {
       expect(state.selectedStatuses, {ListingStatus.available});
       expect(state.statusFilter, ListingStatus.available);
 
-      // Reset to All
+      // Reset goes back to the default (available + reserved)
       state = state.copyWith(
         clearStatusFilter: true,
         clearMinPrice: true,
         clearMaxPrice: true,
       );
-      expect(state.selectedStatuses.length, 3);
+      expect(state.selectedStatuses, BuySellFilterState.defaultStatuses);
+      expect(state.hasActiveCustomFilters, isFalse);
       expect(state.minPrice, isNull);
       expect(state.maxPrice, isNull);
     });

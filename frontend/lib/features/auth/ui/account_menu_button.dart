@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../alerts/ui/saved_searches_dialog.dart';
+import '../../messages/providers/messages_providers.dart';
 import '../providers/auth_providers.dart';
 import 'auth_dialog.dart';
 
 /// App-bar account control. Guests get a labelled "Sign in" button; signed-in users get a menu
-/// with their profile, their admin or moderation tools (if any) and "Sign out".
+/// with their profile, messages, saved searches, their admin or moderation tools (if any) and "Sign out".
 class AccountMenuButton extends ConsumerWidget {
   /// Phone layout: avatar only, no name.
   final bool compact;
@@ -34,6 +36,8 @@ class AccountMenuButton extends ConsumerWidget {
 
     final role = user.isAdmin ? 'Admin' : user.isModerator ? 'Moderator' : 'Student';
     final panelLabel = user.isAdmin ? 'Admin panel' : user.isModerator ? 'Moderation tools' : null;
+    final messagingAvailable = ref.watch(messagesRepositoryProvider) != null;
+    final unreadMessages = messagingAvailable ? ref.watch(chatUnreadCountProvider).valueOrNull ?? 0 : 0;
 
     return PopupMenuButton<String>(
       tooltip: 'Your account',
@@ -42,8 +46,12 @@ class AccountMenuButton extends ConsumerWidget {
         switch (value) {
           case 'profile':
             context.push('/profile');
+          case 'messages':
+            context.go('/messages');
+          case 'saved':
+            showDialog(context: context, builder: (_) => const SavedSearchesDialog());
           case 'panel':
-            context.push('/admin');
+            context.push(user.controlsPath);
           case 'signout':
             ref.read(showTrustedExchangeBannerProvider.notifier).state = false;
             await ref.read(authRepositoryProvider).signOut();
@@ -75,6 +83,26 @@ class AccountMenuButton extends ConsumerWidget {
           child: ListTile(
             leading: Icon(Icons.person_outline_rounded),
             title: Text('My profile'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        if (messagingAvailable)
+          PopupMenuItem(
+            value: 'messages',
+            child: ListTile(
+              leading: const Icon(Icons.chat_bubble_outline_rounded),
+              title: const Text('My messages'),
+              trailing: unreadMessages > 0
+                  ? Badge(label: Text(unreadMessages > 99 ? '99+' : '$unreadMessages'))
+                  : null,
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        const PopupMenuItem(
+          value: 'saved',
+          child: ListTile(
+            leading: Icon(Icons.saved_search_rounded),
+            title: Text('Saved searches'),
             contentPadding: EdgeInsets.zero,
           ),
         ),

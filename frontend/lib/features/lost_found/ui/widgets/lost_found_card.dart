@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/utils/contact_actions.dart';
 import '../../../../core/utils/date_time_formatter.dart';
 import '../../../../core/widgets/no_photo_placeholder.dart';
+import '../../../auth/providers/auth_providers.dart';
 import '../../domain/lost_found_item.dart';
 import 'lost_found_detail_dialog.dart';
 
@@ -31,10 +33,7 @@ class _LostFoundCardState extends State<LostFoundCard> {
     Color badgeColor;
     String statusLabel;
 
-    if (item.status == ReportStatus.matched) {
-      badgeColor = Colors.purple.shade700;
-      statusLabel = ReportStatus.matched.label.toUpperCase();
-    } else if (item.status == ReportStatus.closed) {
+    if (item.status == ReportStatus.closed) {
       badgeColor = Colors.grey.shade600;
       statusLabel = ReportStatus.closed.label.toUpperCase();
     } else {
@@ -297,94 +296,100 @@ class _LostFoundCardState extends State<LostFoundCard> {
                     ),
                     const SizedBox(height: 6),
 
-                    // Contact Button(s) at very bottom (Email + Phone if available)
-                    if (item.reporterContact?.phone != null && item.reporterContact!.phone!.trim().isNotEmpty) ...[
-                      SizedBox(
-                        height: 30,
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () {
-                                  final email = item.reporterContact?.email ??
-                                      '${item.reporter.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
-                                  contactBy(context, email: email);
-                                },
-                                icon: Icon(Icons.email_outlined, size: 13, color: badgeColor),
-                                label: Text(
-                                  'Email',
-                                  style: TextStyle(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: badgeColor,
+                    // Contact Button(s) at very bottom (Email + Phone if available) —
+                    // signed-in users only; guests get nothing rendered here at all.
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final isGuest = ref.watch(isGuestUserProvider);
+                        if (isGuest) return const SizedBox.shrink();
+                        return item.reporterContact?.phone != null &&
+                                item.reporterContact!.phone!.trim().isNotEmpty
+                            ? SizedBox(
+                                height: 30,
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        onPressed: () {
+                                          final email = item.reporterContact?.email ??
+                                              '${item.reporter.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
+                                          contactBy(context, email: email);
+                                        },
+                                        icon: Icon(Icons.email_outlined, size: 13, color: badgeColor),
+                                        label: Text(
+                                          'Email',
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: badgeColor,
+                                          ),
+                                        ),
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                          side: BorderSide(
+                                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        onPressed: () {
+                                          final phone = item.reporterContact!.phone!;
+                                          contactBy(context, phone: phone);
+                                        },
+                                        icon: Icon(Icons.phone_outlined, size: 13, color: badgeColor),
+                                        label: Text(
+                                          'Call',
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: badgeColor,
+                                          ),
+                                        ),
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                          side: BorderSide(
+                                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : SizedBox(
+                                width: double.infinity,
+                                height: 30,
+                                child: OutlinedButton.icon(
+                                  onPressed: () {
+                                    final email = item.reporterContact?.email ??
+                                        '${item.reporter.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
+                                    contactBy(context, email: email);
+                                  },
+                                  icon: Icon(Icons.email_outlined, size: 13, color: badgeColor),
+                                  label: Text(
+                                    'Email',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: badgeColor,
+                                    ),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    side: BorderSide(
+                                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                                    ),
                                   ),
                                 ),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                  side: BorderSide(
-                                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () {
-                                  final phone = item.reporterContact!.phone!;
-                                  contactBy(context, phone: phone);
-                                },
-                                icon: Icon(Icons.phone_outlined, size: 13, color: badgeColor),
-                                label: Text(
-                                  'Call',
-                                  style: TextStyle(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: badgeColor,
-                                  ),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                  side: BorderSide(
-                                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ] else ...[
-                      SizedBox(
-                        width: double.infinity,
-                        height: 30,
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            final email = item.reporterContact?.email ??
-                                '${item.reporter.name.toLowerCase().replaceAll(' ', '.')}@iisc.ac.in';
-                            contactBy(context, email: email);
-                          },
-                          icon: Icon(Icons.email_outlined, size: 13, color: badgeColor),
-                          label: Text(
-                            'Email',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: badgeColor,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            side: BorderSide(
-                              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                              );
+                      },
+                    ),
                   ],
                 ),
               ),

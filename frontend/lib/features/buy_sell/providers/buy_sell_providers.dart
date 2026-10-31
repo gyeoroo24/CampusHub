@@ -40,6 +40,9 @@ enum DateDurationFilter {
 }
 
 class BuySellFilterState {
+  /// What the feed shows until the user changes it: things still for sale (sold ones hidden).
+  static const defaultStatuses = {ListingStatus.available, ListingStatus.reserved};
+
   final String query;
   final String category;
   final SortOption sortOption;
@@ -62,20 +65,23 @@ class BuySellFilterState {
   }) : selectedStatuses = selectedStatuses ??
             (statusFilter != null
                 ? {statusFilter}
-                : {ListingStatus.available, ListingStatus.reserved, ListingStatus.sold});
+                : defaultStatuses);
 
   ListingStatus? get statusFilter =>
       selectedStatuses.length == 1 ? selectedStatuses.first : null;
 
+  bool get _statusesChanged =>
+      selectedStatuses.length != defaultStatuses.length || !selectedStatuses.containsAll(defaultStatuses);
+
   bool get hasActiveCustomFilters =>
-      (selectedStatuses.isNotEmpty && selectedStatuses.length < 3) ||
+      _statusesChanged ||
       minPrice != null ||
       maxPrice != null ||
       dateDuration != DateDurationFilter.allTime;
 
   int get activeFiltersCount {
     int count = 0;
-    if (selectedStatuses.isNotEmpty && selectedStatuses.length < 3) count++;
+    if (_statusesChanged) count++;
     if (minPrice != null || maxPrice != null) count++;
     if (dateDuration != DateDurationFilter.allTime) count++;
     return count;
@@ -100,7 +106,7 @@ class BuySellFilterState {
       category: category ?? this.category,
       sortOption: sortOption ?? this.sortOption,
       selectedStatuses: clearStatusFilter
-          ? {ListingStatus.available, ListingStatus.reserved, ListingStatus.sold}
+          ? defaultStatuses
           : ((selectedStatuses != null && selectedStatuses.isEmpty)
               ? {ListingStatus.available}
               : (selectedStatuses ??

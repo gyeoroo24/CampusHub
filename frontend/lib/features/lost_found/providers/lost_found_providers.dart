@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/page.dart';
@@ -31,11 +32,10 @@ class LostFoundFilterState {
     this.typeFilter,
     this.viewMode = ViewMode.grid,
     Set<ReportStatus>? selectedStatuses,
-  }) : selectedStatuses = selectedStatuses ?? {
-          ReportStatus.open,
-          ReportStatus.matched,
-          ReportStatus.closed,
-        };
+  }) : selectedStatuses = selectedStatuses ?? defaultStatuses;
+
+  /// What the feed shows until the user changes it: only items still being looked for.
+  static const defaultStatuses = {ReportStatus.open};
 
   /// The active date range computed from custom selection or date preset
   DateTimeRange? get dateRange => customDateRange ?? datePreset.toDateTimeRange();
@@ -51,7 +51,7 @@ class LostFoundFilterState {
       customDateRange != null ||
       query.isNotEmpty ||
       sortOption != SortOption.newest ||
-      selectedStatuses.length < 3;
+      !setEquals(selectedStatuses, defaultStatuses);
 
   LostFoundFilterState copyWith({
     String? query,

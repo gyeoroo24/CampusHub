@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/error_text.dart';
-import '../../../core/utils/validators.dart';
+import '../../../core/utils/phone_countries.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/utils/date_time_formatter.dart';
 import '../../auth/domain/user.dart';
@@ -18,6 +18,7 @@ import '../../lost_found/ui/widgets/edit_report_dialog.dart';
 import '../../lost_found/ui/widgets/lost_found_detail_dialog.dart';
 import '../../wanted/providers/wanted_providers.dart';
 import 'role_card.dart';
+import 'verify_phone_dialog.dart';
 import '../../wanted/ui/wanted_feed_sliver.dart';
 
 class UserProfileScreen extends ConsumerStatefulWidget {
@@ -36,6 +37,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
 
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+  PhoneCountry _phoneCountry = india;
   final _programmeController = TextEditingController();
   final _gradYearController = TextEditingController();
   final _profileFormKey = GlobalKey<FormState>();
@@ -51,7 +53,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
   void _populateFields(User? user) {
     if (user != null) {
       _nameController.text = user.name;
-      _phoneController.text = user.phone ?? '';
+      final phone = splitPhone(user.phone);
+      _phoneCountry = phone.country;
+      _phoneController.text = phone.digits;
       _programmeController.text = user.programme ?? '';
       _gradYearController.text = user.graduationYear?.toString() ?? '';
     }
@@ -158,7 +162,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
               style: TextButton.styleFrom(foregroundColor: Colors.blue.shade700),
               icon: const Icon(Icons.shield_outlined, size: 16),
               label: const Text('Moderator Panel'),
-              onPressed: () => context.push('/admin'),
+              onPressed: () => context.push('/moderator'),
             ),
           IconButton(
             tooltip: 'Sign Out',
@@ -393,15 +397,61 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextFormField(
+                    initialValue: user.email,
+                    enabled: false,
+                    decoration: InputDecoration(
+                      labelText: 'IISc Email',
+                      helperText: 'Your sign-in email can’t be changed',
+                      prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 130,
+                  child: DropdownButtonFormField<PhoneCountry>(
+                    key: const Key('phone_country'),
+                    initialValue: _phoneCountry,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Country',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                    ),
+                    selectedItemBuilder: (_) => [
+                      for (final c in phoneCountries) Text('${c.flag} ${c.dialCode}', overflow: TextOverflow.ellipsis),
+                    ],
+                    items: [
+                      for (final c in phoneCountries)
+                        DropdownMenuItem(value: c, child: Text('${c.flag}  ${c.name} (${c.dialCode})')),
+                    ],
+                    onChanged: (c) {
+                      if (c == null) return;
+                      setState(() => _phoneCountry = c);
+                      _profileFormKey.currentState?.validate();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextFormField(
+                    key: const Key('phone_number'),
                     controller: _phoneController,
                     keyboardType: TextInputType.phone,
-                    maxLength: 20,
-                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+\s-]'))],
-                    validator: validatePhone,
+                    maxLength: _phoneCountry.maxDigits,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    validator: (v) => _phoneCountry.check(v ?? ''),
                     decoration: InputDecoration(
                       labelText: 'Phone Number (Optional)',
-                      hintText: 'e.g. +919876543210',
-                      helperText: '10–15 digits, optional + and country code',
+                      hintText: _phoneCountry.minDigits == 10 ? 'e.g. 9876543210' : null,
+                      helperText: 'A new number is verified with a code',
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     ),
@@ -474,16 +524,23 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
     // Same rules as the server, so a bad value is caught here instead of failing on save.
     if (!(_profileFormKey.currentState?.validate() ?? false)) return;
     final name = _nameController.text.trim();
-    final phone = normalizePhone(_phoneController.text);
+    final digits = _phoneController.text.trim();
+    final phone = digits.isEmpty ? '' : '${_phoneCountry.dialCode}$digits';
     final programme = _programmeController.text.trim();
     final gradYear = int.tryParse(_gradYearController.text.trim());
-    final hadPhone = (ref.read(currentUserProvider)?.phone ?? '').isNotEmpty;
+    final saved = ref.read(currentUserProvider)?.phone ?? '';
+    final hadPhone = saved.isNotEmpty;
+
+    // A new number only goes on the profile once its code is entered.
+    if (phone.isNotEmpty && phone != saved) {
+      final verified = await showVerifyPhoneDialog(context, phone);
+      if (!verified || !mounted) return;
+    }
 
     setState(() => _isSavingProfile = true);
     try {
       await ref.read(authRepositoryProvider).updateProfile(
             name: name,
-            phone: phone.isNotEmpty ? phone : null,
             clearPhone: phone.isEmpty && hadPhone,
             programme: programme.isNotEmpty ? programme : null,
             graduationYear: gradYear,

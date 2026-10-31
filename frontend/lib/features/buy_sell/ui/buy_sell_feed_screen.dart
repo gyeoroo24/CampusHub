@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/error_state.dart';
@@ -5,6 +6,7 @@ import '../../../core/enums/sort_option.dart';
 import '../../../core/enums/view_mode.dart';
 import '../../../core/utils/category_emoji_helper.dart';
 import '../../../core/widgets/compact_price_range_picker_dialog.dart';
+import '../../../core/widgets/filter_sheet.dart';
 import '../../../core/widgets/skeleton_loader.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../alerts/domain/alerts_models.dart';
@@ -37,11 +39,157 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
     'Others',
   ];
 
-  static const _pricePresets = [
+  static const _pricePresets = <({String label, double? min, double? max})>[
+    (label: 'Any price', min: null, max: null),
     (label: 'Under ₹500', min: null, max: 500.0),
-    (label: '₹500 - ₹2,000', min: 500.0, max: 2000.0),
-    (label: '₹2,000+', min: 2000.0, max: null),
+    (label: '₹500 – ₹2,000', min: 500.0, max: 2000.0),
+    (label: '₹2,000 – ₹5,000', min: 2000.0, max: 5000.0),
+    (label: '₹5,000+', min: 5000.0, max: null),
   ];
+
+  static const _statusOptions = [
+    (value: ListingStatus.available, label: 'Available', icon: null),
+    (value: ListingStatus.reserved, label: 'Reserved', icon: null),
+    (value: ListingStatus.sold, label: 'Sold', icon: null),
+  ];
+
+  static const _sortOptions = [
+    (value: SortOption.newest, label: 'Newest first', icon: null),
+    (value: SortOption.priceLowToHigh, label: 'Price: low to high', icon: null),
+    (value: SortOption.priceHighToLow, label: 'Price: high to low', icon: null),
+  ];
+
+  static String _rupees(double v) {
+    final whole = v.round().toString();
+    final b = StringBuffer();
+    for (var i = 0; i < whole.length; i++) {
+      if (i > 0 && (whole.length - i) % 3 == 0) b.write(',');
+      b.write(whole[i]);
+    }
+    return '₹$b';
+  }
+
+  static String _priceLabel(double? min, double? max) {
+    final preset = _pricePresets.where((p) => p.min == min && p.max == max).firstOrNull;
+    if (preset != null) return preset.label;
+    if (min != null && max != null) return '${_rupees(min)} – ${_rupees(max)}';
+    return min != null ? '${_rupees(min)}+' : 'Under ${_rupees(max!)}';
+  }
+
+  /// The filters that differ from a fresh feed, as chips: what to show and how to undo each one.
+  /// Wanted posts only filter by category.
+  static List<({String label, BuySellFilterState Function(BuySellFilterState) remove})> _activeFilters(
+    BuySellFilterState f,
+    List<({String name, String? icon})> categories,
+    bool wanted,
+  ) {
+    final icon = categories.where((c) => c.name.toLowerCase() == f.category.toLowerCase()).firstOrNull?.icon;
+    final statuses = _statusOptions.where((o) => f.selectedStatuses.contains(o.value)).map((o) => o.label);
+    return [
+      if (f.category != 'All') (label: '${icon ?? ''} ${f.category}'.trim(), remove: (s) => s.copyWith(category: 'All')),
+      if (!wanted && (f.minPrice != null || f.maxPrice != null))
+        (label: _priceLabel(f.minPrice, f.maxPrice), remove: (s) => s.copyWith(clearMinPrice: true, clearMaxPrice: true)),
+      if (!wanted && !setEquals(f.selectedStatuses, BuySellFilterState.defaultStatuses))
+        (label: 'Status: ${statuses.join(', ')}', remove: (s) => s.copyWith(clearStatusFilter: true)),
+      if (!wanted && f.sortOption != SortOption.newest)
+        (
+          label: _sortOptions.where((o) => o.value == f.sortOption).firstOrNull?.label ?? 'Sorted',
+          remove: (s) => s.copyWith(sortOption: SortOption.newest),
+        ),
+    ];
+  }
+
+  void _openFilters(
+    BuildContext context,
+    WidgetRef ref,
+    BuySellFilterState filter,
+    List<({String name, String? icon})> categories,
+    bool wanted,
+  ) {
+    showFilterSheet<BuySellFilterState>(
+      context,
+      title: wanted ? 'Filter wanted posts' : 'Filter listings',
+      initial: filter,
+      defaults: BuySellFilterState(query: filter.query, viewMode: filter.viewMode),
+      onApply: (next) => ref.read(buySellFilterProvider.notifier).state = next,
+      sections: (context, draft, update) => [
+        FilterSection(
+          title: 'Category',
+          child: FilterChoices<String>(
+            options: [for (final c in categories) (value: c.name, label: c.name, icon: c.icon)],
+            selected: {draft.category},
+            onTap: (c) => update(draft.copyWith(category: c)),
+          ),
+        ),
+        if (!wanted) ...[
+          FilterSection(
+            title: 'Price',
+            trailing: TextButton(
+              onPressed: () async {
+                final result = await showDialog(
+                  context: context,
+                  builder: (_) => CompactPriceRangePickerDialog(initialMin: draft.minPrice, initialMax: draft.maxPrice),
+                );
+                if (result == 'CLEAR') {
+                  update(draft.copyWith(clearMinPrice: true, clearMaxPrice: true));
+                } else if (result is ({double? min, double? max})) {
+                  update(draft.copyWith(
+                    minPrice: result.min,
+                    clearMinPrice: result.min == null,
+                    maxPrice: result.max,
+                    clearMaxPrice: result.max == null,
+                  ));
+                }
+              },
+              child: const Text('Custom range…'),
+            ),
+            child: FilterChoices<String>(
+              options: [
+                for (final p in _pricePresets) (value: p.label, label: p.label, icon: null),
+                // A custom range shows up as its own selected chip.
+                if (!_pricePresets.any((p) => p.min == draft.minPrice && p.max == draft.maxPrice))
+                  (value: 'custom', label: _priceLabel(draft.minPrice, draft.maxPrice), icon: null),
+              ],
+              selected: {
+                _pricePresets.where((p) => p.min == draft.minPrice && p.max == draft.maxPrice).firstOrNull?.label ??
+                    'custom',
+              },
+              onTap: (label) {
+                final p = _pricePresets.where((p) => p.label == label).firstOrNull;
+                if (p == null) return;
+                update(draft.copyWith(
+                  minPrice: p.min,
+                  clearMinPrice: p.min == null,
+                  maxPrice: p.max,
+                  clearMaxPrice: p.max == null,
+                ));
+              },
+            ),
+          ),
+          FilterSection(
+            title: 'Status',
+            child: FilterChoices<ListingStatus>(
+              options: _statusOptions,
+              selected: draft.selectedStatuses,
+              onTap: (st) {
+                final next = {...draft.selectedStatuses};
+                if (!next.remove(st)) next.add(st);
+                if (next.isNotEmpty) update(draft.copyWith(selectedStatuses: next)); // keep at least one
+              },
+            ),
+          ),
+          FilterSection(
+            title: 'Sort by',
+            child: FilterChoices<SortOption>(
+              options: _sortOptions,
+              selected: {draft.sortOption},
+              onTap: (o) => update(draft.copyWith(sortOption: o)),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 
   // Captured in initState: `ref` itself is unusable by the time dispose() runs (Riverpod
   // tears it down before calling the widget's dispose), but a notifier obtained earlier is
@@ -105,12 +253,7 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
       categoryPills.add((name: clean, icon: emoji));
     }
 
-    final isAllSelected = filter.minPrice == null &&
-        filter.maxPrice == null &&
-        filter.selectedStatuses.length == 3;
-
-    final isCustomPriceActive = (filter.minPrice != null || filter.maxPrice != null) &&
-        !_pricePresets.any((p) => filter.minPrice == p.min && filter.maxPrice == p.max);
+    final activeFilters = _activeFilters(filter, categoryPills, isWanted);
 
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -215,68 +358,92 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
               ),
             ),
 
-          // ── For sale | Wanted switch ──
+          // ── Toolbar: For sale | Wanted, Filters, save search, view, Sell ──
           SliverToBoxAdapter(
             child: Container(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              color: theme.cardColor,
-              alignment: Alignment.centerLeft,
-              child: const BuySellSectionToggle(),
-            ),
-          ),
-
-          // ── Category Pills (Horizontal Scroll with Dynamic Categories) & Sell Item Button ──
-          SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              color: theme.cardColor,
-              child: Row(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              decoration: BoxDecoration(
+                color: theme.cardColor,
+                border: Border(
+                  bottom: BorderSide(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: SingleChildScrollView(
+                  Row(
+                    children: [
+                      const BuySellSectionToggle(),
+                      const SizedBox(width: 10),
+                      FiltersButton(
+                        compact: isMobile,
+                        activeCount: activeFilters.length,
+                        onPressed: () => _openFilters(context, ref, filter, categoryPills, isWanted),
+                      ),
+                      const Spacer(),
+                      if (!isWanted) ...[
+                        IconButton(
+                          iconSize: 20,
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Save this search & get alerts',
+                          icon: const Icon(Icons.notification_add_outlined),
+                          onPressed: () => _handleSaveSearch(context, ref, filter),
+                        ),
+                        IconButton(
+                          iconSize: 20,
+                          visualDensity: VisualDensity.compact,
+                          tooltip: filter.viewMode == ViewMode.grid ? 'Compact view' : 'Large view',
+                          icon: Icon(
+                            filter.viewMode == ViewMode.grid ? Icons.density_medium_rounded : Icons.view_agenda_outlined,
+                          ),
+                          onPressed: () => ref.read(buySellFilterProvider.notifier).update(
+                                (s) => s.copyWith(
+                                  viewMode: filter.viewMode == ViewMode.grid ? ViewMode.list : ViewMode.grid,
+                                ),
+                              ),
+                        ),
+                      ],
+                      if (!isMobile) ...[
+                        const SizedBox(width: 8),
+                        FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () =>
+                              isWanted ? CreateWantedDialog.show(context, ref) : _handleCreateListing(context, ref),
+                          icon: Icon(
+                            isWanted ? Icons.volunteer_activism_outlined : Icons.add_shopping_cart_rounded,
+                            size: 18,
+                          ),
+                          label: Text(
+                            isWanted ? 'Post Wanted' : 'Sell Item',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  // What's filtered, each removable on its own.
+                  if (activeFilters.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
-                        children: categoryPills.map((pill) {
-                          final isSelected = filter.category.toLowerCase() == pill.name.toLowerCase();
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8.0),
-                            child: ChoiceChip(
-                              avatar: pill.icon != null
-                                  ? Text(pill.icon!, style: const TextStyle(fontSize: 13))
-                                  : null,
-                              label: Text(pill.name),
-                              selected: isSelected,
-                              onSelected: (selected) {
-                                if (selected) {
-                                  ref.read(buySellFilterProvider.notifier).update(
-                                        (s) => s.copyWith(category: pill.name),
-                                      );
-                                }
-                              },
-                              visualDensity: VisualDensity.compact,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        children: [
+                          for (final f in activeFilters)
+                            ActiveFilterChip(
+                              label: f.label,
+                              onRemove: () => ref.read(buySellFilterProvider.notifier).update(f.remove),
                             ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ),
-                  if (!isMobile) ...[
-                    const SizedBox(width: 8),
-                    FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: () =>
-                          isWanted ? CreateWantedDialog.show(context, ref) : _handleCreateListing(context, ref),
-                      icon: Icon(
-                        isWanted ? Icons.volunteer_activism_outlined : Icons.add_shopping_cart_rounded,
-                        size: 18,
-                      ),
-                      label: Text(
-                        isWanted ? 'Post Wanted' : 'Sell Item',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                          if (activeFilters.length > 1)
+                            TextButton(
+                              onPressed: () => ref.read(buySellFilterProvider.notifier).update(
+                                    (s) => BuySellFilterState(query: s.query, viewMode: s.viewMode),
+                                  ),
+                              child: const Text('Clear all', style: TextStyle(fontSize: 12)),
+                            ),
+                        ],
                       ),
                     ),
                   ],
@@ -285,286 +452,10 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
             ),
           ),
 
-          // ── Wanted posts replace the toolbar and listings when the switch is on "Wanted" ──
+          // ── Wanted posts replace the listings when the switch is on "Wanted" ──
           if (isWanted)
             const WantedFeedSliver()
           else ...[
-          // ── Quick Filter Toolbar (All | Price Presets + Custom | Status Chips | Sort | Custom Range | View mode) ─────────────
-          SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                border: Border(
-                  bottom: BorderSide(
-                    color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  // Quick Filter Chips: All | Price Presets + Custom | Status Chips
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          // "All" Chip
-                          Padding(
-                            padding: const EdgeInsets.only(right: 6.0),
-                            child: FilterChip(
-                              label: const Text('All', style: TextStyle(fontSize: 11)),
-                              selected: isAllSelected,
-                              showCheckmark: false,
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              onSelected: (_) {
-                                ref.read(buySellFilterProvider.notifier).update(
-                                      (s) => s.copyWith(
-                                        clearMinPrice: true,
-                                        clearMaxPrice: true,
-                                        selectedStatuses: {
-                                          ListingStatus.available,
-                                          ListingStatus.reserved,
-                                          ListingStatus.sold,
-                                        },
-                                      ),
-                                    );
-                              },
-                            ),
-                          ),
-
-                          // Vertical Divider
-                          Container(
-                            height: 18,
-                            width: 1,
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
-                          ),
-                          const SizedBox(width: 4),
-
-                          // Price Preset Chips (Toggle: single or none)
-                          ..._pricePresets.map((p) {
-                            final isSelected = filter.minPrice == p.min && filter.maxPrice == p.max;
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 6.0),
-                              child: FilterChip(
-                                label: Text(p.label, style: const TextStyle(fontSize: 11)),
-                                selected: isSelected,
-                                showCheckmark: false,
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(horizontal: 4),
-                                onSelected: (_) {
-                                  if (isSelected) {
-                                    ref.read(buySellFilterProvider.notifier).update(
-                                          (s) => s.copyWith(
-                                            clearMinPrice: true,
-                                            clearMaxPrice: true,
-                                          ),
-                                        );
-                                  } else {
-                                    ref.read(buySellFilterProvider.notifier).update(
-                                          (s) => s.copyWith(
-                                            minPrice: p.min,
-                                            clearMinPrice: p.min == null,
-                                            maxPrice: p.max,
-                                            clearMaxPrice: p.max == null,
-                                          ),
-                                        );
-                                  }
-                                },
-                              ),
-                            );
-                          }),
-
-                          // Custom Price Range Chip (if active and not matching presets)
-                          if (isCustomPriceActive)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 6.0),
-                              child: FilterChip(
-                                label: Text(
-                                  '₹${filter.minPrice?.toStringAsFixed(0) ?? "0"} - ₹${filter.maxPrice?.toStringAsFixed(0) ?? "Any"}',
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                                selected: true,
-                                showCheckmark: false,
-                                avatar: const Icon(Icons.close_rounded, size: 14),
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(horizontal: 4),
-                                onSelected: (_) {
-                                  ref.read(buySellFilterProvider.notifier).update(
-                                        (s) => s.copyWith(
-                                          clearMinPrice: true,
-                                          clearMaxPrice: true,
-                                        ),
-                                      );
-                                },
-                              ),
-                            ),
-
-                          // Vertical Divider
-                          Container(
-                            height: 18,
-                            width: 1,
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
-                          ),
-                          const SizedBox(width: 4),
-
-                          // Status Filter Chips (Toggles: multiple can be active)
-                          ...[
-                            (label: 'Available', status: ListingStatus.available),
-                            (label: 'Reserved', status: ListingStatus.reserved),
-                            (label: 'Sold', status: ListingStatus.sold),
-                          ].map((st) {
-                            final isSelected = filter.selectedStatuses.contains(st.status);
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 6.0),
-                              child: FilterChip(
-                                label: Text(st.label, style: const TextStyle(fontSize: 11)),
-                                selected: isSelected,
-                                showCheckmark: false,
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(horizontal: 4),
-                                onSelected: (selected) {
-                                  final newStatuses = Set<ListingStatus>.from(filter.selectedStatuses);
-                                  if (selected) {
-                                    newStatuses.add(st.status);
-                                  } else {
-                                    newStatuses.remove(st.status);
-                                  }
-                                  if (newStatuses.isEmpty) {
-                                    newStatuses.add(ListingStatus.available);
-                                  }
-                                  ref.read(buySellFilterProvider.notifier).update(
-                                        (s) => s.copyWith(selectedStatuses: newStatuses),
-                                      );
-                                },
-                              ),
-                            );
-                          }),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Save this search & get alerts for new matches
-                  IconButton(
-                    iconSize: 18,
-                    visualDensity: VisualDensity.compact,
-                    tooltip: 'Save this search & get alerts',
-                    icon: const Icon(Icons.notification_add_outlined),
-                    onPressed: () => _handleSaveSearch(context, ref, filter),
-                  ),
-
-                  // Sort Dropdown
-                  PopupMenuButton<SortOption>(
-                    tooltip: 'Sort Listings',
-                    initialValue: filter.sortOption,
-                    onSelected: (option) {
-                      ref.read(buySellFilterProvider.notifier).update(
-                            (s) => s.copyWith(sortOption: option),
-                          );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.sort_rounded, size: 16, color: theme.colorScheme.primary),
-                          const SizedBox(width: 4),
-                          Text(
-                            _sortLabel(filter.sortOption),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    itemBuilder: (ctx) => [
-                      const PopupMenuItem(
-                        value: SortOption.newest,
-                        child: Text('Newest First', style: TextStyle(fontSize: 12)),
-                      ),
-                      const PopupMenuItem(
-                        value: SortOption.priceLowToHigh,
-                        child: Text('Price: Low to High', style: TextStyle(fontSize: 12)),
-                      ),
-                      const PopupMenuItem(
-                        value: SortOption.priceHighToLow,
-                        child: Text('Price: High to Low', style: TextStyle(fontSize: 12)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 4),
-
-                  // Custom Price Range Picker button (Matching custom date range in LnF)
-                  IconButton(
-                    iconSize: 18,
-                    visualDensity: VisualDensity.compact,
-                    tooltip: (filter.minPrice != null || filter.maxPrice != null)
-                        ? 'Custom: ₹${filter.minPrice?.toStringAsFixed(0) ?? "0"} - ₹${filter.maxPrice?.toStringAsFixed(0) ?? "Any"}'
-                        : 'Pick Custom Price Range',
-                    icon: Icon(
-                      Icons.currency_rupee_rounded,
-                      color: (filter.minPrice != null || filter.maxPrice != null)
-                          ? theme.colorScheme.primary
-                          : null,
-                    ),
-                    onPressed: () async {
-                      final result = await showDialog(
-                        context: context,
-                        builder: (ctx) => CompactPriceRangePickerDialog(
-                          initialMin: filter.minPrice,
-                          initialMax: filter.maxPrice,
-                        ),
-                      );
-                      if (result == 'CLEAR') {
-                        ref.read(buySellFilterProvider.notifier).update(
-                              (s) => s.copyWith(clearMinPrice: true, clearMaxPrice: true),
-                            );
-                      } else if (result is ({double? min, double? max})) {
-                        ref.read(buySellFilterProvider.notifier).update(
-                              (s) => s.copyWith(
-                                minPrice: result.min,
-                                clearMinPrice: result.min == null,
-                                maxPrice: result.max,
-                                clearMaxPrice: result.max == null,
-                              ),
-                            );
-                      }
-                    },
-                  ),
-                  const SizedBox(width: 4),
-
-                  // View Mode Toggle (Large vs Compact)
-                  IconButton(
-                    iconSize: 20,
-                    visualDensity: VisualDensity.compact,
-                    tooltip: filter.viewMode == ViewMode.grid ? 'Compact view' : 'Large view',
-                    icon: Icon(
-                      filter.viewMode == ViewMode.grid
-                          ? Icons.density_medium_rounded
-                          : Icons.view_agenda_outlined,
-                    ),
-                    onPressed: () {
-                      ref.read(buySellFilterProvider.notifier).update(
-                            (s) => s.copyWith(
-                              viewMode: filter.viewMode == ViewMode.grid
-                                  ? ViewMode.list
-                                  : ViewMode.grid,
-                            ),
-                          );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-
           // ── Feed Body: Skeletons or Cards with Infinite Scroll ─────────────
           if (paginatedState.isLoadingInitial)
             SliverToBoxAdapter(
@@ -761,17 +652,5 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
       ),
       child: Text(text, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
     );
-  }
-
-  static String _sortLabel(SortOption option) {
-    switch (option) {
-      case SortOption.priceLowToHigh:
-        return 'Price: Low';
-      case SortOption.priceHighToLow:
-        return 'Price: High';
-      case SortOption.newest:
-      default:
-        return 'Newest';
-    }
   }
 }

@@ -9,4 +9,7 @@ class _WebHistoryStub implements WebHistoryManager {
 
   @override
   void popModalState() {}
+
+  @override
+  Future<void> get settled => Future.value();
 }

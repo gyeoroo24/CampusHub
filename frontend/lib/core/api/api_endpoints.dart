@@ -13,6 +13,8 @@ class ApiEndpoints {
 
   // --- Profile & Users ---
   static const String me = '$version/me';
+  static const String phoneCode = '$version/me/phone/code';
+  static const String phoneVerify = '$version/me/phone/verify';
   static String user(String id) => '$version/users/$id';
   static const String userLookup = '$version/users/lookup';
   static String userMakeAdmin(String id) => '$version/users/$id/make-admin';
@@ -56,6 +58,8 @@ class ApiEndpoints {
   static const String notifications = '$version/me/notifications';
   static String notificationRead(String id) => '$version/me/notifications/$id/read';
   static const String notificationsReadAll = '$version/me/notifications/read-all';
+  static String notification(String id) => '$version/me/notifications/$id';
+  static const String notificationsDelete = '$version/me/notifications/delete';
   static const String devices = '$version/me/devices';
 
   // --- Academic Help ---
@@ -83,6 +87,19 @@ class ApiEndpoints {
   // --- Campus Services (rev 6) ---
   static const String campusServices = '$version/campus-services';
   static String campusService(String id) => '$version/campus-services/$id';
+
+  // --- Messages (end-to-end encrypted, rev 8) ---
+  static const String myChatKey = '$version/me/chat-key';
+  static String userChatKey(String userId) => '$version/users/$userId/chat-key';
+  static const String chatConversations = '$version/chat/conversations';
+  static const String chatUnread = '$version/chat/unread';
+  static String chatConversation(String id) => '$version/chat/conversations/$id';
+  static String chatMessages(String conversationId) => '$version/chat/conversations/$conversationId/messages';
+  static String chatRead(String conversationId) => '$version/chat/conversations/$conversationId/read';
+  static String chatMessage(String messageId) => '$version/chat/messages/$messageId';
+  static String chatOffer(String messageId) => '$version/chat/messages/$messageId/offer';
+  static const String chatBlocks = '$version/chat/blocks';
+  static String chatBlock(String userId) => '$version/chat/blocks/$userId';
 
   // --- Backwards-compatible aliases ---
   static const String authMe = me;

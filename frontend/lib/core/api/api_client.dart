@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import '../constants/app_config.dart';
 import '../storage/token_storage.dart';
@@ -5,6 +7,10 @@ import 'api_exception.dart';
 
 /// Central HTTP Client built on Dio with token injection and error transformation.
 class ApiClient {
+  /// Fires when the server answers 403: the app's idea of the user's roles may be out of date
+  /// (e.g. their moderator role was revoked), so the session refreshes them (see SessionKeeper).
+  static final forbidden = StreamController<String>.broadcast();
+
   final Dio dio;
   final ITokenStorage tokenStorage;
 
@@ -51,8 +57,11 @@ class ApiClient {
 
             final token = await tokenStorage.getAccessToken();
             final savedUser = await tokenStorage.getSavedUser();
-            final email = savedUser?['email'] as String? ?? devUserEmail;
-            final name = savedUser?['name'] as String? ?? devUserName;
+            // Only a signed-in session sends an identity: a guest must not be sent as the
+            // configured dev user.
+            final signedIn = token != null && token.isNotEmpty;
+            final email = signedIn ? (savedUser?['email'] as String? ?? devUserEmail) : null;
+            final name = signedIn ? (savedUser?['name'] as String? ?? devUserName) : null;
 
             if (token != null && token.isNotEmpty && !token.startsWith('dev_token_')) {
               options.headers['Authorization'] = 'Bearer $token';
@@ -67,6 +76,7 @@ class ApiClient {
           return handler.next(options);
         },
         onError: (DioException error, handler) {
+          if (error.response?.statusCode == 403) forbidden.add(error.requestOptions.path);
           // Wrap with our typed ApiException
           final appError = ApiException.fromDioException(error);
           return handler.reject(

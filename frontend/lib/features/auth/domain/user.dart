@@ -124,6 +124,9 @@ class User {
   bool get isSignedIn => !isGuest;
   bool get isModerator => moderatorGrants.isNotEmpty || isAdmin;
 
+  /// Where this user's controls live: the admin panel, or (moderators) the moderation tools.
+  String get controlsPath => isAdmin ? '/admin' : '/moderator';
+
   /// Scoped permission checks (FR-2, FR-3)
   bool canModerateModule(String module) =>
       isAdmin || moderatorGrants.any((g) => g.module == module);

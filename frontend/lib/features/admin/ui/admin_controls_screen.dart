@@ -24,7 +24,10 @@ enum _PanelTab { moderators, users, reports, categories, health, campusServices 
 
 class AdminControlsScreen extends ConsumerStatefulWidget {
   final int? initialTab;
-  const AdminControlsScreen({super.key, this.initialTab});
+
+  /// The route this was opened on: `/admin` or `/moderator` (null when not opened by the router).
+  final String? path;
+  const AdminControlsScreen({super.key, this.initialTab, this.path});
 
   @override
   ConsumerState<AdminControlsScreen> createState() => _AdminControlsScreenState();
@@ -59,6 +62,9 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
   @override
   void initState() {
     super.initState();
+    // Check roles with the server now: if this person's moderator role was just removed, the
+    // screen falls back to "Access Restricted" instead of showing tools from a stale session.
+    ref.read(authRepositoryProvider).getCurrentUser().then((_) {}, onError: (_) {});
     final user = ref.read(currentUserProvider);
     final isAdmin = user?.isAdmin ?? false;
     _tabs = isAdmin
@@ -110,6 +116,16 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final currentUser = ref.watch(currentUserProvider);
+
+    // Admins belong on /admin and moderators on /moderator: fix the address if it's the other one.
+    final path = widget.path;
+    if (path != null && currentUser != null && currentUser.isModerator && currentUser.controlsPath != path) {
+      final query = GoRouterState.of(context).uri.query;
+      final target = '${currentUser.controlsPath}${query.isEmpty ? '' : '?$query'}';
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.replace(target);
+      });
+    }
 
     // Security Gate: Admin or Moderator
     if (currentUser == null || (!currentUser.isAdmin && !currentUser.isModerator)) {

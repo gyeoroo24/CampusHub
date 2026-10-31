@@ -8,6 +8,7 @@ import '../../../../core/widgets/photo_carousel.dart';
 import '../../../../core/widgets/report_content_dialog.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../../../auth/ui/auth_dialog.dart';
+import '../../../messages/ui/messages_screen.dart';
 import '../../domain/lost_found_item.dart';
 import '../../providers/lost_found_providers.dart';
 import 'edit_report_dialog.dart';
@@ -401,6 +402,22 @@ class LostFoundDetailDialog extends ConsumerWidget {
                       const SizedBox(height: 16),
                     ],
 
+                    // ── In-app messaging (joins the chat with this person) ─────
+                    if (!isOwner) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          key: const Key('message_reporter'),
+                          onPressed: () => openChatAbout(context, ref, {
+                            item.kind == PostType.lost ? 'lost_report_id' : 'found_report_id': item.id,
+                          }),
+                          icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                          label: Text(item.kind == PostType.lost ? 'Message the owner' : 'Message the finder'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
                     // ── Reporter Contact Section (Privacy Protection) ──────────
                     Container(
                       padding: const EdgeInsets.all(14),
@@ -411,7 +428,7 @@ class LostFoundDetailDialog extends ConsumerWidget {
                           color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
                         ),
                       ),
-                      child: item.reporterContact != null
+                      child: (item.reporterContact != null && currentUser != null && !currentUser.isGuest)
                           ? Row(
                               children: [
                                 CircleAvatar(

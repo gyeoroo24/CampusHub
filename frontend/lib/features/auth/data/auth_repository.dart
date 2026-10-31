@@ -18,6 +18,10 @@ abstract class IAuthRepository {
     String? programme,
     int? graduationYear,
   });
+  /// Sends a code to [phone] (E.164); [verifyPhone] with that code puts it on my profile.
+  Future<void> requestPhoneCode(String phone);
+  Future<User> verifyPhone(String phone, String code);
+
   /// Admin endpoint: deactivate or reactivate an account (`PATCH /api/v1/users/{id}`).
   Future<AccountStatus> updateAccountStatus(
     String userId, {
@@ -136,6 +140,15 @@ class MockAuthRepository implements IAuthRepository {
     await tokenStorage.saveUser(_currentUser!.toJson());
     _controller.add(_currentUser);
     return _currentUser!;
+  }
+
+  @override
+  Future<void> requestPhoneCode(String phone) async {}
+
+  @override
+  Future<User> verifyPhone(String phone, String code) async {
+    if (code != '123456') throw Exception('Incorrect code.');
+    return updateProfile(phone: phone);
   }
 
   @override
@@ -275,11 +288,13 @@ class ApiAuthRepository implements IAuthRepository {
   @override
   Future<User?> getCurrentUser() async {
     await _init();
+    await tokenStorage.reload(); // another tab may have signed in or out
     final hasToken = await tokenStorage.hasToken();
-    final savedUser = await tokenStorage.getSavedUser();
-    // Allow checking user if token exists, saved user exists, or dev user email is active
-    if (!hasToken && savedUser == null && apiClient.devUserEmail == null) {
-      _cachedUser = null;
+    if (!hasToken) {
+      if (_cachedUser != null) {
+        _cachedUser = null;
+        _controller.add(null); // signed out in another tab
+      }
       return null;
     }
 
@@ -331,6 +346,20 @@ class ApiAuthRepository implements IAuthRepository {
 
     final data = response.data as Map<String, dynamic>;
     _cachedUser = User.fromJson(data);
+    await tokenStorage.saveUser(_cachedUser!.toJson());
+    _controller.add(_cachedUser);
+    return _cachedUser!;
+  }
+
+  @override
+  Future<void> requestPhoneCode(String phone) async {
+    await apiClient.post(ApiEndpoints.phoneCode, data: {'phone': phone});
+  }
+
+  @override
+  Future<User> verifyPhone(String phone, String code) async {
+    final response = await apiClient.post(ApiEndpoints.phoneVerify, data: {'phone': phone, 'code': code});
+    _cachedUser = User.fromJson(response.data as Map<String, dynamic>);
     await tokenStorage.saveUser(_cachedUser!.toJson());
     _controller.add(_cachedUser);
     return _cachedUser!;
@@ -418,6 +447,11 @@ class ApiAuthRepository implements IAuthRepository {
   Stream<User?> get authStateChanges async* {
     await _init();
     yield _cachedUser;
+    // Show the saved session straight away, then check it with the server: roles and moderator
+    // grants may have changed since it was saved (e.g. a moderator was removed).
+    if (_cachedUser != null) {
+      unawaited(getCurrentUser().then((_) {}, onError: (_) {}));
+    }
     yield* _controller.stream;
   }
 }

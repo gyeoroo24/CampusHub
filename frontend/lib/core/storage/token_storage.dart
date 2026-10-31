@@ -13,6 +13,9 @@ abstract class ITokenStorage {
   Future<Map<String, dynamic>?> getSavedUser();
   Future<void> saveUser(Map<String, dynamic> userMap);
   Future<void> clearAll();
+
+  /// Re-reads what is stored, in case another browser tab signed in or out.
+  Future<void> reload() async {}
 }
 
 /// SharedPreferences-backed token and user storage with automatic in-memory fallback.
@@ -118,6 +121,13 @@ class SharedPrefsTokenStorage implements ITokenStorage {
   }
 
   @override
+  Future<void> reload() async {
+    try {
+      await (await _getPrefs())?.reload();
+    } catch (_) {}
+  }
+
+  @override
   Future<void> clearAll() async {
     await _fallback.clearAll();
     try {
@@ -126,6 +136,10 @@ class SharedPrefsTokenStorage implements ITokenStorage {
         await prefs.remove(_keyAccessToken);
         await prefs.remove(_keyRefreshToken);
         await prefs.remove(_keyUser);
+        // Messaging keys unlocked on this device (ChatKeyStore): signing out locks messages again.
+        for (final key in prefs.getKeys().where((k) => k.startsWith('campushub_chat_key_')).toList()) {
+          await prefs.remove(key);
+        }
       }
     } catch (_) {}
   }
@@ -167,6 +181,9 @@ class InMemoryTokenStorage implements ITokenStorage {
   Future<void> saveUser(Map<String, dynamic> userMap) async {
     _persistedUser = userMap;
   }
+
+  @override
+  Future<void> reload() async {}
 
   @override
   Future<void> clearAll() async {

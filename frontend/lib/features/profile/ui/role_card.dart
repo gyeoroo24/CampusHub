@@ -84,7 +84,7 @@ class RoleCard extends ConsumerWidget {
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 ),
                 FilledButton.tonalIcon(
-                  onPressed: () => context.push('/admin'),
+                  onPressed: () => context.push(user.controlsPath),
                   icon: const Icon(Icons.open_in_new_rounded, size: 16),
                   label: Text(user.isAdmin ? 'Admin panel' : 'Moderation tools'),
                 ),

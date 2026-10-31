@@ -7,6 +7,10 @@ abstract class WebHistoryManager {
 
   void pushModalState(VoidCallback onPop);
   void popModalState();
+
+  /// Completes once the browser has applied the `history.back()` of the last closed modal.
+  /// Await it after closing a dialog and before navigating, or that back step undoes the navigation.
+  Future<void> get settled;
 }
 
 /// A wrapper widget for modal dialogs that intercepts browser/system back buttons on web.

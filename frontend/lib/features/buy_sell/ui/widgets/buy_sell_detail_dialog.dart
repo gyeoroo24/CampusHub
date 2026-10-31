@@ -8,6 +8,7 @@ import '../../../../core/widgets/photo_carousel.dart';
 import '../../../../core/widgets/report_content_dialog.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../../../auth/ui/auth_dialog.dart';
+import '../../../messages/ui/messages_screen.dart';
 import '../../domain/buy_sell_item.dart';
 import '../../providers/buy_sell_providers.dart';
 import 'edit_listing_dialog.dart';
@@ -293,6 +294,20 @@ class BuySellDetailDialog extends ConsumerWidget {
                       const SizedBox(height: 16),
                     ],
 
+                    // ── In-app messaging (joins the chat with this person) ─────
+                    if (!isOwner && item.status != ListingStatus.sold) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          key: const Key('message_seller'),
+                          onPressed: () => openChatAboutListing(context, ref, item.id),
+                          icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                          label: const Text('Message seller'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
                     // ── Seller Contact Section (PRD Scenario 1 Privacy) ────────
                     Container(
                       padding: const EdgeInsets.all(14),
@@ -303,7 +318,7 @@ class BuySellDetailDialog extends ConsumerWidget {
                           color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
                         ),
                       ),
-                      child: item.sellerContact != null
+                      child: (item.sellerContact != null && currentUser != null && !currentUser.isGuest)
                           ? Row(
                               children: [
                                 CircleAvatar(
