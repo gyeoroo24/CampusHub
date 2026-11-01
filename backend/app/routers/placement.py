@@ -15,6 +15,7 @@ from typing import Literal
 from uuid import UUID
 
 import asyncpg
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, field_validator
 
@@ -690,7 +691,12 @@ async def import_sheet(body: ImportRequest, user: CurrentUser = Depends(current_
         raise HTTPException(422, str(exc)) from exc
 
     source_key = f"placement-imports/{user.id}/{body.placement_year}-{uuid.uuid4()}.csv"
-    await put_object(source_key, body.sheet.encode(), "text/csv; charset=utf-8")
+    try:
+        await put_object(source_key, body.sheet.encode(), "text/csv; charset=utf-8")
+    except (BotoCoreError, ClientError) as exc:
+        # The sheet is kept as the import's source (FR-17 audit trail), so don't import without it.
+        raise HTTPException(503, "File storage is unavailable, so the sheet couldn't be saved. Nothing was "
+                                 "imported; try again shortly.") from exc
     created = updated = 0
     new_companies: list[str] = []
     company_ids: dict[str, UUID] = {}

@@ -174,6 +174,21 @@ def test_import_creates_updates_and_rejects(client, s3, placement):
     assert client.get(f"{API}/placement/imports", headers=ASHA).status_code == 403
 
 
+def test_import_needs_file_storage(client, placement, monkeypatch):
+    """The pasted sheet is kept in S3; if storage is down, nothing is imported and the moderator is told why."""
+    from botocore.exceptions import EndpointConnectionError
+
+    from app.routers import placement as placement_router
+
+    async def down(*_args, **_kwargs):
+        raise EndpointConnectionError(endpoint_url="http://localhost:9000")
+    monkeypatch.setattr(placement_router, "put_object", down)
+    r = client.post(f"{API}/placement/imports", headers=RAVI,
+                    json={"placement_year": 2026, "sheet": "Company,Email,Role\nIntel,a@iisc.ac.in,SWE"})
+    assert r.status_code == 503 and "storage" in r.json()["detail"]
+    assert sql("SELECT count(*) AS n FROM placement_records")[0]["n"] == 0
+
+
 def test_import_rejects_unreadable_sheet(client, placement):
     r = client.post(f"{API}/placement/imports", headers=RAVI,
                     json={"placement_year": 2026, "sheet": "Name,Email\nA,a@iisc.ac.in"})
