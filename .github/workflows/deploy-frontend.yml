@@ -1,0 +1,58 @@
+name: Deploy CampusHub Frontend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    name: Build & Deploy Flutter Web
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Verify Flutter Installation
+        run: flutter --version
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: flutter pub get
+
+      - name: Build Flutter Web Release Bundle
+        working-directory: frontend
+        run: |
+          flutter build web --release \
+            --dart-define=USE_MOCK=false \
+            --dart-define=API_BASE_URL="${{ secrets.API_BASE_URL }}"
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Deploy Static Web Assets to S3
+        run: |
+          aws s3 sync frontend/build/web/ "s3://${{ secrets.FRONTEND_S3_BUCKET }}/" --delete
+
+      - name: Invalidate CloudFront Cache (If CDN is configured)
+        if: ${{secrets.CLOUDFRONT_DISTRIBUTION_ID != ''}}
+        run: |
+          aws cloudfront create-invalidation --distribution-id "${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" --paths "/*"
