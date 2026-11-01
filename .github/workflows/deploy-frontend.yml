@@ -53,6 +53,9 @@ jobs:
           aws s3 sync frontend/build/web/ "s3://${{ secrets.FRONTEND_S3_BUCKET }}/" --delete
 
       - name: Invalidate CloudFront Cache (If CDN is configured)
-        if: ${{secrets.CLOUDFRONT_DISTRIBUTION_ID != ''}}
+        env:
+          DIST_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
         run: |
-          aws cloudfront create-invalidation --distribution-id "${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" --paths "/*"
+          if [ -n "$DIST_ID" ]; then
+            aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*"
+          fi
