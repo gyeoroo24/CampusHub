@@ -30,8 +30,9 @@ module "database" {
 module "storage" {
   source = "./modules/storage"
 
-  environment  = var.environment
-  project_name = var.project_name
+  environment       = var.environment
+  project_name      = var.project_name
+  enable_cloudfront = var.enable_cloudfront
 }
 
 # 4. AUTHENTICATION TIER (Cognito User Pool, App Client, 4-Role Groups)

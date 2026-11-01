@@ -13,7 +13,7 @@ resource "aws_apigatewayv2_api" "http_api" {
   cors_configuration {
     allow_origins     = ["*"]
     allow_methods     = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-    allow_headers     = ["Content-Type", "Authorization", "X-Amz-Date", "X-Api-Key", "X-Amz-Security-Token"]
+    allow_headers     = ["*"]
     max_age           = 300
     allow_credentials = false
   }
@@ -59,6 +59,66 @@ locals {
       prefix      = "events"
       service_key = "community_events"
     }
+  }
+
+  # Additional routes mapped to the FastAPI /api/v1 specification for Flutter Web
+  frontend_v1_routes = {
+    # Health check
+    v1_health        = { route = "GET /api/v1/health", service = "community_events", auth = false }
+
+    # S3 Upload Tickets
+    v1_uploads_post  = { route = "POST /api/v1/uploads", service = "community_events", auth = false }
+    v1_uploads_sub   = { route = "ANY /api/v1/uploads/{proxy+}", service = "community_events", auth = false }
+
+    # Buy & Sell
+    v1_bs_categories = { route = "GET /api/v1/buy-sell/{proxy+}", service = "buy_sell", auth = false }
+    v1_bs_cat_post   = { route = "POST /api/v1/buy-sell/{proxy+}", service = "buy_sell", auth = false }
+    v1_listings_base = { route = "ANY /api/v1/listings", service = "buy_sell", auth = false }
+    v1_listings_sub  = { route = "ANY /api/v1/listings/{proxy+}", service = "buy_sell", auth = false }
+    v1_wanted_base   = { route = "ANY /api/v1/wanted", service = "buy_sell", auth = false }
+    v1_wanted_sub    = { route = "ANY /api/v1/wanted/{proxy+}", service = "buy_sell", auth = false }
+
+    # Lost & Found
+    v1_lf_categories = { route = "GET /api/v1/lost-found/{proxy+}", service = "lost_found", auth = false }
+    v1_lf_cat_post   = { route = "POST /api/v1/lost-found/{proxy+}", service = "lost_found", auth = false }
+    v1_lost_base     = { route = "ANY /api/v1/lost-reports", service = "lost_found", auth = false }
+    v1_lost_sub      = { route = "ANY /api/v1/lost-reports/{proxy+}", service = "lost_found", auth = false }
+
+    v1_found_base    = { route = "ANY /api/v1/found-reports", service = "lost_found", auth = false }
+    v1_found_sub     = { route = "ANY /api/v1/found-reports/{proxy+}", service = "lost_found", auth = false }
+
+    # Academic Hub
+    v1_acad_sub      = { route = "ANY /api/v1/academic/{proxy+}", service = "academic_hub", auth = false }
+    v1_dept_base     = { route = "ANY /api/v1/departments", service = "academic_hub", auth = false }
+    v1_dept_sub      = { route = "ANY /api/v1/departments/{proxy+}", service = "academic_hub", auth = false }
+    v1_courses_base  = { route = "ANY /api/v1/courses", service = "academic_hub", auth = false }
+    v1_courses_sub   = { route = "ANY /api/v1/courses/{proxy+}", service = "academic_hub", auth = false }
+    v1_feedback_sub  = { route = "ANY /api/v1/feedback/{proxy+}", service = "academic_hub", auth = false }
+
+    # Community, Events, Profile, Auth & Landing Page Services
+    v1_campus_svc_b  = { route = "ANY /api/v1/campus-services", service = "community_events", auth = false }
+    v1_campus_svc_s  = { route = "ANY /api/v1/campus-services/{proxy+}", service = "community_events", auth = false }
+    v1_events_base   = { route = "ANY /api/v1/events", service = "community_events", auth = false }
+    v1_events_sub    = { route = "ANY /api/v1/events/{proxy+}", service = "community_events", auth = false }
+    v1_me_base       = { route = "ANY /api/v1/me", service = "community_events", auth = false }
+    v1_me_sub        = { route = "ANY /api/v1/me/{proxy+}", service = "community_events", auth = false }
+    v1_auth_sub      = { route = "ANY /api/v1/auth/{proxy+}", service = "community_events", auth = false }
+
+    # Messaging & Secure Chat
+    v1_chat_base     = { route = "ANY /api/v1/chat", service = "community_events", auth = false }
+    v1_chat_sub      = { route = "ANY /api/v1/chat/{proxy+}", service = "community_events", auth = false }
+
+    # Admin Governance & Moderation
+    v1_moderators_b  = { route = "ANY /api/v1/moderators", service = "community_events", auth = false }
+    v1_moderators_s  = { route = "ANY /api/v1/moderators/{proxy+}", service = "community_events", auth = false }
+    v1_reports_b     = { route = "ANY /api/v1/reports", service = "community_events", auth = false }
+    v1_reports_s     = { route = "ANY /api/v1/reports/{proxy+}", service = "community_events", auth = false }
+    v1_users_sub     = { route = "ANY /api/v1/users/{proxy+}", service = "community_events", auth = false }
+
+    # Placement Hub
+    v1_placement_sub = { route = "ANY /api/v1/placement/{proxy+}", service = "placement_hub", auth = false }
+    v1_companies_b   = { route = "ANY /api/v1/companies", service = "placement_hub", auth = false }
+    v1_companies_s   = { route = "ANY /api/v1/companies/{proxy+}", service = "placement_hub", auth = false }
   }
 }
 
@@ -114,6 +174,17 @@ resource "aws_apigatewayv2_route" "protected_routes" {
   ]
 }
 
+# Routes dedicated to Flutter Web (/api/v1/*)
+resource "aws_apigatewayv2_route" "frontend_v1_routes" {
+  for_each = local.frontend_v1_routes
+
+  api_id             = aws_apigatewayv2_api.http_api.id
+  route_key          = each.value.route
+  target             = "integrations/${aws_apigatewayv2_integration.lambda_integrations[each.value.service].id}"
+  authorization_type = each.value.auth ? "JWT" : "NONE"
+  authorizer_id      = each.value.auth ? aws_apigatewayv2_authorizer.cognito_jwt.id : null
+}
+
 # Grant API Gateway permission to invoke each Lambda function
 resource "aws_lambda_permission" "api_gateway" {
   for_each = local.module_routes
@@ -132,8 +203,8 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
 
   default_route_settings {
-    throttling_rate_limit  = var.throttling_rate_limit  # 50 req/sec steady state
-    throttling_burst_limit = var.throttling_burst_limit # 100 burst
+    throttling_rate_limit  = var.throttling_rate_limit
+    throttling_burst_limit = var.throttling_burst_limit
     detailed_metrics_enabled = true
   }
 

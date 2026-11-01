@@ -20,9 +20,9 @@ variable "project_name" {
 # Free Tier & Cost Optimization Flags
 # ==========================================
 variable "enable_cloudfront" {
-  description = "Set to true to provision CloudFront CDN. Default is false to allow immediate deployment while new accounts complete AWS Support CloudFront verification."
+  description = "Set to true to provision CloudFront CDN."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "enable_waf" {
@@ -34,7 +34,7 @@ variable "enable_waf" {
 variable "multi_az_db" {
   description = "Set to true for Multi-AZ PostgreSQL RDS (Note: Free Tier covers 750 hrs/month of Single-AZ only. Keep false for Free Tier)"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "db_engine_version" {

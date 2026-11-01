@@ -12,6 +12,24 @@ locals {
   api_gateway_domain = replace(replace(var.api_endpoint, "https://", ""), "/", "")
 }
 
+# CloudFront Function for Single-Page Application (SPA) client-side routing
+resource "aws_cloudfront_function" "spa_rewrite" {
+  name    = "${var.project_name}-${var.environment}-spa-rewrite"
+  runtime = "cloudfront-js-2.0"
+  comment = "Rewrite SPA routes to /index.html without touching static assets or API routes"
+  publish = true
+  code    = <<-EOF
+function handler(event) {
+    var request = event.request;
+    var uri = request.uri;
+    if (!uri.includes('.')) {
+        request.uri = '/index.html';
+    }
+    return request;
+}
+EOF
+}
+
 # CloudFront Distribution fronting both S3 Static Frontend and API Gateway
 resource "aws_cloudfront_distribution" "distribution" {
   enabled             = true
@@ -55,6 +73,11 @@ resource "aws_cloudfront_distribution" "distribution" {
 
     # Managed CachingOptimized Policy ID
     cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.spa_rewrite.arn
+    }
   }
 
   # Ordered Cache Behavior -> Routes /api/* traffic directly to API Gateway
@@ -73,19 +96,12 @@ resource "aws_cloudfront_distribution" "distribution" {
     origin_request_policy_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac"
   }
 
-  # SPA Routing: Redirect 403 / 404 to index.html for client-side routing
+  # SPA Routing Fallback: Redirect S3 403 to index.html with 0 min TTL (does NOT rewrite 404 API responses)
   custom_error_response {
     error_code            = 403
     response_code         = 200
     response_page_path    = "/index.html"
-    error_caching_min_ttl = 10
-  }
-
-  custom_error_response {
-    error_code            = 404
-    response_code         = 200
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 10
+    error_caching_min_ttl = 0
   }
 
   restrictions {
