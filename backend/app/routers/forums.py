@@ -1,6 +1,6 @@
 """Discussion forums (FR-14): forum -> threads -> comments.
 
-Every course and department has one forum, created the first time it's opened.
+Every course, department and company (Placement Hub) has one forum, created the first time it's opened.
 A thread has a title and an author; its first comment (lowest seq) is the opening post.
 The author can edit or remove their thread/comment, and admins can edit anyone's. Admins
 and the relevant moderators (see can_moderate_forum() in schema.sql) can remove anyone's.
@@ -80,7 +80,8 @@ FROM forums f
 
 
 async def _get_or_create_forum(conn: asyncpg.Connection, scope: str, scope_id: UUID) -> Forum:
-    table, column = {"course": ("courses", "course_id"), "department": ("departments", "department_id")}[scope]
+    table, column = {"course": ("courses", "course_id"), "department": ("departments", "department_id"),
+                     "company": ("companies", "company_id")}[scope]
     row = await conn.fetchrow(_FORUM_SELECT + f" WHERE f.{column} = $1", scope_id)
     if row is None:
         # First visit: create the forum (only once, so later reads don't write).
@@ -101,6 +102,11 @@ async def course_forum(course_id: UUID, conn: asyncpg.Connection = Depends(get_c
 @router.get("/departments/{department_id}/forum", response_model=Forum, summary="A department's forum")
 async def department_forum(department_id: UUID, conn: asyncpg.Connection = Depends(get_conn)):
     return await _get_or_create_forum(conn, "department", department_id)
+
+
+@router.get("/companies/{company_id}/forum", response_model=Forum, summary="A company's forum (Placement Hub)")
+async def company_forum(company_id: UUID, conn: asyncpg.Connection = Depends(get_conn)):
+    return await _get_or_create_forum(conn, "company", company_id)
 
 
 # ---------------------------------------------------------------- threads

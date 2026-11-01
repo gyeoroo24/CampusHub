@@ -23,3 +23,8 @@ FROM (VALUES
      'grievance', 'https://www.iisc.ac.in/wp-content/uploads/2024/08/Colleges-University-Institution_Website_Information.pdf', NULL, 40)
 ) AS v(name, description, category, url, phone, sort_order)
 WHERE NOT EXISTS (SELECT 1 FROM campus_services c WHERE c.name = v.name);
+
+-- Community Events tags (FR-18). The admin adds, renames or removes tags with /event-tags.
+INSERT INTO event_tags (name)
+VALUES ('Sports'), ('Food/Mess'), ('Nature'), ('Photography'), ('Culture'), ('Music'), ('Tech Talks'), ('Workshops')
+ON CONFLICT (name) DO NOTHING;

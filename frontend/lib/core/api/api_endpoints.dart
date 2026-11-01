@@ -103,6 +103,36 @@ class ApiEndpoints {
   static const String chatBlocks = '$version/chat/blocks';
   static String chatBlock(String userId) => '$version/chat/blocks/$userId';
 
+  // --- Placement Hub ---
+  static const String companies = '$version/companies';
+  static String company(String id) => '$version/companies/$id';
+  static String companyHiringStats(String id) => '$version/companies/$id/hiring-stats';
+  static String companyJds(String id) => '$version/companies/$id/jds';
+  static String companyPpts(String id) => '$version/companies/$id/ppts';
+  static String companyInterviews(String id) => '$version/companies/$id/interviews';
+  static String companyForum(String id) => '$version/companies/$id/forum';
+  static String jd(String id) => '$version/jds/$id';
+  static String ppt(String id) => '$version/ppts/$id';
+  static const String interviews = '$version/interviews';
+  static String interview(String id) => '$version/interviews/$id';
+  static const String placementStats = '$version/placement/stats';
+  static const String placementPpts = '$version/placement/ppts';
+  static const String placementImports = '$version/placement/imports';
+
+  // --- Forums ---
+  static String forumThreads(String forumId) => '$version/forums/$forumId/threads';
+  static String thread(String id) => '$version/threads/$id';
+  static String threadComments(String threadId) => '$version/threads/$threadId/comments';
+  static String comment(String id) => '$version/comments/$id';
+
+  // --- Community Events and bookmarks ---
+  static const String events = '$version/events';
+  static String event(String id) => '$version/events/$id';
+  static const String eventTags = '$version/event-tags';
+  static String followedTag(int tagId) => '$version/me/followed-tags/$tagId';
+  static String bookmark(String targetType, String targetId) => '$version/me/bookmarks/$targetType/$targetId';
+  static const String bookmarksImport = '$version/me/bookmarks/import';
+
   // --- Backwards-compatible aliases ---
   static const String authMe = me;
   static const String mediaPresign = uploads;

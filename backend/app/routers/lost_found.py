@@ -23,7 +23,7 @@ from pydantic import AfterValidator, BaseModel, Field
 from ..alerts import found_report_alerts, push_alerts
 from ..auth import CurrentUser, current_user, optional_user
 from ..common import (MAX_INT_ID, CategoryId, CategoryRef, Contact, Page, PageParams, Photo, UserRef, forbidden,
-                      make_page, not_found, page_params, search_text, set_clause, text)
+                      like_pattern, make_page, not_found, page_params, search_text, set_clause, text)
 from ..db import get_conn
 from ..lf_kinds import FOUND, LOST, Kind, other_kind
 from ..matching.trigger import match_mode, request_match, strength
@@ -121,11 +121,6 @@ def select_for(k: Kind, extra_columns: str = "") -> str:
     JOIN lf_categories c ON c.id = r.category_id
     JOIN users u ON u.id = r.reporter_id
     """
-
-
-def _like_pattern(q: str) -> str:
-    """Escape LIKE wildcards so a search for "50%" or "u_b" matches those characters literally."""
-    return q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 async def notify_lost_reporters(conn: asyncpg.Connection, found_report_id: UUID, category_id: int,
@@ -254,7 +249,7 @@ def build_router(kind: Kind) -> APIRouter:
               AND ($8::timestamptz IS NULL OR r.{kind.when} <= $8)
             ORDER BY {order}
             LIMIT $5 OFFSET $6""",
-            category_id, status, _like_pattern(q) if (q := search_text(q)) else None, reporter_id,
+            category_id, status, like_pattern(q) if (q := search_text(q)) else None, reporter_id,
             page.limit + 1, page.offset, from_date, to_date)
         return make_page(rows, page, summary)
 

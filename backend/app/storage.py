@@ -49,6 +49,12 @@ MATERIAL_TYPES = {
     "text/plain": "txt",
 }
 
+DOCUMENT_TYPES = {
+    "application/pdf": "pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "text/plain": "txt",
+}
+
 
 @dataclass(frozen=True)
 class UploadKind:
@@ -62,6 +68,8 @@ UPLOAD_KINDS: dict[str, UploadKind] = {
     "lost_report_photo": UploadKind("lost-reports", IMAGE_TYPES, 10 * MB),
     "found_report_photo": UploadKind("found-reports", IMAGE_TYPES, 10 * MB),
     "course_material": UploadKind("course-materials", MATERIAL_TYPES, 50 * MB),
+    # Placement Hub: a JD file attached to a company's role (placement moderators only).
+    "job_description": UploadKind("job-descriptions", DOCUMENT_TYPES, 20 * MB),
 }
 
 
@@ -174,6 +182,13 @@ async def mark_attached(keys: list[str]) -> None:
             await asyncio.to_thread(tag, key)
         except Exception:  # noqa: BLE001 - the post is already saved; never fail the request here
             log.exception("Could not mark %s as attached; the lifecycle rule may delete it", key)
+
+
+async def put_object(key: str, body: bytes, content_type: str) -> None:
+    """Store a file the API itself produced (e.g. a pasted placement sheet, kept as the import's source)."""
+    s = get_settings()
+    await asyncio.to_thread(s3_client().put_object, Bucket=s.s3_bucket, Key=key, Body=body,
+                            ContentType=content_type, Tagging="state=attached")
 
 
 async def delete_objects(keys: list[str]) -> None:
