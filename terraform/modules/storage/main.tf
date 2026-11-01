@@ -15,13 +15,48 @@ resource "aws_s3_bucket" "frontend" {
   }
 }
 
-# Block all public access for Frontend bucket (Accessed exclusively via CloudFront OAC)
+# S3 Website Configuration for static Flutter Web SPA hosting
+resource "aws_s3_bucket_website_configuration" "frontend" {
+  bucket = aws_s3_bucket.frontend.id
+
+  index_document {
+    suffix = "index.html"
+  }
+
+  error_document {
+    key = "index.html"
+  }
+}
+
+# Access block: If CloudFront is enabled, block all direct access (accessed via CloudFront OAC).
+# If CloudFront is disabled, allow public read for direct S3 static website hosting.
 resource "aws_s3_bucket_public_access_block" "frontend" {
   bucket                  = aws_s3_bucket.frontend.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
+  block_public_acls       = var.enable_cloudfront ? true : false
+  block_public_policy     = var.enable_cloudfront ? true : false
+  ignore_public_acls      = var.enable_cloudfront ? true : false
+  restrict_public_buckets = var.enable_cloudfront ? true : false
+}
+
+# Direct public read policy for S3 Website Hosting when CloudFront is disabled
+resource "aws_s3_bucket_policy" "frontend_public_website" {
+  count  = var.enable_cloudfront ? 0 : 1
+  bucket = aws_s3_bucket.frontend.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "PublicReadGetObjectForWebsite"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.frontend.arn}/*"
+      }
+    ]
+  })
+
+  depends_on = [aws_s3_bucket_public_access_block.frontend]
 }
 
 # Server-side encryption for Frontend bucket

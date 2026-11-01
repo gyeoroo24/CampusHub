@@ -23,11 +23,11 @@ locals {
   }
 }
 
-# Package the starter Lambda function
+# Package the Lambda function with source code and SQL schemas
 data "archive_file" "lambda_zip" {
   type        = "zip"
-  source_file = "${path.module}/lambda_src/app.py"
-  output_path = "${path.module}/lambda_src/function.zip"
+  source_dir  = "${path.module}/lambda_src"
+  output_path = "${path.module}/function.zip"
 }
 
 # CloudWatch Log Groups for each microservice with cost-effective 7-day retention

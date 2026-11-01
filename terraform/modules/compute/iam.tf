@@ -53,6 +53,15 @@ resource "aws_iam_policy" "lambda_app_permissions" {
           "ssm:GetParameterHistory"
         ]
         Resource = "arn:aws:ssm:*:*:parameter/campushub/${var.environment}/*"
+      },
+      {
+        Sid    = "KMSDecryptAccess"
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
       }
     ]
   })

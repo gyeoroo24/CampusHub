@@ -13,6 +13,11 @@ output "frontend_bucket_regional_domain_name" {
   value       = aws_s3_bucket.frontend.bucket_regional_domain_name
 }
 
+output "frontend_website_endpoint" {
+  description = "The S3 static website hosting endpoint URL"
+  value       = aws_s3_bucket_website_configuration.frontend.website_endpoint
+}
+
 output "media_bucket_id" {
   description = "The ID/Name of the media S3 bucket"
   value       = aws_s3_bucket.media.id

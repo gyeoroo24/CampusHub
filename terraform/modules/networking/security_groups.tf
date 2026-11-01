@@ -48,3 +48,22 @@ resource "aws_security_group_rule" "db_ingress_from_app" {
   security_group_id        = aws_security_group.db_sg.id
   source_security_group_id = aws_security_group.app_sg.id
 }
+
+# Security Group for VPC Interface Endpoints (SSM, KMS)
+resource "aws_security_group" "vpce_sg" {
+  name        = "campushub-${var.environment}-vpce-sg"
+  description = "Security group for private VPC Interface Endpoints"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "Allow HTTPS inbound from Lambda App Tier"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.app_sg.id]
+  }
+
+  tags = {
+    Name = "campushub-${var.environment}-vpce-sg"
+  }
+}

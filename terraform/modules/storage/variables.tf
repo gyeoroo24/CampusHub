@@ -9,3 +9,9 @@ variable "project_name" {
   type        = string
   default     = "campushub"
 }
+
+variable "enable_cloudfront" {
+  description = "Whether CloudFront CDN is enabled"
+  type        = bool
+  default     = false
+}

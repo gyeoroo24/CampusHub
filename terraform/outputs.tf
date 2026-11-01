@@ -7,6 +7,11 @@ output "app_url" {
   value       = var.enable_cloudfront ? "https://${module.cdn[0].cloudfront_domain_name}" : module.api_gateway.api_endpoint
 }
 
+output "frontend_url" {
+  description = "Direct Web Application Frontend URL (CloudFront if enabled, else S3 Website Endpoint)"
+  value       = var.enable_cloudfront ? "https://${module.cdn[0].cloudfront_domain_name}" : "http://${module.storage.frontend_website_endpoint}"
+}
+
 output "cloudfront_domain_name" {
   description = "The CloudFront distribution domain name (if enabled)"
   value       = var.enable_cloudfront ? module.cdn[0].cloudfront_domain_name : null
