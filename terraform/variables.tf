@@ -1,0 +1,98 @@
+variable "aws_region" {
+  description = "AWS deployment region (Mumbai: ap-south-1)"
+  type        = string
+  default     = "ap-south-1"
+}
+
+variable "environment" {
+  description = "Environment name (dev, staging, prod)"
+  type        = string
+  default     = "dev"
+}
+
+variable "project_name" {
+  description = "Project name prefix"
+  type        = string
+  default     = "campushub"
+}
+
+# ==========================================
+# Free Tier & Cost Optimization Flags
+# ==========================================
+variable "enable_cloudfront" {
+  description = "Set to true to provision CloudFront CDN. Default is false to allow immediate deployment while new accounts complete AWS Support CloudFront verification."
+  type        = bool
+  default     = false
+}
+
+variable "enable_waf" {
+  description = "Set to true to provision AWS WAF (Note: AWS WAF charges ~$5/month + rule fees outside Free Tier. Default false ensures $0 cost)"
+  type        = bool
+  default     = false
+}
+
+variable "multi_az_db" {
+  description = "Set to true for Multi-AZ PostgreSQL RDS (Note: Free Tier covers 750 hrs/month of Single-AZ only. Keep false for Free Tier)"
+  type        = bool
+  default     = true
+}
+
+variable "db_engine_version" {
+  description = "PostgreSQL engine version (major version 16 automatically resolves to the latest active minor version in the region)"
+  type        = string
+  default     = "16"
+}
+
+variable "db_instance_class" {
+  description = "RDS instance class (db.t4g.micro or db.t3.micro is AWS Free Tier eligible)"
+  type        = string
+  default     = "db.t4g.micro"
+}
+
+variable "db_allocated_storage" {
+  description = "RDS allocated storage in GB (Free tier covers up to 20 GB gp2/gp3)"
+  type        = number
+  default     = 20
+}
+
+variable "db_name" {
+  description = "Initial PostgreSQL database name"
+  type        = string
+  default     = "campushub"
+}
+
+variable "db_username" {
+  description = "PostgreSQL master username"
+  type        = string
+  default     = "campushub_admin"
+}
+
+variable "alert_email" {
+  description = "Email address for AWS Budgets cost alerts and CloudWatch alarms"
+  type        = string
+  default     = "dinkylakhani@iisc.ac.in"
+}
+
+variable "monthly_budget_usd" {
+  description = "Monthly cost budget limit in USD to enforce Free Tier adherence"
+  type        = string
+  default     = "50.0"
+}
+
+variable "lambda_memory_size" {
+  description = "Memory allocated to each Lambda function in MB"
+  type        = number
+  default     = 512
+}
+
+variable "throttling_rate_limit" {
+  description = "API Gateway steady-state request rate limit (req/s) (PRD Section 8.4 Risk 1)"
+  type        = number
+  default     = 50
+}
+
+variable "throttling_burst_limit" {
+  description = "API Gateway burst capacity limit (PRD Section 8.4 Risk 1)"
+  type        = number
+  default     = 100
+}
