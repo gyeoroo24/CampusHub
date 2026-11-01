@@ -41,6 +41,10 @@ class SavedSearchCreate(BaseModel):
     @model_validator(mode="after")
     def _check(self):
         self.q = self.q or None   # an empty search box means "any"
+        if self.q is None and self.category_id is None and self.min_price is None and self.max_price is None:
+            # A search with no keyword or filter matches every new post (e.g. "Drugs" alerting a
+            # search named "hero cycle" that was saved with an empty search box).
+            raise ValueError("Add keywords, a category or a price range: otherwise every new post would match")
         if self.module == "lost_found" and (self.min_price is not None or self.max_price is not None):
             raise ValueError("Lost & Found searches have no price filter")
         if self.min_price is not None and self.max_price is not None and self.min_price > self.max_price:
@@ -156,6 +160,11 @@ async def update_saved_search(search_id: UUID, body: SavedSearchUpdate, user: Cu
     high = changes.get("max_price", current.max_price)
     if low is not None and high is not None and low > high:
         raise HTTPException(422, "min_price can't be more than max_price.")
+    after = {"q": current.q, "category_id": current.category_id,
+             "min_price": current.min_price, "max_price": current.max_price} | changes
+    if not (after["q"] or after["category_id"] is not None or after["min_price"] is not None
+            or after["max_price"] is not None):
+        raise HTTPException(422, "Keep keywords, a category or a price range: otherwise every new post would match.")
     if "category_id" in changes:
         await _check_category(conn, current.module, changes["category_id"])
         changes["bs_category_id" if current.module == "buy_sell" else "lf_category_id"] = changes.pop("category_id")

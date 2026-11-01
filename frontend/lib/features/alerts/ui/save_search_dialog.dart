@@ -69,12 +69,23 @@ class SaveSearchDialog extends ConsumerStatefulWidget {
 
 class _SaveSearchDialogState extends ConsumerState<SaveSearchDialog> {
   late final TextEditingController _nameController;
+  // What gets matched. Pre-filled from the feed's search box, editable here: typing "hero cycle"
+  // as only the name used to save a search with no keywords, which matched every new post.
+  late final TextEditingController _keywordsController;
+  bool _nameEdited = false;
   bool _alertsEnabled = true;
   bool _saving = false;
   String? _error;
 
+  String? get _keywords {
+    final k = _keywordsController.text.trim();
+    return k.isEmpty ? null : k;
+  }
+
+  bool get _hasOtherFilters => widget.categoryId != null || widget.minPrice != null || widget.maxPrice != null;
+
   String get _summary => describeFilters(
-        query: widget.query,
+        query: _keywords,
         categoryName: widget.categoryName,
         minPrice: widget.minPrice,
         maxPrice: widget.maxPrice,
@@ -83,6 +94,7 @@ class _SaveSearchDialogState extends ConsumerState<SaveSearchDialog> {
   @override
   void initState() {
     super.initState();
+    _keywordsController = TextEditingController(text: widget.query?.trim() ?? '');
     final summary = _summary == 'Everything new'
         ? 'All new ${widget.module.label.toLowerCase()}'
         : _summary.replaceAll('“', '').replaceAll('”', '');
@@ -92,6 +104,7 @@ class _SaveSearchDialogState extends ConsumerState<SaveSearchDialog> {
   @override
   void dispose() {
     _nameController.dispose();
+    _keywordsController.dispose();
     super.dispose();
   }
 
@@ -99,6 +112,11 @@ class _SaveSearchDialogState extends ConsumerState<SaveSearchDialog> {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       setState(() => _error = 'Give the search a name.');
+      return;
+    }
+    if (_keywords == null && !_hasOtherFilters) {
+      setState(() => _error = 'Add keywords (or pick a category or price range first), '
+          'otherwise every new post would match.');
       return;
     }
     setState(() {
@@ -109,7 +127,7 @@ class _SaveSearchDialogState extends ConsumerState<SaveSearchDialog> {
       await ref.read(alertsRepositoryProvider).createSavedSearch(
             module: widget.module,
             name: name,
-            query: widget.query,
+            query: _keywords,
             categoryId: widget.categoryId,
             minPrice: widget.minPrice,
             maxPrice: widget.maxPrice,
@@ -177,9 +195,30 @@ class _SaveSearchDialogState extends ConsumerState<SaveSearchDialog> {
             ],
             const SizedBox(height: 16),
             TextField(
+              controller: _keywordsController,
+              maxLength: 200,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Keywords to match',
+                hintText: 'e.g. hero cycle',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              onChanged: (k) => setState(() {
+                // Keep the name in step with the keywords until the user names it themselves.
+                if (!_nameEdited) {
+                  final summary = _summary == 'Everything new'
+                      ? 'All new ${widget.module.label.toLowerCase()}'
+                      : _summary.replaceAll('“', '').replaceAll('”', '');
+                  _nameController.text = summary.length > 80 ? summary.substring(0, 80) : summary;
+                }
+              }),
+            ),
+            const SizedBox(height: 8),
+            TextField(
               controller: _nameController,
               maxLength: 80,
-              autofocus: true,
+              onChanged: (_) => _nameEdited = true,
               decoration: const InputDecoration(
                 labelText: 'Name',
                 border: OutlineInputBorder(),

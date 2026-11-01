@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/utils/contact_actions.dart';
 import '../../../../core/utils/date_time_formatter.dart';
 import '../../../../core/widgets/no_photo_placeholder.dart';
+import '../../../../core/widgets/seller_trust_badge.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../../domain/buy_sell_item.dart';
 import '../../../messages/ui/messages_screen.dart';
 import 'buy_sell_detail_dialog.dart';
+import 'price_watch.dart';
 
 class BuySellGridCard extends StatefulWidget {
   final ListingItem item;
@@ -313,19 +315,30 @@ class _BuySellGridCardState extends State<BuySellGridCard> {
                               ),
                             ],
                           ),
-                          Text(
-                            '₹${item.price.toStringAsFixed(0)}',
-                            style: TextStyle(
-                              color: isSold
-                                  ? Colors.grey
-                                  : Theme.of(context).colorScheme.primary,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 18,
-                              letterSpacing: -0.5,
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '₹${item.price.toStringAsFixed(0)}',
+                                style: TextStyle(
+                                  color: isSold
+                                      ? Colors.grey
+                                      : Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                              if (item.negotiable) const NegotiableBadge(fontSize: 9),
+                            ],
                           ),
                         ],
                       ),
+                      if (item.sellerTrustTag != null) ...[
+                        const SizedBox(height: 6),
+                        SellerTrustBadge(tag: item.sellerTrustTag, fontSize: 9),
+                      ],
                       const SizedBox(height: 8),
 
                       // Message the seller (in-app chat) first; email and phone as small extras.

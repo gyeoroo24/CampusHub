@@ -76,8 +76,9 @@ abstract class ILostFoundRepository {
   /// Updates or renames an existing category.
   Future<CategoryRef> updateCategory(int id, String newName);
 
-  /// Deletes or removes a category.
-  Future<void> deleteCategory(int id);
+  /// Deletes a category (that module's moderators and the admin). If posts or saved searches use
+  /// it, they are moved to [moveTo]; without one the server answers 409 saying how many use it.
+  Future<void> deleteCategory(int id, {int? moveTo});
 
   /// Possible matches for one of the signed-in user's own reports, best first
   /// (`GET /{kind}-reports/{id}/matches`). Owners and admins only.

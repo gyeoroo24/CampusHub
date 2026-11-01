@@ -15,12 +15,12 @@ The user requested:
    - Allow an Admin user to easily toggle between **Mock In-Memory Data** and a **Live FastAPI Backend Server** running on a teammate's laptop or local machine, with zero app reloads or code recompilation required.
 2. **Comprehensive Connection Configuration Form:**
    - **FastAPI Server Base URL:** With quick presets for common demo targets:
-     - Teammate Laptop: `http://10.217.103.203:8000`
+     - Teammate Laptop: `http://<backend-ip>:8000`
      - Localhost: `http://localhost:8000`
      - Loopback IP: `http://127.0.0.1:8000`
-   - **Developer Secret Key (`X-Dev-Key`):** Allows entering the dev bypass key (e.g. `kSH3AyYRCzXn8Czy8xXCZbC9`) with show/hide password visibility toggle.
+   - **Developer Secret Key (`X-Dev-Key`):** Allows entering the dev bypass key (e.g. `<dev-key>`) with show/hide password visibility toggle.
    - **Test User Email Identity (`X-Dev-User`):** Injected into requests to allow testing as specific identities (e.g. `kmukund@iisc.ac.in` [Admin], `mukund@iisc.ac.in`, `cadithya@iisc.ac.in` [Moderator]).
-   - **Database Connection URI Reference:** For referencing the live PostgreSQL database (e.g. `postgresql://postgres:password@10.217.103.203:5432/campushub`).
+   - **Database Connection URI Reference:** For referencing the live PostgreSQL database (e.g. `postgresql://<user>:<password>@<backend-ip>:5432/campushub`).
 3. **Interactive Live Health & Connectivity Verification:**
    - A dedicated button that pings `<baseUrl>/health` (which verifies both the FastAPI HTTP server and the live PostgreSQL database via `SELECT 1`) and `<baseUrl>/api/v1/buy-sell/categories`.
    - Real-time diagnostic output showing roundtrip latency, HTTP status codes, and endpoint statuses.
@@ -28,7 +28,7 @@ The user requested:
    - When connection settings are saved, Riverpod providers (`serverConfigProvider`, `apiClientProvider`, `authRepositoryProvider`, `buySellRepositoryProvider`, `lostFoundRepositoryProvider`, `adminRepositoryProvider`) dynamically invalidate and rebind to the active backend.
 5. **Admin-Only Visibility & AppBar Status Badge:**
    - Non-admins and guests cannot see connection controls or backend details.
-   - For Admins, a prominent status badge in the top AppBar displays `[Mock Mode]` (in neutral grey/slate with amber indicator) or `[Live: 10.217.103.203:8000]` (in emerald green with green indicator). Tapping the badge opens the Backend Settings tab directly (`/admin?tab=4`).
+   - For Admins, a prominent status badge in the top AppBar displays `[Mock Mode]` (in neutral grey/slate with amber indicator) or `[Live: <backend-ip>:8000]` (in emerald green with green indicator). Tapping the badge opens the Backend Settings tab directly (`/admin?tab=4`).
 
 ---
 
@@ -74,7 +74,7 @@ Each feature repository provider now observes `serverConfigProvider`:
 - **Location:** [`CampusHub/frontend/lib/core/router/app_router.dart`](file:///media/mukund-kukreja/Vol%20M/Academics/MTech/CSA/sem-3/DS252-Cloud-Computing/Project/campus_hub/CampusHub/frontend/lib/core/router/app_router.dart)
 - Rendered in the top AppBar for Administrators:
   - If Mock: Amber circle with `Mock Mode`.
-  - If Live: Emerald green circle with `Live: 10.217.103.203:8000`.
+  - If Live: Emerald green circle with `Live: <backend-ip>:8000`.
   - Clicking this badge navigates straight to `/admin?tab=4` (`Backend & Health`).
   - `AdminControlsScreen` updated with optional `initialTab` parameter to facilitate direct deep linking from any route.
 

@@ -48,6 +48,12 @@ def strength(score: float | None) -> Literal["strong", "possible"] | None:
     return "strong" if score >= get_settings().match_strong else "possible"
 
 
+def get_nsfw_classifier():
+    """The obscene-photo model, or None where it isn't installed."""
+    from .nsfw import nsfw_classifier, nsfw_model_present
+    return nsfw_classifier(model_dir()) if nsfw_model_present(model_dir()) else None
+
+
 def get_embedder():
     from .models import onnx_embedder
     return onnx_embedder(model_dir())
@@ -74,6 +80,38 @@ async def _run_inline(kind: str, report_id: UUID) -> None:
         await run_one(kind, report_id, get_embedder())
     except Exception:  # noqa: BLE001 - never break the request; the backfill retries it
         log.exception("Matching failed for %s report %s", kind, report_id)
+
+
+async def _invoke_photo_screen(kind: str, item_id: UUID) -> None:
+    payload = json.dumps({"screen": kind, "id": str(item_id)}).encode()
+    try:
+        await asyncio.to_thread(_lambda_client().invoke, FunctionName=get_settings().match_function,
+                                InvocationType="Event", Payload=payload)
+    except Exception:  # noqa: BLE001 - the photos just go unchecked; a moderator report still works
+        log.exception("Could not start photo screening for %s %s", kind, item_id)
+
+
+async def _photo_screen_inline(kind: str, item_id: UUID) -> None:
+    classifier = get_nsfw_classifier()
+    if classifier is None:
+        return
+    from .photo_screen import run_photo_screen
+    try:
+        await run_photo_screen(kind, item_id, classifier)
+    except Exception:  # noqa: BLE001
+        log.exception("Photo screening failed for %s %s", kind, item_id)
+
+
+def request_photo_screen(background: BackgroundTasks, kind: str, item_id: UUID) -> None:
+    """Check a post's photos for obscene images after the response (future plan §1.6).
+    kind: listing, lost_report or found_report. Same modes as matching."""
+    if not get_settings().auto_flag:
+        return
+    mode = match_mode()
+    if mode == "lambda":
+        background.add_task(_invoke_photo_screen, kind, item_id)
+    elif mode == "inline":
+        background.add_task(_photo_screen_inline, kind, item_id)
 
 
 def request_match(background: BackgroundTasks, kind: str, report_id: UUID) -> None:

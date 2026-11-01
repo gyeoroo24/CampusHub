@@ -57,6 +57,10 @@ class NotificationsDialog extends ConsumerStatefulWidget {
         return Icons.forum_outlined;
       case 'chat_message':
         return Icons.chat_bubble_outline_rounded;
+      case 'listing_watch':
+        return Icons.trending_down_rounded;
+      case 'moderation_action':
+        return Icons.shield_outlined;
       default:
         return Icons.notifications_none_rounded;
     }

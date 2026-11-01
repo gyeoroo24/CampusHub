@@ -106,7 +106,16 @@ Adapting the pattern above to a small, low-frequency campus marketplace (most se
 - **Give the seller visibility + a lightweight appeal before anything public happens**, matching YouTube/TikTok: notify the seller when a strike lands, and let them contest it to a moderator before it counts toward the public tag (not before the private record — the record itself should be immediate and tamper-proof).
 - Exact numeric thresholds above (1/2/3) are a starting proposal, not final — intentionally kept simple since this is still an advisory plan, not an implementation.
 
-### 1.6 Automatic (proactive) flagging of illegal, spammy, or gibberish/obscene posts — Approved
+**Status (1 Nov 2026): built**, running locally against the real backend — `backend/app/seller_trust.py` (tag/threshold/hide logic), `backend/db/migrations/013_seller_trust.sql` + `014_reversible_listing_hide.sql` (schema), wired into `backend/app/routers/reports.py` (strike trigger), `backend/app/routers/listings.py` (tag display, hidden-listing visibility gating, posting suspension) and `backend/app/routers/seller_trust.py` (seller/moderator endpoints). Thresholds are `Settings.seller_strike_*` (`backend/app/config.py`), still the 1/severe, 2/negative, 3/blocked starting proposal from §1.5.2 above:
+
+- **Trigger**: only `POST /reports/{id}/resolve` with `remove_content=true` on a `listing` creates a strike — never the direct `DELETE /listings/{id}` a moderator or the seller themself can also call, and never a raw report. Resolving now requires a `severity` ('severe'/'non_severe') on a listing removal, enforced with a 422 if missing — a moderator-facing severity picker was added to the Reports Queue dialog (`frontend/lib/features/admin/ui/admin_controls_screen.dart`) for exactly this.
+- **Removal is reversible, not a delete — revised after first-pass feedback.** The first build soft-deleted the listing the same way any other moderation removal does (`deleted_at`), and only made the *strike* reversible (overturning it un-counted the strike but never brought the listing back). That was wrong: a report-driven removal now sets `listings.hidden_by_strike_id` instead of `deleted_at`. A hidden listing is invisible to everyone except its seller and a Buy & Sell moderator/admin (`GET /listings` and `GET /listings/{id}` check the real signed-in viewer, not just a query filter, so nobody can peek via `?seller_id=`) — and overturning the strike that hid it makes it visible to everyone again, exactly as asked. The pre-existing, unrelated `DELETE /listings/{id}` path (a seller removing their own listing, or a moderator acting outside the report flow) is untouched and stays a permanent soft-delete.
+- **Tag + suspension**: `seller_trust_tags()` computes 'negative'/'blocked' per seller from non-overturned strikes and is shown via `seller_trust_tag` on `ListingSummary`/`ListingDetail`, rendered by a shared `SellerTrustBadge` widget on the Buy & Sell grid card, list card and detail dialog (nothing for normal sellers — confirmed in the browser: 2 non-severe strikes → "Negative Seller" on every listing by that seller; 1 severe strike → "Blocked Seller" + `POST /listings` returns 403 for that seller). A moderator or admin can also lift a suspension directly (`POST /users/{id}/lift-listing-suspension`) without overturning the strike that caused it.
+- **Appeal, now with an explicit moderator decision either way.** A strike counts immediately (tamper-proof, never deleted) and the seller is notified in-app (`moderation_action` notification) right away. The seller can file one written appeal per strike (`POST /me/seller-strikes/{id}/appeal`) from the new "Seller strikes" screen (account menu → Seller strikes, `frontend/lib/features/seller_trust/`). A Buy & Sell moderator or admin then either **overturns** it (`POST /seller-strikes/{id}/overturn`: excludes the strike from the count, restores the listing, auto-lifts a suspension it caused) or **rejects the appeal** (`POST /seller-strikes/{id}/reject-appeal`: the strike stands and the listing stays hidden, but it drops out of the "needs review" queue). This is still simpler than gating public visibility behind an open appeal window the way §1.5.2's literal wording suggests — a strike is visible/counted from the moment it's recorded, not after a grace period — a deliberate trim, not an oversight.
+- **Moderator queue**: a new "Seller Strikes" tab in the admin/moderator panel (visible to admins and Buy & Sell moderators, next to "Reports Queue"), backed by `GET /seller-strikes?appeal_status=pending|resolved|none|all&seller_id=...`. It defaults to `pending` — strikes a seller has contested that nobody has reviewed yet — exactly the "moderator's view shows this listing is contested" the feedback asked for, with the seller's name, the listing (clickable through to its detail dialog even while hidden), the moderator's own original note, and the seller's appeal text all in one card.
+- **Verified locally** (curl + full browser walkthrough, both roles signed in): a report resolved with `remove_content` hides the listing (owner and moderator still see it, `hidden: true`; a third party gets 404, and it's gone from the public feed and from an outsider's `seller_id`-filtered search); the seller opens "Seller strikes," sees the hidden item and files an appeal; the moderator's "Seller Strikes" tab immediately shows it under PENDING with the seller's exact appeal text; clicking **Overturn** restores the listing (`hidden: false`, visible to everyone again) and clears the queue; a separate test confirmed **Reject appeal** instead keeps the listing hidden and moves the strike to the RESOLVED filter. Permission and double-submit guards also verified: a non-moderator gets 403 on overturn/reject, a non-owner gets 409 appealing someone else's strike, and rejecting an appeal that's already resolved gets 404.
+
+### 1.6 Automatic (proactive) flagging of illegal, spammy, or gibberish/obscene posts — Built (2 Nov 2026)
 
 **Problem, as specified by the user**: today, a bad post only reaches the moderator if another student notices it and files a report (§1.1's reporting feature, already built). That's reactive and relies on someone else doing the work. The user wants a *proactive* layer: the system itself should detect clearly-bad posts and push them into the moderator queue automatically, without waiting for a human to report them — explicitly called out cases: **(a)** someone selling something illegal (e.g. drugs), **(b)** someone spamming Buy & Sell / Lost & Found with repeated, not-really-relevant listings, **(c)** a listing with a gibberish title, **(d)** a listing with an obscene image.
 
@@ -124,6 +133,24 @@ Adapting the pattern above to a small, low-frequency campus marketplace (most se
 - For spam, gibberish, and obscene-image checks, auto-flag into the moderator queue but **leave the post visible** until a moderator actually acts — these are lower-stakes categories where an eager false positive would annoy a legitimate seller for no good reason.
 - Every real source surveyed agrees automated screening should stay paired with a human decision, not replace it — none of these checks should auto-delete anything outright; they only get a post in front of a moderator faster than waiting for a report. ([Foiwe — AI content moderation for marketplaces](https://www.foiwe.com/?p=30916))
 
+**Status (2 Nov 2026): built.** Code: `backend/app/screening.py` (text checks), `backend/app/matching/photo_screen.py` and `nsfw.py` (photos), migration `015`.
+
+- **Prohibited items (listings).** These are held, meaning hidden from everyone but the seller and moderators, until a moderator decides.
+  - **Text similarity:** the listing is compared with bge-small-en-v1.5, which the API already ships for category suggestion and which is stronger than MiniLM on short titles. It is compared against 16 prohibited-item descriptions, *and* against harmless look-alikes (water bottles, toy guns, kitchen knives, beer mugs, previous-year papers). It flags when the closest prohibited description scores ≥ 0.60 and beats the closest harmless one.
+  - **Keyword list:** a short list of unambiguous words (ganja, MDMA, vodka, pistol, …) flags on its own.
+  - **Calibration:** on 19 illegal titles and ~150 ordinary ones, similarity alone caught 15/19 and the word list caught the rest. No ordinary title was flagged, including "BB gun toy", "beer mug" and "kitchen knife set".
+- **Gibberish (title or description).** These rules need no model:
+  - keyboard runs such as asdf;
+  - the same letter three times;
+  - five consonants in a row;
+  - mostly non-words, judged against the 21,700 whole words in the bge tokenizer's vocabulary. Brands and names that can be pronounced pass.
+- **Spam.** The third near-identical post from the same person within 24 hours, or more than 8 posts in an hour.
+- **Obscene photos.** Uses Falconsai/nsfw_image_detection (ViT, Apache-2.0), the int8 ONNX build at 87 MB, which takes about 55 ms per photo. It runs after the response, in the matcher Lambda (or a background task locally). On 46 ordinary photos the highest score was 0.004, against a flag threshold of 0.8. It could not be tested on real obscene images, so its catch rate rests on the published accuracy.
+- **Routing.** Every flag is a report with `source = 'system'` (no reporter), shown with an AUTO label in the moderator queue. There is one open automatic report per item; a later check appends its reason.
+  - The owner is told when their post is flagged or held.
+  - A moderator's decision releases a hold. A confirmed removal of a listing is a seller-trust strike, as with any report.
+  - `CAMPUSHUB_AUTO_FLAG=false` turns flagging off.
+
 ---
 
 ## 2. Improvements to Existing Features
@@ -136,18 +163,42 @@ Adapting the pattern above to a small, low-frequency campus marketplace (most se
 
 Folded into §1.2 above — same embedding-based approach covers both the "new feature" (photo+description matching) and this "improvement" (moving off category-only matching).
 
-### 2.3 Buy & Sell: price-drop watch, with a "negotiable" signal — Approved, narrowed
+### 2.3 Buy & Sell: price-drop watch, with a "negotiable" signal — Built (2 Nov 2026)
 
 Originally proposed as two separate things (a 1–5 star course rating, and a watch-this-listing price-drop alert). Decision:
 
 - **Course star rating**: *"No need to add rating of 1-5 for course feedback right now. It can be in more future."* Parked.
 - **Price-drop watch**: keep this one. Additional requirement added: since buyers and sellers will often just negotiate instead of the seller formally dropping the listed price, the listing should support marking a price as **"Negotiable"** (a simple boolean/badge on the listing), separate from the watch/alert mechanism itself. A watcher should plausibly be notified either when the listed price actually changes, or when a listing they're watching gets marked negotiable.
 
-### 2.4 Auto-suggest category from listing title — Approved, with a stability constraint
+**Status (2 Nov 2026): built.**
+- **Negotiable:** listings have a `negotiable` flag, set by a checkbox when posting or editing. It shows as a "Negotiable" badge on cards and the listing.
+- **Watching:** "Watch price" on someone else's listing (`PUT`/`DELETE /listings/{id}/watch`). The account menu has "Watched listings" (`GET /me/watched-listings`).
+- **Who is notified:** watchers get a `listing_watch` notification when the price changes ("Price drop on "Hero Sprint": ₹4,000 → ₹3,200") or when the listing is marked negotiable. The seller is never notified, and nothing is sent once the listing is sold or hidden.
+
+### 2.4 Auto-suggest category from listing title — Built (1 Nov 2026)
 
 Decision: *"Based on the title, we can auto suggest a category... fine with me."* But with an important constraint: **it must not suggest a different new category every time** for similar titles — it should first check whether an **existing** category matches well, and only fall back to suggesting something else if nothing existing fits well.
 
 - Practical implication for the design: this should be implemented as **nearest-neighbor matching against the existing category set** (and ideally against existing listings/titles already tagged with each category), not as a generative/free-form classifier that can hallucinate a new label each time. This is naturally stable: the same title (or a near-duplicate) will always map to the same closest existing category, because it's doing a similarity lookup against a fixed, small label set rather than generating an answer from scratch. See §4.3 — this reuses the same text-embedding model as §1.2/§2.2, no separate model needed.
+
+**Status (1 Nov 2026): built** (`backend/app/categories_suggest.py`, `GET /buy-sell/categories/suggest` and `GET /lost-found/categories/suggest`). The Buy & Sell "Post Listing" dialog shows a "Suggested category" chip 500 ms after typing stops; the suggestion is never applied automatically.
+
+**Revised the same day.** The first version reused MiniLM on bare category names with a 0.2 threshold. It suggested "Bottle" for "plant" whenever no Plant category existed, because one-word labels sit close together in embedding space and 0.2 lets almost anything through. It was rebuilt after measuring the options on 87 labelled titles (`backend/scripts/calibrate_category_suggest.py`). The set includes titles that fit no category, and a run with two categories removed.
+
+| Approach | Top pick right | At its safest setting | Speed | Size |
+|---|---|---|---|---|
+| MiniLM, bare names (first version) | 56/79 | 23 right, 55 silent | 8 ms | 90 MB |
+| gte-small / arctic-embed-xs / MiniLM-L12 + listings | 63–69/79 | 50–53 right | 2–21 ms | 90–133 MB |
+| NLI re-ranker (xtremedistil zero-shot) | 61/79 | worse than without it | +3 ms | 13 MB |
+| **Qwen2.5-0.5B-Instruct names a category** (the "LLM + map to nearest" idea) | — | 47 right but **24 wrong**; "asdfgh" → Books | **~260 ms** | 833 MB |
+| **bge-small-en-v1.5 int8 + phrase + recent listings + margin (chosen)** | **71/79** | **55 right, 2 wrong**, silent on all 8 no-fit titles | **~3 ms** | **34 MB** |
+
+How the chosen approach scores a title:
+- **Category phrase:** the title is compared with "a <name> item for sale", not the bare name.
+- **Recent listings:** it is also compared with the closest of that category's 20 most recent listings (or Lost & Found reports), at 30% weight. This adapts as listings accumulate, with no retraining.
+- **Bar to suggest:** the best score must be at least 0.52 and lead the runner-up by 0.03 or more (`category_suggest_threshold` / `_margin`). Otherwise there is no suggestion.
+
+It runs in the API itself. Both API images fetch the model with `scripts/fetch_match_models.py --suggest-only`. The first request in a container takes about 0.35 s to load the model and embed recent listings; later requests take about 6 ms. Without the model, the endpoint returns `{"category": null}`.
 
 ---
 
@@ -186,9 +237,11 @@ Five distinct pieces of "intelligence" are in scope across the approved items: (
 
 Caveat: these are vendor/community-reported numbers, not measured on CampusHub's own infrastructure. Before building, worth a 30-minute local benchmark (run both models on ~20 real report photos/descriptions on the actual deployment hardware) to confirm the latency holds up, per the user's condition that this only proceeds if latency stays low.
 
-### 4.3 Category auto-suggestion — no new model needed
+### 4.3 Category auto-suggestion — no new model needed — Built (1 Nov 2026)
 
 Reuses `all-MiniLM-L6-v2` from §4.2: embed the typed title, compare against embeddings of existing category labels (and/or existing listing titles already tagged per category), and suggest the nearest existing category above a similarity threshold. Only if nothing clears the threshold would it fall back to no-suggestion (never to inventing a new category name) — this directly satisfies the "don't suggest a different new category every time" requirement, since nearest-neighbor lookup against a fixed label set is deterministic for a given title, unlike a generative classifier.
+
+**Superseded (1 Nov 2026):** MiniLM on bare labels proved too weak for one-word category names. Category suggestion now uses bge-small-en-v1.5 (int8, 34 MB) with category phrases, recent listings and a margin rule; see §2.4 for the measurements.
 
 ### 4.4 Automatic flagging (§1.6) — models for the two checks that need one
 
@@ -219,12 +272,12 @@ So the realistic footprint is now **4 small models total** (one text-embedding m
 | Lost & Found description matching (lost **and** found) | Built (1 Nov) | all-MiniLM-L6-v2, any category; alerts only strong matches, §1.2 |
 | Claim-verification step | Deferred | Revisit if abuse becomes a problem |
 | Per-instructor reviews / follow list | Deferred | "Maybe in the future" |
-| Seller trust score / "Negative Seller" tag | Approved | No SLM — moderator-removal counter, §1.5 |
+| Seller trust score / "Negative Seller" tag | Built (1 Nov) | No SLM — moderator-removal counter + posting suspension; removal reversibly hides the listing, with a seller appeal screen and a moderator contested-queue tab, §1.5 |
 | Sentiment model (replace lexicon) | Approved | deberta-v3-xsmall recommended, §4.1 |
-| Price-drop watch | Approved | + add "Negotiable" listing badge |
+| Price-drop watch | Built (2 Nov) | Watch price + "Negotiable" badge, §2.3 |
 | Course 1–5 star rating | Deferred | "More future" |
-| Category auto-suggest from title | Approved | Nearest-existing-category only, reuses MiniLM, §4.3 |
-| Automatic flagging (illegal items, spam, gibberish, obscene images) | Approved | Feeds the existing report queue + §1.5 strikes, §1.6 |
+| Category auto-suggest from title | Built (1 Nov) | bge-small-en-v1.5 int8 (34 MB) in the API; Buy & Sell form only so far, §2.4 |
+| Automatic flagging (illegal items, spam, gibberish, obscene images) | Built (2 Nov) | bge-small + harmless anchors + word list; heuristics; NSFW ViT int8 in the matcher Lambda, §1.6 |
 | Single SLM vs. multiple | Analyzed | 4 small models total, one reused across 3 features — §4.5 |
 
 ---

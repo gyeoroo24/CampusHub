@@ -7,6 +7,10 @@ WORKDIR /srv
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt "uvicorn[standard]==0.34.0"
 
+# The category-suggestion model (34 MB; app/categories_suggest.py), checksum-checked.
+COPY scripts/fetch_match_models.py /tmp/
+RUN python /tmp/fetch_match_models.py --suggest-only /srv/models && rm /tmp/fetch_match_models.py
+
 COPY app ./app
 
 EXPOSE 8000

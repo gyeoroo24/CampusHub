@@ -142,6 +142,7 @@ class ApiBuySellRepository implements IBuySellRepository {
     double? price,
     int? categoryId,
     String? location,
+    bool? negotiable,
   }) async {
     final payload = <String, dynamic>{};
     if (title != null) payload['title'] = title;
@@ -149,6 +150,7 @@ class ApiBuySellRepository implements IBuySellRepository {
     if (price != null) payload['price'] = price;
     if (categoryId != null) payload['category_id'] = categoryId;
     if (location != null) payload['location'] = location;
+    if (negotiable != null) payload['negotiable'] = negotiable;
 
     final response = await apiClient.patch(
       ApiEndpoints.listing(id),
@@ -157,6 +159,22 @@ class ApiBuySellRepository implements IBuySellRepository {
 
     final data = response.data as Map<String, dynamic>;
     return BuySellListingDto.fromJson(data).toDomain();
+  }
+
+  @override
+  Future<void> setWatching(String id, bool watching) async {
+    if (watching) {
+      await apiClient.put(ApiEndpoints.listingWatch(id));
+    } else {
+      await apiClient.delete(ApiEndpoints.listingWatch(id));
+    }
+  }
+
+  @override
+  Future<List<ListingItem>> fetchWatchedListings() async {
+    final response = await apiClient.get(ApiEndpoints.myWatchedListings, queryParameters: {'limit': 50});
+    final items = (response.data as Map<String, dynamic>)['items'] as List? ?? const [];
+    return items.map((j) => BuySellListingDto.fromJson(j as Map<String, dynamic>).toDomain()).toList();
   }
 
   @override
@@ -176,11 +194,12 @@ class ApiBuySellRepository implements IBuySellRepository {
   }
 
   @override
-  Future<void> deleteListing(String id, {String? reason}) async {
+  Future<void> deleteListing(String id, {String? reason, String? severity}) async {
     final queryParams = <String, dynamic>{};
     if (reason != null && reason.trim().isNotEmpty) {
       queryParams['reason'] = reason.trim();
     }
+    if (severity != null) queryParams['severity'] = severity;
 
     await apiClient.delete(
       ApiEndpoints.listing(id),
@@ -209,16 +228,30 @@ class ApiBuySellRepository implements IBuySellRepository {
     return CategoryRef.fromJson(response.data as Map<String, dynamic>);
   }
 
-  // The API has no rename or delete for categories (only list and add), so say so rather than
-  // reporting a success that never happened. Mock mode still supports both.
+  @override
+  Future<CategoryRef?> suggestCategory(String title) async {
+    if (title.trim().isEmpty) return null;
+    final response = await apiClient.get(
+      ApiEndpoints.buySellCategorySuggest,
+      queryParameters: {'title': title.trim()},
+    );
+    final category = (response.data as Map<String, dynamic>)['category'];
+    return category == null ? null : CategoryRef.fromJson(category as Map<String, dynamic>);
+  }
+
+  // The API has no rename for categories, so say so rather than reporting a success that never
+  // happened. Mock mode still supports it.
   @override
   Future<CategoryRef> updateCategory(int id, String newName) async {
     throw Exception("The server doesn't support renaming categories yet.");
   }
 
   @override
-  Future<void> deleteCategory(int id) async {
-    throw Exception("The server doesn't support deleting categories yet.");
+  Future<void> deleteCategory(int id, {int? moveTo}) async {
+    await apiClient.delete(
+      '${ApiEndpoints.buySellCategories}/$id',
+      queryParameters: {if (moveTo != null) 'move_to': moveTo},
+    );
   }
 
 }

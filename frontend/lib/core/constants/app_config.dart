@@ -12,7 +12,7 @@ class AppConfig {
   );
   static const String defaultDevKey = String.fromEnvironment(
     'DEV_KEY',
-    defaultValue: 'kSH3AyYRCzXn8Czy8xXCZbC9',
+    defaultValue: '',
   );
 
   /// Active runtime values (can be updated at runtime by Admin via Live Demo Connection controls)

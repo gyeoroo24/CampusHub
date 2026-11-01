@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/category_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/models/category_ref.dart';
 import '../../domain/lost_found_item.dart';
@@ -105,10 +106,9 @@ class _EditReportDialogState extends ConsumerState<EditReportDialog> {
                         ? matchingCategory.first
                         : (cats.isNotEmpty ? cats.first : _selectedCategory);
 
-                    return DropdownButtonFormField<CategoryRef>(
-                      initialValue: currentValue,
-                      decoration: const InputDecoration(labelText: 'Category *'),
-                      items: cats.map((c) => DropdownMenuItem(value: c, child: Text(c.name))).toList(),
+                    return CategoryPicker(
+                      categories: cats,
+                      value: currentValue,
                       onChanged: (val) => setState(() => _selectedCategory = val),
                     );
                   },
@@ -116,13 +116,9 @@ class _EditReportDialogState extends ConsumerState<EditReportDialog> {
                     padding: EdgeInsets.symmetric(vertical: 8.0),
                     child: LinearProgressIndicator(),
                   ),
-                  error: (_, __) => DropdownButtonFormField<CategoryRef>(
-                    initialValue: _selectedCategory,
-                    decoration: const InputDecoration(labelText: 'Category *'),
-                    items: [
-                      if (_selectedCategory != null)
-                        DropdownMenuItem(value: _selectedCategory, child: Text(_selectedCategory!.name)),
-                    ],
+                  error: (_, __) => CategoryPicker(
+                    categories: [if (_selectedCategory != null) _selectedCategory!],
+                    value: _selectedCategory,
                     onChanged: (val) => setState(() => _selectedCategory = val),
                   ),
                 ),

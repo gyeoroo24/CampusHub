@@ -15,6 +15,10 @@ class BuySellListingDto {
   final String? location;
   final CategoryRef category;
   final UserRef seller;
+  final String? sellerTrustTag;
+  final bool negotiable;
+  final bool heldForReview;
+  final bool watching;
   final String? coverPhotoUrl;
   final List<Photo> photos;
   final Contact? sellerContact;
@@ -30,6 +34,10 @@ class BuySellListingDto {
     this.location,
     required this.category,
     required this.seller,
+    this.sellerTrustTag,
+    this.negotiable = false,
+    this.heldForReview = false,
+    this.watching = false,
     this.coverPhotoUrl,
     this.photos = const [],
     this.sellerContact,
@@ -116,6 +124,10 @@ class BuySellListingDto {
       location: json['location']?.toString(),
       category: parsedCategory,
       seller: parsedSeller,
+      sellerTrustTag: json['seller_trust_tag']?.toString(),
+      negotiable: json['negotiable'] == true,
+      heldForReview: json['held_for_review'] == true,
+      watching: json['watching'] == true,
       coverPhotoUrl: coverUrl,
       photos: parsedPhotos,
       sellerContact: parsedContact,
@@ -138,6 +150,10 @@ class BuySellListingDto {
       location: location ?? '',
       category: category,
       seller: seller,
+      sellerTrustTag: sellerTrustTag,
+      negotiable: negotiable,
+      heldForReview: heldForReview,
+      watching: watching,
       coverPhotoUrl: coverPhotoUrl,
       photos: photos,
       sellerContact: sellerContact,
@@ -156,6 +172,10 @@ class BuySellListingDto {
       location: item.location,
       category: item.category,
       seller: item.seller,
+      sellerTrustTag: item.sellerTrustTag,
+      negotiable: item.negotiable,
+      heldForReview: item.heldForReview,
+      watching: item.watching,
       coverPhotoUrl: item.coverPhotoUrl,
       photos: item.photos,
       sellerContact: item.sellerContact,
@@ -171,6 +191,7 @@ class BuySellListingDto {
       'price': price,
       'category_id': category.id,
       'location': location?.isNotEmpty == true ? location : null,
+      'negotiable': negotiable,
       'photo_keys': photoKeys.isNotEmpty
           ? photoKeys
           : photos.map((p) => p.s3Key).where((k) => k.isNotEmpty).toList(),
@@ -184,6 +205,7 @@ class BuySellListingDto {
       'price': price,
       'category_id': category.id,
       'location': location,
+      'negotiable': negotiable,
     };
   }
 
@@ -197,6 +219,10 @@ class BuySellListingDto {
       'location': location,
       'category': category.toJson(),
       'seller': seller.toJson(),
+      if (sellerTrustTag != null) 'seller_trust_tag': sellerTrustTag,
+      'negotiable': negotiable,
+      'held_for_review': heldForReview,
+      'watching': watching,
       'cover_photo_url': coverPhotoUrl,
       'photos': photos.map((p) => p.toJson()).toList(),
       if (sellerContact != null) 'seller_contact': sellerContact!.toJson(),

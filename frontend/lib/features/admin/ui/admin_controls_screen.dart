@@ -15,12 +15,14 @@ import '../../campus_services/ui/campus_services_admin_panel.dart';
 import '../../lost_found/domain/lost_found_item.dart';
 import '../../lost_found/providers/lost_found_providers.dart';
 import '../../lost_found/ui/widgets/lost_found_detail_dialog.dart';
+import '../../seller_trust/domain/seller_strike.dart';
+import '../../seller_trust/providers/seller_trust_providers.dart';
 import '../domain/content_report.dart';
 import '../providers/admin_providers.dart';
 import 'moderator_grants_panel.dart';
 
 /// The panel's tabs. The admin sees all of them; a moderator sees only the ones they can use.
-enum _PanelTab { moderators, users, reports, categories, health, campusServices }
+enum _PanelTab { moderators, users, reports, sellerStrikes, categories, health, campusServices }
 
 class AdminControlsScreen extends ConsumerStatefulWidget {
   final int? initialTab;
@@ -71,6 +73,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
         ? _PanelTab.values
         : [
             _PanelTab.reports,
+            if (user != null && user.canModerateBuySell) _PanelTab.sellerStrikes,
             if (user != null && (user.canModerateBuySell || user.canModerateLostFound)) _PanelTab.categories,
             if (user != null && user.isDepartmentModerator) _PanelTab.moderators,
           ];
@@ -95,7 +98,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
     _devKeyController = TextEditingController(text: config.devKey);
     _devUserEmailController = TextEditingController(text: config.devUserEmail);
     _databaseUrlController = TextEditingController(
-      text: config.databaseUrl ?? 'postgresql://postgres:password@10.217.103.203:5432/campushub',
+      text: config.databaseUrl ?? '',
     );
   }
 
@@ -283,6 +286,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
           ),
         _PanelTab.users => const Tab(icon: Icon(Icons.manage_accounts_outlined, size: 18), text: 'User Accounts'),
         _PanelTab.reports => const Tab(icon: Icon(Icons.report_gmailerrorred_rounded, size: 18), text: 'Reports Queue'),
+        _PanelTab.sellerStrikes => const Tab(icon: Icon(Icons.gavel_outlined, size: 18), text: 'Seller Strikes'),
         _PanelTab.categories => const Tab(icon: Icon(Icons.category_outlined, size: 18), text: 'Categories'),
         _PanelTab.health => const Tab(icon: Icon(Icons.dns_outlined, size: 18), text: 'Backend & Health'),
         _PanelTab.campusServices =>
@@ -293,6 +297,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
         _PanelTab.moderators => const ModeratorGrantsPanel(),
         _PanelTab.users => _buildUsersTab(isDark, theme),
         _PanelTab.reports => _buildReportsQueueTab(isDark, theme),
+        _PanelTab.sellerStrikes => _buildSellerStrikesTab(isDark, theme),
         _PanelTab.categories => _buildCategoriesTab(isDark, theme),
         _PanelTab.health => _buildSystemHealthTab(isDark, theme),
         _PanelTab.campusServices => CampusServicesAdminPanel(isAdmin: user.isAdmin),
@@ -690,12 +695,31 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
                                       ),
                                     ),
                                   ),
+                                  if (r.source == 'system') ...[
+                                    const SizedBox(width: 6),
+                                    Tooltip(
+                                      message: 'Flagged automatically, not by a person',
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: Colors.purple.shade50,
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text('AUTO',
+                                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.purple.shade700)),
+                                      ),
+                                    ),
+                                  ],
                                   const SizedBox(width: 8),
-                                  Text(
-                                    '${r.module.toUpperCase()} • Target: ${r.targetType}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  Flexible(
+                                    child: Text(
+                                      '${_moduleLabel(r.module)} • ${r.targetTitle ?? r.targetType}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    ),
                                   ),
-                                  const Spacer(),
+                                  const SizedBox(width: 8),
                                   Text(
                                     DateTimeFormatter.timeAgo(r.createdAt),
                                     style: TextStyle(fontSize: 11, color: theme.hintColor),
@@ -720,18 +744,18 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
                                     runSpacing: 8,
                                     children: [
                                       OutlinedButton(
-                                        onPressed: () => _handleResolveReport(r.id, action: 'dismissed', removeContent: false),
+                                        onPressed: () => _handleResolveReport(r, action: 'dismissed', removeContent: false),
                                         child: const Text('Dismiss Flag'),
                                       ),
                                       OutlinedButton(
-                                        onPressed: () => _handleResolveReport(r.id, action: 'actioned', removeContent: false),
+                                        onPressed: () => _handleResolveReport(r, action: 'actioned', removeContent: false),
                                         child: const Text('Action (Keep Content)'),
                                       ),
                                       FilledButton.icon(
                                         style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
                                         icon: const Icon(Icons.delete_sweep_rounded, size: 16),
                                         label: const Text('Action & Soft-Delete'),
-                                        onPressed: () => _handleResolveReport(r.id, action: 'actioned', removeContent: true),
+                                        onPressed: () => _handleResolveReport(r, action: 'actioned', removeContent: true),
                                       ),
                                     ],
                                   ),
@@ -754,6 +778,14 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
       ),
     );
   }
+
+  static String _moduleLabel(String module) => switch (module) {
+        'buy_sell' => 'BUY & SELL',
+        'lost_found' => 'LOST & FOUND',
+        'academic_help' => 'ACADEMIC HELP',
+        'placement_hub' => 'PLACEMENT HUB',
+        _ => module.toUpperCase(),
+      };
 
   /// Opens whatever a report points at, so a moderator can see the actual content before acting.
   Future<void> _openReportTarget(ContentReport r) async {
@@ -783,46 +815,71 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
     }
   }
 
-  Future<void> _handleResolveReport(String id, {required String action, required bool removeContent}) async {
+  Future<void> _handleResolveReport(ContentReport r, {required String action, required bool removeContent}) async {
     final noteController = TextEditingController();
+    // Removing a listing needs a severity call for the seller trust score (future plan §1.5):
+    // severe (illegal item) blocks the seller immediately; non-severe builds toward a strike ladder.
+    final needsSeverity = removeContent && r.targetType == 'listing';
+    String severity = 'non_severe';
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Resolve Content Report ($action)'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(removeContent
-                ? 'Resolving with action=actioned will soft-delete the reported content from the campus feeds.'
-                : 'Closing report as $action.'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: noteController,
-              decoration: const InputDecoration(
-                labelText: 'Resolution Audit Note (Optional)',
-                border: OutlineInputBorder(),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text('Resolve Content Report ($action)'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(removeContent
+                  ? 'Resolving with action=actioned will soft-delete the reported content from the campus feeds.'
+                  : 'Closing report as $action.'),
+              if (needsSeverity) ...[
+                const SizedBox(height: 12),
+                const Text('Seller trust severity (future plan §1.5):',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                const SizedBox(height: 6),
+                _SeverityOption(
+                  title: 'Non-severe — builds toward the strike ladder',
+                  subtitle: 'Prohibited-but-not-dangerous, scammy, duplicate, misleading',
+                  selected: severity == 'non_severe',
+                  onTap: () => setDialogState(() => severity = 'non_severe'),
+                ),
+                _SeverityOption(
+                  title: 'Severe — blocks the seller immediately',
+                  subtitle: 'Illegal items: drugs, weapons, anything law-enforcement-relevant',
+                  selected: severity == 'severe',
+                  onTap: () => setDialogState(() => severity = 'severe'),
+                ),
+              ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: noteController,
+                decoration: const InputDecoration(
+                  labelText: 'Resolution Audit Note (Optional)',
+                  border: OutlineInputBorder(),
+                ),
               ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Confirm Resolution'),
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirm Resolution'),
-          ),
-        ],
       ),
     );
 
     if (confirm == true) {
       try {
         await ref.read(adminRepositoryProvider).resolveReport(
-              id,
+              r.id,
               action: action,
               note: noteController.text.trim(),
               removeContent: removeContent,
+              severity: needsSeverity ? severity : null,
             );
         ref.invalidate(contentReportsProvider);
         _showToast('Report marked as $action.');
@@ -830,6 +887,86 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
         _showToast('Failed to resolve report: ${errorText(e)}', isError: true);
       }
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // TAB: Seller Strikes (future plan §1.5) - the contested-appeal queue, plus the full history.
+  // ---------------------------------------------------------------------------
+  Widget _buildSellerStrikesTab(bool isDark, ThemeData theme) {
+    final strikesAsync = ref.watch(moderatedSellerStrikesProvider);
+    final filter = ref.watch(sellerStrikesFilterProvider);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 880),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text('Appeal:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(width: 8),
+                  for (final f in const ['pending', 'resolved', 'none', 'all']) ...[
+                    ChoiceChip(
+                      label: Text(f.toUpperCase()),
+                      selected: filter == f,
+                      onSelected: (sel) {
+                        if (sel) ref.read(sellerStrikesFilterProvider.notifier).state = f;
+                      },
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                filter == 'pending'
+                    ? 'Strikes a seller has contested that nobody has reviewed yet.'
+                    : 'Every strike matching this filter, newest first.',
+                style: TextStyle(fontSize: 11, color: theme.hintColor),
+              ),
+              const SizedBox(height: 16),
+              strikesAsync.when(
+                data: (strikes) {
+                  if (strikes.isEmpty) {
+                    return Container(
+                      padding: const EdgeInsets.all(32),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.check_circle_outline_rounded, size: 40, color: Colors.green.shade600),
+                          const SizedBox(height: 8),
+                          Text(
+                            filter == 'pending' ? 'No strikes need your attention.' : 'Nothing in this view.',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  return ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: strikes.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, idx) => _SellerStrikeCard(strike: strikes[idx], isDark: isDark),
+                  );
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Text('Error loading strikes: ${errorText(e)}', style: const TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -956,10 +1093,13 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
                 children: [
                   const Text('Active Buy & Sell Categories', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   const SizedBox(width: 8),
-                  if (canManageBuySell)
-                    Text('(tap chip to rename, ✕ to delete)', style: TextStyle(fontSize: 11, color: theme.hintColor))
-                  else
-                    Text('(read-only for non-moderators)', style: TextStyle(fontSize: 11, color: theme.hintColor)),
+                  Flexible(
+                    child: Text(
+                      canManageBuySell ? '(tap chip to rename, ✕ to delete)' : '(read-only for non-moderators)',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11, color: theme.hintColor),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -995,10 +1135,13 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
                 children: [
                   const Text('Active Lost & Found Categories', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   const SizedBox(width: 8),
-                  if (canManageLostFound)
-                    Text('(tap chip to rename, ✕ to delete)', style: TextStyle(fontSize: 11, color: theme.hintColor))
-                  else
-                    Text('(read-only for non-moderators)', style: TextStyle(fontSize: 11, color: theme.hintColor)),
+                  Flexible(
+                    child: Text(
+                      canManageLostFound ? '(tap chip to rename, ✕ to delete)' : '(read-only for non-moderators)',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11, color: theme.hintColor),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -1104,36 +1247,74 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
 
   Future<void> _confirmDeleteCategory(String module, CategoryRef cat) async {
     final cleanName = CategoryEmojiHelper.cleanName(cat.name);
+    final isBuySell = module == 'buy_sell';
+    final others = ((isBuySell ? ref.read(buySellCategoriesProvider) : ref.read(lostFoundCategoriesProvider))
+                .valueOrNull ??
+            const <CategoryRef>[])
+        .where((c) => c.id != cat.id)
+        .toList();
+    int? moveTo;
+    // Posts can't be left without a category: if any use this one, the server asks where to move
+    // them (409), so the moderator picks a destination here up front.
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Delete Category "$cleanName"?'),
-        content: Text(
-          'Are you sure you want to remove "$cleanName" from ${module == 'buy_sell' ? 'Buy & Sell' : 'Lost & Found'} categories?\n\nExisting postings with this category will remain, but users will no longer be able to select it for new listings.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete Category'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text('Delete Category "$cleanName"?'),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('"$cleanName" will be removed from ${isBuySell ? 'Buy & Sell' : 'Lost & Found'} categories. '
+                    'If any posts or saved searches use it, they are moved to the category you pick below.'),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<int?>(
+                  initialValue: moveTo,
+                  menuMaxHeight: 320,
+                  decoration: const InputDecoration(
+                    labelText: 'Move its posts to',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: [
+                    const DropdownMenuItem<int?>(value: null, child: Text('— Only if nothing uses it —')),
+                    for (final c in others)
+                      DropdownMenuItem<int?>(value: c.id, child: Text(CategoryEmojiHelper.cleanName(c.name))),
+                  ],
+                  onChanged: (v) => setDialogState(() => moveTo = v),
+                ),
+              ],
+            ),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete Category'),
+            ),
+          ],
+        ),
       ),
     );
 
     if (confirm == true) {
       try {
-        if (module == 'buy_sell') {
-          await ref.read(buySellRepositoryProvider).deleteCategory(cat.id);
+        if (isBuySell) {
+          await ref.read(buySellRepositoryProvider).deleteCategory(cat.id, moveTo: moveTo);
           ref.invalidate(buySellCategoriesProvider);
         } else {
-          await ref.read(lostFoundRepositoryProvider).deleteCategory(cat.id);
+          await ref.read(lostFoundRepositoryProvider).deleteCategory(cat.id, moveTo: moveTo);
           ref.invalidate(lostFoundCategoriesProvider);
         }
-        _showToast('Deleted category "$cleanName".');
+        _showToast(moveTo == null
+            ? 'Deleted category "$cleanName".'
+            : 'Deleted "$cleanName" and moved its posts to '
+                '"${CategoryEmojiHelper.cleanName(others.firstWhere((c) => c.id == moveTo).name)}".');
       } catch (e) {
-        _showToast('Failed to delete category: ${errorText(e)}', isError: true);
+        _showToast('Could not delete "$cleanName": ${errorText(e)}', isError: true);
       }
     }
   }
@@ -1358,7 +1539,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
               controller: _baseUrlController,
               decoration: InputDecoration(
                 labelText: 'FastAPI Server Base URL',
-                hintText: 'e.g. http://10.217.103.203:8000',
+                hintText: 'e.g. http://localhost:8000',
                 prefixIcon: const Icon(Icons.dns_rounded, size: 18),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -1373,16 +1554,6 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text('Quick presets:', style: TextStyle(fontSize: 11, color: theme.hintColor)),
-                ActionChip(
-                  label: const Text('Teammate Laptop (10.217.103.203:8000)', style: TextStyle(fontSize: 11)),
-                  avatar: const Icon(Icons.laptop_chromebook_rounded, size: 14),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () {
-                    setState(() {
-                      _baseUrlController.text = 'http://10.217.103.203:8000';
-                    });
-                  },
-                ),
                 ActionChip(
                   label: const Text('Localhost (localhost:8000)', style: TextStyle(fontSize: 11)),
                   avatar: const Icon(Icons.computer_rounded, size: 14),
@@ -1413,7 +1584,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
               obscureText: _obscureDevKey,
               decoration: InputDecoration(
                 labelText: 'Developer Security Key / Secret (X-Dev-Key)',
-                hintText: 'e.g. kSH3AyYRCzXn8Czy8xXCZbC9',
+                hintText: 'e.g. the team key from your teammate',
                 prefixIcon: const Icon(Icons.vpn_key_rounded, size: 18),
                 suffixIcon: IconButton(
                   icon: Icon(_obscureDevKey ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
@@ -1470,7 +1641,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
               controller: _databaseUrlController,
               decoration: InputDecoration(
                 labelText: 'Database Connection URI (Demo Reference)',
-                hintText: 'postgresql://postgres:password@10.217.103.203:5432/campushub',
+                hintText: 'postgresql://<user>:<password>@<host>:5432/campushub',
                 prefixIcon: const Icon(Icons.storage_rounded, size: 18),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -1674,7 +1845,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
       await ref.read(serverConfigProvider.notifier).updateConfig(
             useMockData: _useMockMode,
             apiBaseUrl: baseUrl.isNotEmpty ? baseUrl : 'http://localhost:8000',
-            devKey: devKey.isNotEmpty ? devKey : 'kSH3AyYRCzXn8Czy8xXCZbC9',
+            devKey: devKey.isNotEmpty ? devKey : '',
             devUserEmail: devEmail.isNotEmpty ? devEmail : 'mukund@iisc.ac.in',
             databaseUrl: dbUrl.isNotEmpty ? dbUrl : null,
           );
@@ -1731,6 +1902,191 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
         content: Text(msg),
         backgroundColor: isError ? Colors.red.shade700 : Colors.teal.shade700,
         behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
+
+/// A tappable severity choice for the seller-trust strike dialog, in place of the deprecated
+/// RadioListTile group-value API.
+class _SeverityOption extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _SeverityOption({
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                size: 18, color: selected ? primary : Colors.grey),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: TextStyle(fontSize: 13, fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
+                  Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One strike in the moderator's Seller Strikes tab: what was removed, the seller's appeal if
+/// any, and the two actions that resolve it (future plan §1.5).
+class _SellerStrikeCard extends ConsumerStatefulWidget {
+  final SellerStrike strike;
+  final bool isDark;
+  const _SellerStrikeCard({required this.strike, required this.isDark});
+
+  @override
+  ConsumerState<_SellerStrikeCard> createState() => _SellerStrikeCardState();
+}
+
+class _SellerStrikeCardState extends ConsumerState<_SellerStrikeCard> {
+  bool _isBusy = false;
+
+  Future<void> _run(Future<void> Function() action, String successMessage) async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _isBusy = true);
+    try {
+      await action();
+      ref.invalidate(moderatedSellerStrikesProvider);
+      messenger.showSnackBar(SnackBar(content: Text(successMessage), behavior: SnackBarBehavior.floating));
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed: ${errorText(e)}'), backgroundColor: Colors.red.shade700),
+      );
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _openListing() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final item = await ref.read(buySellRepositoryProvider).getListingById(widget.strike.listingId);
+      if (!mounted) return;
+      if (item == null) throw Exception('This listing could not be found.');
+      await showDialog(context: context, builder: (_) => BuySellDetailDialog(item: item));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(errorText(e)), behavior: SnackBarBehavior.floating));
+    }
+  }
+
+  Widget _chip(String label, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.strike;
+    final theme = Theme.of(context);
+    final severityColor = s.isSevere ? Colors.red.shade700 : Colors.orange.shade800;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: widget.isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: _openListing,
+                    child: Text(s.listingTitle,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 14, decoration: TextDecoration.underline)),
+                  ),
+                ),
+                Text(DateTimeFormatter.timeAgo(s.createdAt), style: TextStyle(fontSize: 11, color: theme.hintColor)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text('Seller: ${s.seller.name}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _chip(s.isSevere ? 'Severe' : 'Non-severe', severityColor),
+                if (s.listingHidden) _chip('Listing hidden', Colors.grey.shade700),
+                if (s.excluded) _chip('Overturned', Colors.green.shade700),
+              ],
+            ),
+            if (s.moderatorNote != null && s.moderatorNote!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('Moderator note: ${s.moderatorNote}', style: TextStyle(fontSize: 12, color: theme.hintColor)),
+            ],
+            if (s.appealMessage != null) ...[
+              const Divider(height: 20),
+              Text("Seller's appeal:",
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: theme.hintColor)),
+              const SizedBox(height: 2),
+              Text(s.appealMessage!, style: const TextStyle(fontSize: 13)),
+            ],
+            if (!s.excluded) ...[
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Wrap(
+                  spacing: 8,
+                  children: [
+                    if (s.appealStatus == AppealStatus.pending)
+                      OutlinedButton(
+                        onPressed: _isBusy
+                            ? null
+                            : () => _run(() => ref.read(sellerTrustRepositoryProvider).rejectAppeal(s.id),
+                                'Appeal rejected; the strike stands.'),
+                        child: const Text('Reject appeal'),
+                      ),
+                    FilledButton.icon(
+                      icon: const Icon(Icons.undo_rounded, size: 16),
+                      label: const Text('Overturn (restore listing)'),
+                      onPressed: _isBusy
+                          ? null
+                          : () => _run(() => ref.read(sellerTrustRepositoryProvider).overturnStrike(s.id),
+                              'Strike overturned; the listing is visible again.'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

@@ -1,10 +1,37 @@
 -- ============================================================================
--- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 12
+-- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 15
 -- DS252 Introduction to Cloud Computing — Team "Order of Phoenix"
 --
 -- Permission modules (FR-2, NFR-6): buy_sell, lost_found, academic_help,
 -- placement_hub. Community Events is a feature, not a permission module:
 -- it has no module moderators (creator + admins manage events).
+--
+-- Changes from rev. 14 (automatic flagging and price watch, 2 Nov 2026):
+--   1. reports.source ('user' or 'system') and reporter_id nullable for system flags (future
+--      plan §1.6); one open system flag per item (uq_reports_one_open_system).
+--   2. listings.held_for_review_at: an automatically flagged listing held back until a moderator
+--      decides; listings.negotiable (future plan §2.3).
+--   3. listing_watches and notification type listing_watch: price changes / marked negotiable.
+--   Upgrade: db/migrations/015_auto_flags_and_price_watch.sql.
+--
+-- Changes from rev. 13 (reversible listing hide + appeal review, 1 Nov 2026):
+--   1. listings.hidden_by_strike_id: a report-driven removal (future plan §1.5) now hides the
+--      listing instead of soft-deleting it — visible only to the seller and a Buy & Sell
+--      moderator/admin until the strike is overturned (restores it) or the appeal is rejected
+--      (stays hidden). A direct DELETE /listings/{id} is unaffected and still permanent.
+--   2. seller_strikes.appeal_resolved_at/by: lets a moderator explicitly reject an appeal
+--      (distinct from overturning it), so it drops out of the "needs review" queue either way.
+--   Upgrade: db/migrations/014_reversible_listing_hide.sql.
+--
+-- Changes from rev. 12 (seller trust score, 1 Nov 2026):
+--   1. seller_strikes: one row per moderator-confirmed listing removal (future plan §1.5) —
+--      never from a raw report. severity (severe/non_severe) sets the "Negative Seller" /
+--      "Blocked Seller" thresholds (app/seller_trust.py). A seller may appeal a strike
+--      (appeal_message); a moderator may overturn one (excluded), which drops it from the count.
+--   2. users.listing_suspended_at / listing_suspended_reason: set once a seller crosses the
+--      "Blocked Seller" threshold, enforced on listing creation; cleared by a moderator or by
+--      overturning the strike that caused it.
+--   Upgrade: db/migrations/013_seller_trust.sql.
 --
 -- Changes from rev. 5 ("Taking it further" features, 24 Oct 2026):
 --   1. saved_searches: a saved Buy & Sell or Lost & Found search; new
@@ -93,15 +120,18 @@ CREATE TYPE forum_scope_type     AS ENUM ('course', 'department', 'company');
 CREATE TYPE bookmark_target_type AS ENUM ('listing', 'event');
 CREATE TYPE notification_type    AS ENUM ('lost_found_match', 'forum_reply', 'listing_status_change',
                                           'bookmarked_event_update', 'followed_tag_event', 'moderation_action',
-                                          'saved_search_match', 'wanted_post_match', 'chat_message');
+                                          'saved_search_match', 'wanted_post_match', 'chat_message',
+                                          'listing_watch');
 CREATE TYPE report_target_type   AS ENUM ('listing', 'lost_report', 'found_report', 'course_material',
                                           'course_feedback', 'thread', 'comment', 'interview_experience',
                                           'wanted_post');
 CREATE TYPE wanted_status        AS ENUM ('open', 'fulfilled', 'closed');
 CREATE TYPE campus_service_category AS ENUM ('health', 'wellbeing', 'grievance', 'safety', 'other');
 CREATE TYPE report_status        AS ENUM ('open', 'actioned', 'dismissed');
+CREATE TYPE report_source        AS ENUM ('user', 'system');   -- system: automatic flag (§1.6)
 CREATE TYPE device_platform      AS ENUM ('android', 'ios', 'web', 'desktop');
 CREATE TYPE chat_message_kind    AS ENUM ('text', 'offer');
+CREATE TYPE seller_strike_severity AS ENUM ('severe', 'non_severe');  -- future plan §1.5
 CREATE TYPE chat_offer_status    AS ENUM ('pending', 'accepted', 'declined', 'withdrawn', 'superseded');
 CREATE TYPE chat_topic_kind      AS ENUM ('listing', 'lost_report', 'found_report');
 
@@ -161,6 +191,11 @@ CREATE TABLE users (
     programme       TEXT,                                    -- e.g. 'M.Tech CSA'
     graduation_year SMALLINT CHECK (graduation_year BETWEEN 1950 AND 2100),
     is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Seller trust score (future plan §1.5): set once seller_strikes crosses the "Blocked Seller"
+    -- threshold (app/seller_trust.py). Checked on listing creation; cleared by a moderator/admin
+    -- or automatically when overturning the strike that caused it.
+    listing_suspended_at     TIMESTAMPTZ,
+    listing_suspended_reason TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -275,6 +310,10 @@ CREATE TABLE listings (
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at         TIMESTAMPTZ,                        -- soft delete, FR-10
     deleted_by         UUID REFERENCES users(id),          -- owner or moderator who removed it
+    held_for_review_at TIMESTAMPTZ,                         -- auto-flagged as prohibited: hidden until a moderator decides
+    negotiable         BOOLEAN NOT NULL DEFAULT FALSE,      -- "Negotiable" badge (future plan §2.3)
+    -- hidden_by_strike_id (reversible, report-driven removal) is added below, near
+    -- seller_strikes, to avoid a circular forward reference.
     CONSTRAINT listings_deleted_pair_chk CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))
 );
 CREATE INDEX idx_listings_filter ON listings(category_id, price) WHERE deleted_at IS NULL;   -- FR-6
@@ -717,7 +756,8 @@ $$;
 -- ============================================================================
 CREATE TABLE reports (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    reporter_id             UUID NOT NULL REFERENCES users(id),
+    reporter_id             UUID REFERENCES users(id),                -- NULL for automatic flags
+    source                  report_source NOT NULL DEFAULT 'user',
     module                  module_name NOT NULL,
     target_type             report_target_type NOT NULL,
     listing_id              UUID REFERENCES listings(id)              ON DELETE CASCADE,
@@ -761,6 +801,7 @@ CREATE TABLE reports (
         (target_type IN ('course_material', 'course_feedback') AND module = 'academic_help') OR
         (target_type = 'interview_experience'                 AND module = 'placement_hub') OR
         (target_type IN ('thread', 'comment')                 AND module IN ('academic_help', 'placement_hub'))),
+    CONSTRAINT reports_source_chk CHECK ((source = 'user') = (reporter_id IS NOT NULL)),
     -- open reports have no handler; handled ones always record who and when
     CONSTRAINT reports_handled_chk CHECK (
         (status = 'open' AND handled_by IS NULL AND handled_at IS NULL) OR
@@ -769,6 +810,8 @@ CREATE TABLE reports (
 -- One open report per user per item (stops one person flagging a post 50 times);
 -- the same user may report again after an earlier report was handled.
 CREATE UNIQUE INDEX uq_reports_one_open ON reports(reporter_id, target_type, target_id) WHERE status = 'open';
+CREATE UNIQUE INDEX uq_reports_one_open_system ON reports(target_type, target_id)
+    WHERE status = 'open' AND source = 'system';
 CREATE INDEX idx_reports_queue  ON reports(module, created_at) WHERE status = 'open';
 CREATE INDEX idx_reports_target ON reports(target_type, target_id);
 
@@ -786,6 +829,55 @@ CREATE TABLE moderation_log (
     reason       TEXT,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ============================================================================
+-- BUY & SELL — SELLER TRUST SCORE (future plan §1.5)
+-- One row per moderator-confirmed listing removal against a seller. Never created from a raw
+-- report — only from POST /reports/{id}/resolve with remove_content=true on a listing. Rows are
+-- never deleted (tamper-proof history); a moderator who overturns one sets excluded=true instead,
+-- which drops it from the seller's "Negative Seller" / "Blocked Seller" tag (app/seller_trust.py).
+-- ============================================================================
+CREATE TABLE seller_strikes (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    seller_id      UUID NOT NULL REFERENCES users(id),
+    listing_id     UUID NOT NULL REFERENCES listings(id),
+    report_id      UUID NOT NULL UNIQUE REFERENCES reports(id),  -- one strike per resolved report
+    severity       seller_strike_severity NOT NULL,
+    moderator_id   UUID NOT NULL REFERENCES users(id),
+    moderator_note TEXT,
+    -- The seller's one-shot appeal (future plan §1.5.2's "lightweight appeal"); a moderator
+    -- resolves it by overturning the strike (restores the listing) or rejecting the appeal
+    -- (appeal_resolved_at/by set, excluded stays false, listing stays hidden).
+    appeal_message     TEXT,
+    appeal_created_at  TIMESTAMPTZ,
+    appeal_resolved_at TIMESTAMPTZ,
+    appeal_resolved_by UUID REFERENCES users(id),
+    excluded          BOOLEAN NOT NULL DEFAULT FALSE,
+    excluded_by       UUID REFERENCES users(id),
+    excluded_at       TIMESTAMPTZ,
+    excluded_note     TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_seller_strikes_seller ON seller_strikes(seller_id);
+-- The moderator queue: strikes with an appeal nobody has resolved yet.
+CREATE INDEX idx_seller_strikes_pending_appeal ON seller_strikes(appeal_created_at)
+    WHERE appeal_message IS NOT NULL AND appeal_resolved_at IS NULL;
+
+-- listings.hidden_by_strike_id forward-references this table, so it's added here (not in
+-- CREATE TABLE listings above) to avoid a circular definition - listings referencing a strike
+-- that itself references the listing it strikes.
+ALTER TABLE listings ADD COLUMN hidden_by_strike_id UUID REFERENCES seller_strikes(id);
+CREATE INDEX idx_listings_hidden ON listings(hidden_by_strike_id) WHERE hidden_by_strike_id IS NOT NULL;
+CREATE INDEX idx_listings_held ON listings(held_for_review_at) WHERE held_for_review_at IS NOT NULL;
+
+-- Price watch (future plan §2.3): told when the price changes or the listing is marked negotiable.
+CREATE TABLE listing_watches (
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    listing_id UUID NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, listing_id)
+);
+CREATE INDEX idx_listing_watches_listing ON listing_watches(listing_id);
 
 -- ============================================================================
 -- PHASE 2 — COMMUNITY / CULTURE EVENTS  (FR-18, FR-19, FR-20, FR-21, FR-22)

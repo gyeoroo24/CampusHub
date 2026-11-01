@@ -99,6 +99,20 @@ docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub 
 python -m app.matching --backfill
 ```
 
+A database created before revision 15 (1–2 Nov 2026: seller trust strikes, automatic flagging,
+price watch and the Negotiable badge) needs these, in order:
+
+```bash
+for m in 013_seller_trust 014_reversible_listing_hide 015_auto_flags_and_price_watch; do
+  docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub < db/migrations/$m.sql
+done
+```
+
+Automatic flagging (future plan §1.6, `app/screening.py`) is on by default: its text checks use the
+category-suggestion model, and the obscene-photo check needs the full model download below
+(`scripts/fetch_match_models.py`). Without those models only the keyword, gibberish and spam
+checks run. Set `CAMPUSHUB_AUTO_FLAG=false` to turn it off.
+
 ### Lost & Found matching (optional locally)
 
 Reports are matched by description and photo with three small ONNX models (future plan §1.2;
@@ -109,6 +123,11 @@ optional. To turn it on locally:
 uv pip install -r requirements-matching.txt          # or pip install
 python scripts/fetch_match_models.py                  # ~305 MB into backend/models (gitignored)
 ```
+
+The same download includes the 34 MB model behind category suggestion
+(`GET /buy-sell/categories/suggest`, `app/categories_suggest.py`). It runs in the API itself, and
+`--suggest-only` fetches just that one; both Dockerfiles do so.
+`python scripts/calibrate_category_suggest.py` measures it on labelled titles.
 
 Restart the API: with `CAMPUSHUB_MATCH_MODE=auto` (the default) it finds the models and matches
 in a background task. `python scripts/calibrate_matching.py <photo dir>` prints the similarity

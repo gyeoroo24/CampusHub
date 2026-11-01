@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/widgets/category_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/web_history_support.dart';
@@ -138,19 +139,12 @@ class _CreateWantedDialogState extends ConsumerState<CreateWantedDialog> {
                 categories.when(
                   loading: () => const LinearProgressIndicator(),
                   error: (e, _) => Text(errorText(e), style: TextStyle(color: theme.colorScheme.error)),
-                  data: (cats) => DropdownButtonFormField<int>(
-                    initialValue: _categoryId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Category',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    items: [
-                      for (final c in cats) DropdownMenuItem(value: c.id, child: Text(c.name)),
-                    ],
-                    onChanged: (v) => setState(() => _categoryId = v),
-                    validator: (v) => v == null ? 'Pick a category' : null,
+                  data: (cats) => CategoryPicker(
+                    label: 'Category',
+                    categories: cats,
+                    value: cats.where((c) => c.id == _categoryId).firstOrNull,
+                    onChanged: (c) => setState(() => _categoryId = c.id),
+                    validator: (_) => _categoryId == null ? 'Pick a category' : null,
                   ),
                 ),
                 const SizedBox(height: 12),

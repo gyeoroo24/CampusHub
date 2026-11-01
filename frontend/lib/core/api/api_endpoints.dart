@@ -25,12 +25,24 @@ class ApiEndpoints {
   // --- Categories ---
   static const String buySellCategories = '$version/buy-sell/categories';
   static const String lostFoundCategories = '$version/lost-found/categories';
+  static const String buySellCategorySuggest = '$version/buy-sell/categories/suggest';
+  static const String lostFoundCategorySuggest = '$version/lost-found/categories/suggest';
 
   // --- Buy & Sell (FR-4, FR-5, FR-6, FR-10) ---
   static const String listings = '$version/listings';
   static String listing(String id) => '$version/listings/$id';
   static String listingStatus(String id) => '$version/listings/$id/status';
+  static String listingWatch(String id) => '$version/listings/$id/watch';
+  static const String myWatchedListings = '$version/me/watched-listings';
   static String listingPhotos(String id) => '$version/listings/$id/photos';
+
+  // --- Seller trust score (future plan §1.5) ---
+  static const String mySellerStrikes = '$version/me/seller-strikes';
+  static String appealSellerStrike(String id) => '$version/me/seller-strikes/$id/appeal';
+  static const String sellerStrikes = '$version/seller-strikes';
+  static String overturnSellerStrike(String id) => '$version/seller-strikes/$id/overturn';
+  static String rejectSellerStrikeAppeal(String id) => '$version/seller-strikes/$id/reject-appeal';
+  static String liftListingSuspension(String sellerId) => '$version/users/$sellerId/lift-listing-suspension';
 
   // --- Lost & Found (FR-7, FR-8, FR-9, FR-10) ---
   // Lost Reports

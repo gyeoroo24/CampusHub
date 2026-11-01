@@ -6,6 +6,10 @@ FROM public.ecr.aws/lambda/python:3.12
 COPY requirements.txt ${LAMBDA_TASK_ROOT}/
 RUN pip install --no-cache-dir -r ${LAMBDA_TASK_ROOT}/requirements.txt --target ${LAMBDA_TASK_ROOT}
 
+# The category-suggestion model (34 MB; app/categories_suggest.py), checksum-checked.
+COPY scripts/fetch_match_models.py /tmp/
+RUN python /tmp/fetch_match_models.py --suggest-only ${LAMBDA_TASK_ROOT}/models && rm /tmp/fetch_match_models.py
+
 COPY app ${LAMBDA_TASK_ROOT}/app
 
 CMD ["app.main.handler"]

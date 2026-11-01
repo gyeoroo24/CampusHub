@@ -1,6 +1,6 @@
 # Deploying CampusHub to the cloud: what still has to change
 
-*Last updated 1 Nov 2026 (database revision 12)*
+*Last updated 2 Nov 2026 (database revision 15)*
 
 Local development takes shortcuts that must not reach a real deployment. This page lists them,
 plus the cloud work each feature still needs. How to build and wire the Lambda, RDS Proxy, S3,
@@ -9,13 +9,15 @@ Update this page whenever a new shortcut or cloud dependency is added.
 
 ## Must do before going live
 
-1. **Run the database migrations** on RDS, in order, if the database is older than revision 12.
+1. **Run the database migrations** on RDS, in order, if the database is older than revision 15.
    A brand-new database only needs `backend/db/schema.sql`.
    - `008_encrypted_chat`
    - `009_server_held_chat_keys`
    - `010_chat_per_person`
    - `011_drop_matched_status`
    - `012_lf_matching` (then invoke the matcher once with `{"backfill": true}`)
+   - `013_seller_trust`, `014_reversible_listing_hide`
+   - `015_auto_flags_and_price_watch` (adds a notification type outside the transaction; run as is)
 
    `010` merges older per-listing chats into one chat per person. Back up the `chat_*` tables
    first.
@@ -90,6 +92,23 @@ Update this page whenever a new shortcut or cloud dependency is added.
   `backend/scripts/calibrate_matching.py` re-measures them.
 - **Licence:** the MobileCLIP-S0 weights are under Apple's ML research licence (fine for this
   course project; check it before any commercial use). all-MiniLM-L6-v2 is Apache-2.0.
+
+## Automatic flagging
+
+- Text checks (prohibited items, gibberish, spam) run in the API with the bge-small model it already
+  has. The obscene-photo check needs the 87 MB NSFW model, which only the matcher image includes
+  (`Dockerfile.matcher` fetches it). With `CAMPUSHUB_MATCH_FUNCTION` set, the API invokes the matcher
+  with `{"screen": "listing", "id": ...}` after posts with photos. Without a matcher, photos go
+  unchecked; everything else still works.
+- `CAMPUSHUB_AUTO_FLAG=false` turns all automatic flagging off.
+
+## Category suggestion
+
+- The API image now includes ONNX Runtime and the 34 MB bge-small-en-v1.5 model (fetched and
+  checksum-checked by `Dockerfile.lambda` / `Dockerfile`). Nothing else to deploy.
+- The first suggestion in a new container takes about 0.35 s (loading the model and embedding recent
+  listings); later ones about 6 ms. Give the API Lambda at least 512 MB.
+- Tune with `CAMPUSHUB_CATEGORY_SUGGEST_THRESHOLD` (0.52) and `..._MARGIN` (0.03).
 
 ## Phone verification
 

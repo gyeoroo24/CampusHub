@@ -133,6 +133,9 @@ Guests can browse and search listings. Sellers create, edit and mark their own l
 | --- | --- | --- | --- |
 | GET | `/buy-sell/categories` | guest | All categories (`id`, `name`), A–Z |
 | POST | `/buy-sell/categories` | user | Add a category by `name` (the "Others" option). If the name already exists, ignoring case and spaces, the existing one comes back |
+| GET | `/buy-sell/categories/suggest?title=` | guest | `{"category": {id, name}}`: the existing category that clearly fits the title, or `null` when none does (or the model isn't installed). Never invents a category. About 6 ms; call it after typing pauses |
+| PUT, DELETE | `/listings/{id}/watch` | user | Watch / stop watching someone else's listing: a `listing_watch` notification when its price changes or it is marked `negotiable` |
+| GET | `/me/watched-listings` | user | Listings I'm watching, newest watch first |
 | GET | `/listings` | guest | Browse. Filters: `q` (title and description), `category_id`, `min_price`, `max_price`, `status` (repeatable), `seller_id`. `sort`: `newest` (default), `price_asc`, `price_desc` |
 | POST | `/listings` | user | Create: `title`, `price`, `category_id`, `description`, `location`, `photo_keys` (up to 10) |
 | GET | `/listings/{id}` | guest | One listing with all photos; `seller_contact` for signed-in users |
@@ -160,6 +163,7 @@ Lost reports and found reports have identical endpoints. Swap `/lost-reports` fo
 | --- | --- | --- | --- |
 | GET | `/lost-found/categories` | guest | All categories, A–Z. A category names the item: ID card, Water bottle, Earbuds |
 | POST | `/lost-found/categories` | user | Add a category by `name`, or get the existing one with that name |
+| GET | `/lost-found/categories/suggest?title=` | guest | The existing category that clearly fits a title, or `{"category": null}`. Never invents one; see Buy & Sell |
 | GET | `/lost-reports` | guest | Browse. Filters: `q` (description), `category_id`, `status` (repeatable), `reporter_id`, `from_date` and `to_date` (when the item was lost or found; send a time zone). `sort`: `newest` (default) or `oldest`, by when the report was filed |
 | POST | `/lost-reports` | user | File a report: `description`, `category_id`, `occurred_at`, `location`, `photo_keys` (up to 10). The reply includes `possible_matches` |
 | GET | `/lost-reports/{id}` | guest | One report with photos; `reporter_contact` for signed-in users |
@@ -323,6 +327,9 @@ Forums go forum → thread → comments. Each course and each department has exa
 - **Limits:** title 1–200 characters, post or comment 1–10,000.
 
 ## Reports and moderation
+
+- **Automatic flags (future plan §1.6):** reports in the queue can have `source: "system"` and `reporter: null`. The system files these itself for possible prohibited items, gibberish, spam and obscene photos. A prohibited-item flag also holds the listing: it shows `held_for_review: true` to its seller and moderators, and everyone else can't see it until a moderator resolves the report.
+- **Listings:** listings also carry `negotiable`, and in the detail view `watching` (whether the viewer watches its price).
 
 Any signed-in user can flag content. Moderators work through a queue limited to their own scope.
 

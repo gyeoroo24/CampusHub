@@ -259,16 +259,19 @@ class ApiLostFoundRepository implements ILostFoundRepository {
     return CategoryRef.fromJson(response.data as Map<String, dynamic>);
   }
 
-  // The API has no rename or delete for categories (only list and add), so say so rather than
-  // reporting a success that never happened. Mock mode still supports both.
+  // The API has no rename for categories, so say so rather than reporting a success that never
+  // happened. Mock mode still supports it.
   @override
   Future<CategoryRef> updateCategory(int id, String newName) async {
     throw Exception("The server doesn't support renaming categories yet.");
   }
 
   @override
-  Future<void> deleteCategory(int id) async {
-    throw Exception("The server doesn't support deleting categories yet.");
+  Future<void> deleteCategory(int id, {int? moveTo}) async {
+    await apiClient.delete(
+      '${ApiEndpoints.lostFoundCategories}/$id',
+      queryParameters: {if (moveTo != null) 'move_to': moveTo},
+    );
   }
 
 

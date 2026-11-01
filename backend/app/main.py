@@ -16,7 +16,8 @@ from .config import get_settings, in_lambda
 from .db import close_pool
 from .errors import install_error_handlers
 from .routers import (academic, auth_otp, campus_services, categories, chat, forums, listings, lost_found,
-                      moderators, notifications, reports, saved_searches, survival_guide, uploads, users, wanted)
+                      moderators, notifications, reports, saved_searches, seller_trust, survival_guide, uploads,
+                      users, wanted)
 
 logging.basicConfig(level=logging.INFO)
 # Lambda installs its own root handler before our code runs, which makes basicConfig a no-op.
@@ -89,8 +90,9 @@ def create_app() -> FastAPI:
     # always gets 401. Routes that need the user reuse the same (cached) result.
     checked = [Depends(optional_user)]
     for module in (users, moderators, uploads, categories, listings, wanted, academic, survival_guide, forums, reports,
-                   notifications, saved_searches, campus_services, auth_otp, chat):
+                   notifications, saved_searches, campus_services, auth_otp, chat, seller_trust):
         app.include_router(module.router, prefix=settings.api_prefix, dependencies=checked)
+    app.include_router(listings.watch_router, prefix=settings.api_prefix, dependencies=checked)
     app.include_router(lost_found.lost_router, prefix=settings.api_prefix, dependencies=checked)
     app.include_router(lost_found.found_router, prefix=settings.api_prefix, dependencies=checked)
     _add_sign_in_to_docs(app)

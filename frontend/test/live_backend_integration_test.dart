@@ -11,8 +11,8 @@ import 'package:campus_hub/features/lost_found/data/lost_found_repository.dart';
 import 'package:campus_hub/features/lost_found/domain/lost_found_item.dart';
 
 void main() {
-  const liveUrl = String.fromEnvironment('LIVE_BACKEND_URL', defaultValue: 'http://10.217.103.203:8000');
-  const devKey = String.fromEnvironment('DEV_KEY', defaultValue: 'kSH3AyYRCzXn8Czy8xXCZbC9');
+  const liveUrl = String.fromEnvironment('LIVE_BACKEND_URL', defaultValue: 'http://localhost:8000');
+  const devKey = String.fromEnvironment('DEV_KEY', defaultValue: '');
 
   group('Live FastAPI Backend Integration Tests', () {
     late InMemoryTokenStorage storage;

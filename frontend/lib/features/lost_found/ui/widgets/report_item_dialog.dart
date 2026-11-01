@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../../core/widgets/category_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/utils/error_text.dart';
@@ -209,35 +210,26 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
                     child: LinearProgressIndicator(),
                   )
                 else ...[
-                  DropdownButtonFormField<CategoryRef>(
-                    initialValue: _selectedCategory,
-                    decoration: const InputDecoration(labelText: 'Item Category *'),
-                    items: [
-                      ..._availableCategories.map(
-                        (c) => DropdownMenuItem(value: c, child: Text(c.name)),
-                      ),
-                      const DropdownMenuItem(
-                        value: CategoryRef(id: -1, name: '+ Add New Category...'),
-                        child: Text('+ Add New Category...', style: TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                    ],
+                  CategoryPicker(
+                    label: 'Item Category *',
+                    categories: _availableCategories,
+                    value: _selectedCategory,
+                    addNewLabel: CategoryPicker.addNew.name,
                     onChanged: (val) {
-                      if (val != null) {
-                        if (val.id == -1) {
-                          setState(() {
-                            _isCustomCategory = true;
-                            _selectedCategory = null;
-                          });
-                        } else {
-                          setState(() {
-                            _isCustomCategory = false;
-                            _selectedCategory = val;
-                          });
-                        }
+                      if (val.id == -1) {
+                        setState(() {
+                          _isCustomCategory = true;
+                          _selectedCategory = null;
+                        });
+                      } else {
+                        setState(() {
+                          _isCustomCategory = false;
+                          _selectedCategory = val;
+                        });
                       }
                     },
                     validator: (val) {
-                      if (!_isCustomCategory && val == null) {
+                      if (!_isCustomCategory && _selectedCategory == null) {
                         return 'Please select a category.';
                       }
                       return null;

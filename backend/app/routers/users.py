@@ -3,7 +3,7 @@ from datetime import datetime
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from .. import otp
@@ -11,6 +11,7 @@ from ..auth import CurrentUser, current_user, optional_user
 from ..common import Contact, forbidden, not_found, set_clause, text
 from ..db import get_conn
 from ..permissions import log_moderation
+from .moderators import notify_role_change
 
 router = APIRouter(tags=["Users"])
 
@@ -182,7 +183,7 @@ async def update_account(user_id: UUID, body: AccountUpdate, user: CurrentUser =
 
 @router.post("/users/{user_id}/make-admin", response_model=AccountStatus,
              summary="Hand the admin role to someone else (admin); you become a signed-in user")
-async def make_admin(user_id: UUID, user: CurrentUser = Depends(current_user),
+async def make_admin(user_id: UUID, background: BackgroundTasks, user: CurrentUser = Depends(current_user),
                      conn: asyncpg.Connection = Depends(get_conn)):
     """There is exactly one admin. The current admin names their successor; in one transaction the
     successor becomes admin and the caller is downgraded to a normal signed-in user."""
@@ -206,4 +207,6 @@ async def make_admin(user_id: UUID, user: CurrentUser = Depends(current_user),
         row = await conn.fetchrow(
             f"UPDATE users SET base_role = 'admin' WHERE id = $1 RETURNING {_STATUS_COLUMNS}", user_id)
         await log_moderation(conn, user.id, "transfer_admin", "user", user_id)
+        await notify_role_change(conn, background, user_id,
+                                 f"{user.name or 'The previous admin'} made you the CampusHub admin.")
     return AccountStatus(**dict(row))

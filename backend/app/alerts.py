@@ -19,8 +19,11 @@ from .notify import create_notifications, deliver_push
 Push = tuple[list[UUID], str, dict]
 
 # Does listing l match saved search s? Same rules as GET /listings.
+# A search with no keyword, category or price (allowed before 2 Nov 2026) matches nothing: it used
+# to alert on every new post, e.g. "Drugs" for a search named "hero cycle".
 LISTING_MATCHES_SEARCH = """
-    (s.bs_category_id IS NULL OR s.bs_category_id = l.category_id)
+    (s.query IS NOT NULL OR s.bs_category_id IS NOT NULL OR s.min_price IS NOT NULL OR s.max_price IS NOT NULL)
+    AND (s.bs_category_id IS NULL OR s.bs_category_id = l.category_id)
     AND (s.min_price IS NULL OR l.price >= s.min_price)
     AND (s.max_price IS NULL OR l.price <= s.max_price)
     AND (s.query IS NULL OR numnode(websearch_to_tsquery('english', s.query)) = 0
@@ -29,7 +32,8 @@ LISTING_MATCHES_SEARCH = """
 
 # Does found report f match saved search s? Same rules as GET /found-reports (substring of the description).
 FOUND_MATCHES_SEARCH = r"""
-    (s.lf_category_id IS NULL OR s.lf_category_id = f.category_id)
+    (s.query IS NOT NULL OR s.lf_category_id IS NOT NULL)
+    AND (s.lf_category_id IS NULL OR s.lf_category_id = f.category_id)
     AND (s.query IS NULL OR f.description ILIKE
          '%' || replace(replace(replace(s.query, '\', '\\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
 """

@@ -594,6 +594,7 @@ class MockBuySellRepository implements IBuySellRepository {
     double? price,
     int? categoryId,
     String? location,
+    bool? negotiable,
   }) async {
     final index = _mockData.indexWhere((it) => it.id == id);
     if (index == -1) throw Exception('Listing not found');
@@ -612,6 +613,7 @@ class MockBuySellRepository implements IBuySellRepository {
       price: price,
       category: newCat,
       location: location,
+      negotiable: negotiable,
       updatedAt: DateTime.now(),
     );
     _mockData[index] = updated;
@@ -646,7 +648,7 @@ class MockBuySellRepository implements IBuySellRepository {
   }
 
   @override
-  Future<void> deleteListing(String id, {String? reason}) async {
+  Future<void> deleteListing(String id, {String? reason, String? severity}) async {
     _mockData.removeWhere((item) => item.id == id);
   }
 
@@ -654,6 +656,22 @@ class MockBuySellRepository implements IBuySellRepository {
   Future<List<CategoryRef>> fetchCategories() async {
     return List.unmodifiable(_categories);
   }
+
+  // No embedding model in mock mode - the real suggestion endpoint (future plan §2.4) needs the
+  // MiniLM-backed backend, so mock mode reports no suggestion rather than faking one.
+  @override
+  Future<CategoryRef?> suggestCategory(String title) async => null;
+
+  final _watched = <String>{};
+
+  @override
+  Future<void> setWatching(String id, bool watching) async {
+    watching ? _watched.add(id) : _watched.remove(id);
+  }
+
+  @override
+  Future<List<ListingItem>> fetchWatchedListings() async =>
+      _mockData.where((it) => _watched.contains(it.id)).map((it) => it.copyWith(watching: true)).toList();
 
   @override
   Future<CategoryRef> createCategory(String name) async {
@@ -680,7 +698,7 @@ class MockBuySellRepository implements IBuySellRepository {
   }
 
   @override
-  Future<void> deleteCategory(int id) async {
+  Future<void> deleteCategory(int id, {int? moveTo}) async {
     _categories.removeWhere((c) => c.id == id);
   }
 }
