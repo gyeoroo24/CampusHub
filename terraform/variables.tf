@@ -34,7 +34,7 @@ variable "enable_waf" {
 variable "multi_az_db" {
   description = "Set to true for Multi-AZ PostgreSQL RDS (Note: Free Tier covers 750 hrs/month of Single-AZ only. Keep false for Free Tier)"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "db_engine_version" {
@@ -70,13 +70,13 @@ variable "db_username" {
 variable "alert_email" {
   description = "Email address for AWS Budgets cost alerts and CloudWatch alarms"
   type        = string
-  default     = "admin@iisc.ac.in"
+  default     = "dinkylakhani@iisc.ac.in"
 }
 
 variable "monthly_budget_usd" {
   description = "Monthly cost budget limit in USD to enforce Free Tier adherence"
   type        = string
-  default     = "5.0"
+  default     = "50.0"
 }
 
 variable "lambda_memory_size" {
