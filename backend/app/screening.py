@@ -54,6 +54,9 @@ PROHIBITED = [
     "leaked exam question papers, answer keys for sale", "counterfeit branded goods, replica watches, first copy",
     "stolen goods, phone without bill", "fireworks, explosives, firecrackers",
     "assignment writing service, will write your exam for you",
+    "bhang laddoo, cannabis edibles, weed chocolate", "white powder, smack, heroin, dope",
+    "pot, skunk, party stuff, herb stuff", "tripping paper, acid blotter, LSD tabs, pinch of happiness",
+    "magic mushrooms, shrooms, psychedelic mushrooms",
 ]
 HARMLESS = [
     "water bottle, flask, sipper", "toy, kids toy, toy gun", "kitchen utensils, knife set, cutlery", "mug, glass, cup",
@@ -62,7 +65,7 @@ HARMLESS = [
 ] + [f"a {c} item for sale" for c in ("books", "electronics", "cycles", "furniture", "clothing",
                                        "kitchen & appliances", "sports & fitness", "plant")]
 PROHIBITED_WORDS = re.compile(
-    r"\b(ganja|weed|cannabis|marijuana|charas|hashish|mdma|cocaine|lsd|ecstasy|heroin|meth|codeine|tramadol|"
+    r"\b(ganja|weed|cannabis|marijuana|charas|hashish|bhang|bhaang|shrooms|mdma|cocaine|lsd|ecstasy|heroin|meth|codeine|tramadol|"
     r"vodka|whisky|whiskey|rum|liquor|alcohol|cigarettes?|vapes?|gutka|pistol|revolver|firearms?|ammunition|"
     r"bullets?|counterfeit|forged)\b", re.IGNORECASE)
 PROHIBITED_AT = 0.60       # closest prohibited description, cosine
@@ -107,19 +110,38 @@ def _word_ok(word: str, vocab: frozenset[str]) -> bool:
         return True
     if re.search(r"(.)\1\1", word) or re.search(r"[bcdfghjklmnpqrstvwxz]{5,}", word):
         return False
-    return bool(re.search(r"[aeiouy]", word))   # a pronounceable unknown word: a brand or a name
+    # A pronounceable unknown word (a brand or a name), or a short acronym with no vowel (JBL, TV, DVD).
+    return bool(re.search(r"[aeiouy]", word)) or len(word) <= 4
+
+
+def _switches(token: str) -> int:
+    """How often a token changes between a letter and a digit: 1 for ST20, 4 for j8sk2l."""
+    kinds = ["d" if c.isdigit() else "a" for c in token]
+    return sum(a != b for a, b in zip(kinds, kinds[1:]))
+
+
+def _mixed_bad(token: str) -> bool:
+    """A token with letters and digits is junk if it keeps switching (73ubtc0oq) or has a consonant
+    cluster (kdjfl938). Model codes (ST20, 510BT, RTX3080Ti) switch once or twice and pass."""
+    return _switches(token) >= 3 or bool(re.search(r"[bcdfghjklmnpqrstvwxz]{5,}|(.)\1\1", token))
 
 
 def is_gibberish(text: str) -> bool:
     lowered = text.lower()
     if _KEYBOARD_RUN.search(re.sub(r"[^a-z]", "", lowered)):
         return True
-    words = [w for w in re.findall(r"[a-z]+", lowered) if len(w) >= 3]
-    if not words:
-        return not re.search(r"[a-z0-9]", lowered)
     vocab = _vocabulary()
-    bad = [w for w in words if not _word_ok(w, vocab)]
-    return len(bad) / len(words) >= 0.5
+    units = []   # one entry per word-like token: True if it looks like junk
+    for token in re.findall(r"[a-z0-9]+", lowered):
+        if token.isdigit() or len(token) < 3:
+            continue
+        if re.search(r"[a-z]", token) and re.search(r"\d", token):
+            units.append(_mixed_bad(token))
+        else:
+            units.append(not _word_ok(token, vocab))
+    if not units:
+        return not re.search(r"[a-z0-9]", lowered)
+    return sum(units) / len(units) >= 0.5
 
 
 def prohibited_reason(text: str) -> str | None:

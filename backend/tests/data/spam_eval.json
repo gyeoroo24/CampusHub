@@ -1,0 +1,1436 @@
+[
+ {
+  "kind": "repeat_case_punct",
+  "history": [
+   {
+    "minutes_ago": 465,
+    "text": "milton flask 1l!!"
+   },
+   {
+    "minutes_ago": 615,
+    "text": "MILTON FLASK 1L"
+   }
+  ],
+  "title": "Milton flask 1L",
+  "gold_spam": 1
+ },
+ {
+  "kind": "repeat_identical",
+  "history": [
+   {
+    "minutes_ago": 499,
+    "text": "Hero Sprint cycle for sale"
+   },
+   {
+    "minutes_ago": 544,
+    "text": "Hero Sprint cycle for sale"
+   }
+  ],
+  "title": "Hero Sprint cycle for sale",
+  "gold_spam": 1
+ },
+ {
+  "kind": "burst_7_in_hour",
+  "history": [
+   {
+    "minutes_ago": 23,
+    "text": "Item 0 for sale 608"
+   },
+   {
+    "minutes_ago": 11,
+    "text": "Item 1 for sale 552"
+   },
+   {
+    "minutes_ago": 1,
+    "text": "Item 2 for sale 576"
+   },
+   {
+    "minutes_ago": 18,
+    "text": "Item 3 for sale 623"
+   },
+   {
+    "minutes_ago": 16,
+    "text": "Item 4 for sale 254"
+   },
+   {
+    "minutes_ago": 10,
+    "text": "Item 5 for sale 973"
+   },
+   {
+    "minutes_ago": 28,
+    "text": "Item 6 for sale 230"
+   }
+  ],
+  "title": "Casio fx-991ES variant 9",
+  "gold_spam": 0
+ },
+ {
+  "kind": "different_items",
+  "history": [
+   {
+    "minutes_ago": 924,
+    "text": "Casio keyboard CT-S300"
+   },
+   {
+    "minutes_ago": 188,
+    "text": "Hero Sprint cycle for sale"
+   },
+   {
+    "minutes_ago": 1107,
+    "text": "Physics textbook 2nd year"
+   }
+  ],
+  "title": "Nike shoes size 9",
+  "gold_spam": 0
+ },
+ {
+  "kind": "burst_7_in_hour",
+  "history": [
+   {
+    "minutes_ago": 30,
+    "text": "Item 0 for sale 117"
+   },
+   {
+    "minutes_ago": 35,
+    "text": "Item 1 for sale 494"
+   },
+   {
+    "minutes_ago": 3,
+    "text": "Item 2 for sale 432"
+   },
+   {
+    "minutes_ago": 21,
+    "text": "Item 3 for sale 327"
+   },
+   {
+    "minutes_ago": 46,
+    "text": "Item 4 for sale 132"
+   },
+   {
+    "minutes_ago": 48,
+    "text": "Item 5 for sale 164"
+   },
+   {
+    "minutes_ago": 21,
+    "text": "Item 6 for sale 155"
+   }
+  ],
+  "title": "TP-Link router variant 10",
+  "gold_spam": 0
+ },
+ {
+  "kind": "repeat_once",
+  "history": [
+   {
+    "minutes_ago": 638,
+    "text": "Dell laptop charger"
+   }
+  ],
+  "title": "Dell laptop charger",
+  "gold_spam": 0
+ },
+ {
+  "kind": "repeat_identical",
+  "history": [
+   {
+    "minutes_ago": 1256,
+    "text": "Physics textbook 2nd year"
+   },
+   {
+    "minutes_ago": 186,
+    "text": "Physics textbook 2nd year"
+   }
+  ],
+  "title": "Physics textbook 2nd year",
+  "gold_spam": 1
+ },
+ {
+  "kind": "repeat_case_punct",
+  "history": [
+   {
+    "minutes_ago": 437,
+    "text": "hero sprint cycle for sale!!"
+   },
+   {
+    "minutes_ago": 637,
+    "text": "HERO SPRINT CYCLE FOR SALE"
+   }
+  ],
+  "title": "Hero Sprint cycle for sale",
+  "gold_spam": 1
+ },
+ {
+  "kind": "different_items",
+  "history": [
+   {
+    "minutes_ago": 1128,
+    "text": "Physics textbook 2nd year"
+   },
+   {
+    "minutes_ago": 925,
+    "text": "Casio keyboard CT-S300"
+   },
+   {
+    "minutes_ago": 1242,
+    "text": "Nike shoes size 9"
+   }
+  ],
+  "title": "Milton flask 1L",
+  "gold_spam": 0
+ },
+ {
+  "kind": "paraphrase_repeat",
+  "history": [
+   {
+    "minutes_ago": 300,
+    "text": "Study table with drawer"
+   },
+   {
+    "minutes_ago": 500,
+    "text": "Study table with drawer"
+   }
+  ],
+  "title": "study table with a drawer for sale",
+  "gold_spam": 1
+ },
+ {
+  "kind": "burst_7_in_hour",
+  "history": [
+   {
+    "minutes_ago": 7,
+    "text": "Item 0 for sale 360"
+   },
+   {
+    "minutes_ago": 34,
+    "text": "Item 1 for sale 431"
+   },
+   {
+    "minutes_ago": 31,
+    "text": "Item 2 for sale 803"
+   },
+   {
+    "minutes_ago": 37,
+    "text": "Item 3 for sale 995"
+   },
+   {
+    "minutes_ago": 31,
+    "text": "Item 4 for sale 190"
+   },
+   {
+    "minutes_ago": 41,
+    "text": "Item 5 for sale 167"
+   },
+   {
+    "minutes_ago": 7,
+    "text": "Item 6 for sale 666"
+   }
+  ],
+  "title": "Prestige 3L cooker variant 6",
+  "gold_spam": 0
+ },
+ {
+  "kind": "burst_7_in_hour",
+  "history": [
+   {
+    "minutes_ago": 45,
+    "text": "Item 0 for sale 306"
+   },
+   {
+    "minutes_ago": 30,
+    "text": "Item 1 for sale 948"
+   },
+   {
+    "minutes_ago": 37,
+    "text": "Item 2 for sale 286"
+   },
+   {
+    "minutes_ago": 10,
+    "text": "Item 3 for sale 432"
+   },
+   {
+    "minutes_ago": 26,
+    "text": "Item 4 for sale 364"
+   },
+   {
+    "minutes_ago": 33,
+    "text": "Item 5 for sale 280"
+   },
+   {
+    "minutes_ago": 43,
+    "text": "Item 6 for sale 888"
+   }
+  ],
+  "title": "Hero Sprint 26T variant 7",
+  "gold_spam": 0
+ },
+ {
+  "kind": "paraphrase_repeat",
+  "history": [
+   {
+    "minutes_ago": 300,
+    "text": "Casio keyboard CT-S300"
+   },
+   {
+    "minutes_ago": 500,
+    "text": "Casio keyboard CT-S300"
+   }
+  ],
+  "title": "casio CT-S300 keyboard for sale",
+  "gold_spam": 1
+ },
+ {
+  "kind": "burst_8_in_hour",
+  "history": [
+   {
+    "minutes_ago": 54,
+    "text": "Item 0 for sale 899"
+   },
+   {
+    "minutes_ago": 27,
+    "text": "Item 1 for sale 813"
+   },
+   {
+    "minutes_ago": 5,
+    "text": "Item 2 for sale 236"
+   },
+   {
+    "minutes_ago": 20,
+    "text": "Item 3 for sale 253"
+   },
+   {
+    "minutes_ago": 3,
+    "text": "Item 4 for sale 748"
+   },
+   {
+    "minutes_ago": 8,
+    "text": "Item 5 for sale 804"
+   },
+   {
+    "minutes_ago": 16,
+    "text": "Item 6 for sale 129"
+   },
+   {
+    "minutes_ago": 37,
+    "text": "Item 7 for sale 867"
+   }
+  ],
+  "title": "Nilkamal chair variant 5",
+  "gold_spam": 1
+ },
+ {
+  "kind": "repeat_case_punct",
+  "history": [
+   {
+    "minutes_ago": 420,
+    "text": "study table with drawer!!"
+   },
+   {
+    "minutes_ago": 1212,
+    "text": "STUDY TABLE WITH DRAWER"
+   }
+  ],
+  "title": "Study table with drawer",
+  "gold_spam": 1
+ },
+ {
+  "kind": "repeat_case_punct",
+  "history": [
+   {
+    "minutes_ago": 1119,
+    "text": "yonex badminton racket!!"
+   },
+   {
+    "minutes_ago": 312,
+    "text": "YONEX BADMINTON RACKET"
+   }
+  ],
+  "title": "Yonex badminton racket",
+  "gold_spam": 1
+ },
+ {
+  "kind": "old_posts_ignored",
+  "history": [],
+  "title": "Hero Sprint cycle for sale",
+  "gold_spam": 0
+ },
+ {
+  "kind": "repeat_identical",
+  "history": [
+   {
+    "minutes_ago": 1041,
+    "text": "Casio keyboard CT-S300"
+   },
+   {
+    "minutes_ago": 903,
+    "text": "Casio keyboard CT-S300"
+   }
+  ],
+  "title": "Casio keyboard CT-S300",
+  "gold_spam": 1
+ },
+ {
+  "kind": "repeat_once",
+  "history": [
+   {
+    "minutes_ago": 943,
+    "text": "Casio keyboard CT-S300"
+   }
+  ],
+  "title": "Casio keyboard CT-S300",
+  "gold_spam": 0
+ },
+ {
+  "kind": "paraphrase_repeat",
+  "history": [
+   {
+    "minutes_ago": 300,
+    "text": "Nike shoes size 9"
+   },
+   {
+    "minutes_ago": 500,
+    "text": "Nike shoes size 9"
+   }
+  ],
+  "title": "Nike running shoes size 9 for sale",
+  "gold_spam": 1
+ },
+ {
+  "kind": "burst_7_in_hour",
+  "history": [
+   {
+    "minutes_ago": 11,
+    "text": "Item 0 for sale 579"
+   },
+   {
+    "minutes_ago": 19,
+    "text": "Item 1 for sale 420"
+   },
+   {
+    "minutes_ago": 35,
+    "text": "Item 2 for sale 697"
+   },
+   {
+    "minutes_ago": 49,
+    "text": "Item 3 for sale 926"
+   },
+   {
+    "minutes_ago": 29,
+    "text": "Item 4 for sale 512"
+   },
+   {
+    "minutes_ago": 39,
+    "text": "Item 5 for sale 638"
+   },
+   {
+    "minutes_ago": 49,
+    "text": "Item 6 for sale 975"
+   }
+  ],
+  "title": "Logitech MK270 variant 8",
+  "gold_spam": 0
+ },
+ {
+  "kind": "different_items",
+  "history": [
+   {
+    "minutes_ago": 831,
+    "text": "Dell laptop charger"
+   },
+   {
+    "minutes_ago": 891,
+    "text": "Nike shoes size 9"
+   },
+   {
+    "minutes_ago": 815,
+    "text": "Casio keyboard CT-S300"
+   }
+  ],
+  "title": "Study table with drawer",
+  "gold_spam": 0
+ },
+ {
+  "kind": "burst_7_in_hour",
+  "history": [
+   {
+    "minutes_ago": 12,
+    "text": "Item 0 for sale 853"
+   },
+   {
+    "minutes_ago": 17,
+    "text": "Item 1 for sale 940"
+   },
+   {
+    "minutes_ago": 32,
+    "text": "Item 2 for sale 245"
+   },
+   {
+    "minutes_ago": 5,
+    "text": "Item 3 for sale 753"
+   },
+   {
+    "minutes_ago": 36,
+    "text": "Item 4 for sale 448"
+   },
+   {
+    "minutes_ago": 10,
+    "text": "Item 5 for sale 763"
+   },
+   {
+    "minutes_ago": 8,
+    "text": "Item 6 for sale 964"
+   }
+  ],
+  "title": "Sony WH-CH520 variant 3",
+  "gold_spam": 0
+ },
+ {
+  "kind": "burst_7_in_hour",
+  "history": [
+   {
+    "minutes_ago": 30,
+    "text": "Item 0 for sale 666"
+   },
+   {
+    "minutes_ago": 37,
+    "text": "Item 1 for sale 811"
+   },
+   {
+    "minutes_ago": 33,
+    "text": "Item 2 for sale 893"
+   },
+   {
+    "minutes_ago": 49,
+    "text": "Item 3 for sale 181"
+   },
+   {
+    "minutes_ago": 31,
+    "text": "Item 4 for sale 803"
+   },
+   {
+    "minutes_ago": 17,
+    "text": "Item 5 for sale 149"
+   },
+   {
+    "minutes_ago": 53,
+    "text": "Item 6 for sale 855"
+   }
+  ],
+  "title": "JBL Tune 510BT variant 0",
+  "gold_spam": 0
+ },
+ {
+  "kind": "burst_8_in_hour",
+  "history": [
+   {
+    "minutes_ago": 23,
+    "text": "Item 0 for sale 608"
+   },
+   {
+    "minutes_ago": 11,
+    "text": "Item 1 for sale 552"
+   },
+   {
+    "minutes_ago": 1,
+    "text": "Item 2 for sale 576"
+   },
+   {
+    "minutes_ago": 18,
+    "text": "Item 3 for sale 623"
+   },
+   {
+    "minutes_ago": 16,
+    "text": "Item 4 for sale 254"
+   },
+   {
+    "minutes_ago": 10,
+    "text": "Item 5 for sale 973"
+   },
+   {
+    "minutes_ago": 28,
+    "text": "Item 6 for sale 230"
+   },
+   {
+    "minutes_ago": 26,
+    "text": "Item 7 for sale 418"
+   }
+  ],
+  "title": "Casio fx-991ES variant 9",
+  "gold_spam": 1
+ },
+ {
+  "kind": "burst_8_in_hour",
+  "history": [
+   {
+    "minutes_ago": 7,
+    "text": "Item 0 for sale 423"
+   },
+   {
+    "minutes_ago": 53,
+    "text": "Item 1 for sale 851"
+   },
+   {
+    "minutes_ago": 44,
+    "text": "Item 2 for sale 288"
+   },
+   {
+    "minutes_ago": 44,
+    "text": "Item 3 for sale 497"
+   },
+   {
+    "minutes_ago": 6,
+    "text": "Item 4 for sale 290"
+   },
+   {
+    "minutes_ago": 33,
+    "text": "Item 5 for sale 629"
+   },
+   {
+    "minutes_ago": 40,
+    "text": "Item 6 for sale 438"
+   },
+   {
+    "minutes_ago": 45,
+    "text": "Item 7 for sale 741"
+   }
+  ],
+  "title": "Sony WH-CH520 variant 1",
+  "gold_spam": 1
+ },
+ {
+  "kind": "different_items",
+  "history": [
+   {
+    "minutes_ago": 174,
+    "text": "Physics textbook 2nd year"
+   },
+   {
+    "minutes_ago": 1169,
+    "text": "Casio keyboard CT-S300"
+   },
+   {
+    "minutes_ago": 944,
+    "text": "Nike shoes size 9"
+   }
+  ],
+  "title": "Dell laptop charger",
+  "gold_spam": 0
+ },
+ {
+  "kind": "repeat_case_punct",
+  "history": [
+   {
+    "minutes_ago": 949,
+    "text": "physics textbook 2nd year!!"
+   },
+   {
+    "minutes_ago": 775,
+    "text": "PHYSICS TEXTBOOK 2ND YEAR"
+   }
+  ],
+  "title": "Physics textbook 2nd year",
+  "gold_spam": 1
+ },
+ {
+  "kind": "burst_8_in_hour",
+  "history": [
+   {
+    "minutes_ago": 7,
+    "text": "Item 0 for sale 360"
+   },
+   {
+    "minutes_ago": 34,
+    "text": "Item 1 for sale 431"
+   },
+   {
+    "minutes_ago": 31,
+    "text": "Item 2 for sale 803"
+   },
+   {
+    "minutes_ago": 37,
+    "text": "Item 3 for sale 995"
+   },
+   {
+    "minutes_ago": 31,
+    "text": "Item 4 for sale 190"
+   },
+   {
+    "minutes_ago": 41,
+    "text": "Item 5 for sale 167"
+   },
+   {
+    "minutes_ago": 7,
+    "text": "Item 6 for sale 666"
+   },
+   {
+    "minutes_ago": 19,
+    "text": "Item 7 for sale 235"
+   }
+  ],
+  "title": "Prestige 3L cooker variant 6",
+  "gold_spam": 1
+ },
+ {
+  "kind": "burst_8_in_hour",
+  "history": [
+   {
+    "minutes_ago": 12,
+    "text": "Item 0 for sale 853"
+   },
+   {
+    "minutes_ago": 17,
+    "text": "Item 1 for sale 940"
+   },
+   {
+    "minutes_ago": 32,
+    "text": "Item 2 for sale 245"
+   },
+   {
+    "minutes_ago": 5,
+    "text": "Item 3 for sale 753"
+   },
+   {
+    "minutes_ago": 36,
+    "text": "Item 4 for sale 448"
+   },
+   {
+    "minutes_ago": 10,
+    "text": "Item 5 for sale 763"
+   },
+   {
+    "minutes_ago": 8,
+    "text": "Item 6 for sale 964"
+   },
+   {
+    "minutes_ago": 2,
+    "text": "Item 7 for sale 306"
+   }
+  ],
+  "title": "Sony WH-CH520 variant 3",
+  "gold_spam": 1
+ },
+ {
+  "kind": "repeat_case_punct",
+  "history": [
+   {
+    "minutes_ago": 1248,
+    "text": "casio keyboard ct-s300!!"
+   },
+   {
+    "minutes_ago": 434,
+    "text": "CASIO KEYBOARD CT-S300"
+   }
+  ],
+  "title": "Casio keyboard CT-S300",
+  "gold_spam": 1
+ },
+ {
+  "kind": "different_items",
+  "history": [
+   {
+    "minutes_ago": 229,
+    "text": "Milton flask 1L"
+   },
+   {
+    "minutes_ago": 217,
+    "text": "Hero Sprint cycle for sale"
+   },
+   {
+    "minutes_ago": 187,
+    "text": "Physics textbook 2nd year"
+   }
+  ],
+  "title": "Yonex badminton racket",
+  "gold_spam": 0
+ },
+ {
+  "kind": "repeat_case_punct",
+  "history": [
+   {
+    "minutes_ago": 1222,
+    "text": "dell laptop charger!!"
+   },
+   {
+    "minutes_ago": 1221,
+    "text": "DELL LAPTOP CHARGER"
+   }
+  ],
+  "title": "Dell laptop charger",
+  "gold_spam": 1
+ },
+ {
+  "kind": "repeat_identical",
+  "history": [
+   {
+    "minutes_ago": 1179,
+    "text": "Study table with drawer"
+   },
+   {
+    "minutes_ago": 1207,
+    "text": "Study table with drawer"
+   }
+  ],
+  "title": "Study table with drawer",
+  "gold_spam": 1
+ },
+ {
+  "kind": "burst_8_in_hour",
+  "history": [
+   {
+    "minutes_ago": 16,
+    "text": "Item 0 for sale 729"
+   },
+   {
+    "minutes_ago": 32,
+    "text": "Item 1 for sale 878"
+   },
+   {
+    "minutes_ago": 21,
+    "text": "Item 2 for sale 805"
+   },
+   {
+    "minutes_ago": 10,
+    "text": "Item 3 for sale 284"
+   },
+   {
+    "minutes_ago": 11,
+    "text": "Item 4 for sale 447"
+   },
+   {
+    "minutes_ago": 35,
+    "text": "Item 5 for sale 922"
+   },
+   {
+    "minutes_ago": 51,
+    "text": "Item 6 for sale 644"
+   },
+   {
+    "minutes_ago": 29,
+    "text": "Item 7 for sale 770"
+   }
+  ],
+  "title": "1st floor variant 4",
+  "gold_spam": 1
+ },
+ {
+  "kind": "repeat_once",
+  "history": [
+   {
+    "minutes_ago": 140,
+    "text": "Nike shoes size 9"
+   }
+  ],
+  "title": "Nike shoes size 9",
+  "gold_spam": 0
+ },
+ {
+  "kind": "different_items",
+  "history": [
+   {
+    "minutes_ago": 349,
+    "text": "Dell laptop charger"
+   },
+   {
+    "minutes_ago": 399,
+    "text": "Casio keyboard CT-S300"
+   },
+   {
+    "minutes_ago": 1038,
+    "text": "Yonex badminton racket"
+   }
+  ],
+  "title": "Physics textbook 2nd year",
+  "gold_spam": 0
+ },
+ {
+  "kind": "burst_8_in_hour",
+  "history": [
+   {
+    "minutes_ago": 30,
+    "text": "Item 0 for sale 117"
+   },
+   {
+    "minutes_ago": 35,
+    "text": "Item 1 for sale 494"
+   },
+   {
+    "minutes_ago": 3,
+    "text": "Item 2 for sale 432"
+   },
+   {
+    "minutes_ago": 21,
+    "text": "Item 3 for sale 327"
+   },
+   {
+    "minutes_ago": 46,
+    "text": "Item 4 for sale 132"
+   },
+   {
+    "minutes_ago": 48,
+    "text": "Item 5 for sale 164"
+   },
+   {
+    "minutes_ago": 21,
+    "text": "Item 6 for sale 155"
+   },
+   {
+    "minutes_ago": 42,
+    "text": "Item 7 for sale 469"
+   }
+  ],
+  "title": "TP-Link router variant 10",
+  "gold_spam": 1
+ },
+ {
+  "kind": "repeat_identical",
+  "history": [
+   {
+    "minutes_ago": 1239,
+    "text": "Yonex badminton racket"
+   },
+   {
+    "minutes_ago": 425,
+    "text": "Yonex badminton racket"
+   }
+  ],
+  "title": "Yonex badminton racket",
+  "gold_spam": 1
+ },
+ {
+  "kind": "repeat_once",
+  "history": [
+   {
+    "minutes_ago": 1049,
+    "text": "Physics textbook 2nd year"
+   }
+  ],
+  "title": "Physics textbook 2nd year",
+  "gold_spam": 0
+ },
+ {
+  "kind": "burst_7_in_hour",
+  "history": [
+   {
+    "minutes_ago": 43,
+    "text": "Item 0 for sale 800"
+   },
+   {
+    "minutes_ago": 19,
+    "text": "Item 1 for sale 917"
+   },
+   {
+    "minutes_ago": 18,
+    "text": "Item 2 for sale 396"
+   },
+   {
+    "minutes_ago": 32,
+    "text": "Item 3 for sale 349"
+   },
+   {
+    "minutes_ago": 10,
+    "text": "Item 4 for sale 297"
+   },
+   {
+    "minutes_ago": 34,
+    "text": "Item 5 for sale 900"
+   },
+   {
+    "minutes_ago": 5,
+    "text": "Item 6 for sale 140"
+   }
+  ],
+  "title": "Btwin Rockrider ST20 variant 11",
+  "gold_spam": 0
+ },
+ {
+  "kind": "burst_7_in_hour",
+  "history": [
+   {
+    "minutes_ago": 22,
+    "text": "Item 0 for sale 775"
+   },
+   {
+    "minutes_ago": 20,
+    "text": "Item 1 for sale 996"
+   },
+   {
+    "minutes_ago": 25,
+    "text": "Item 2 for sale 297"
+   },
+   {
+    "minutes_ago": 32,
+    "text": "Item 3 for sale 544"
+   },
+   {
+    "minutes_ago": 1,
+    "text": "Item 4 for sale 549"
+   },
+   {
+    "minutes_ago": 12,
+    "text": "Item 5 for sale 412"
+   },
+   {
+    "minutes_ago": 5,
+    "text": "Item 6 for sale 877"
+   }
+  ],
+  "title": "LED desk lamp variant 2",
+  "gold_spam": 0
+ },
+ {
+  "kind": "burst_8_in_hour",
+  "history": [
+   {
+    "minutes_ago": 45,
+    "text": "Item 0 for sale 306"
+   },
+   {
+    "minutes_ago": 30,
+    "text": "Item 1 for sale 948"
+   },
+   {
+    "minutes_ago": 37,
+    "text": "Item 2 for sale 286"
+   },
+   {
+    "minutes_ago": 10,
+    "text": "Item 3 for sale 432"
+   },
+   {
+    "minutes_ago": 26,
+    "text": "Item 4 for sale 364"
+   },
+   {
+    "minutes_ago": 33,
+    "text": "Item 5 for sale 280"
+   },
+   {
+    "minutes_ago": 43,
+    "text": "Item 6 for sale 888"
+   },
+   {
+    "minutes_ago": 4,
+    "text": "Item 7 for sale 993"
+   }
+  ],
+  "title": "Hero Sprint 26T variant 7",
+  "gold_spam": 1
+ },
+ {
+  "kind": "repeat_once",
+  "history": [
+   {
+    "minutes_ago": 198,
+    "text": "Hero Sprint cycle for sale"
+   }
+  ],
+  "title": "Hero Sprint cycle for sale",
+  "gold_spam": 0
+ },
+ {
+  "kind": "burst_7_in_hour",
+  "history": [
+   {
+    "minutes_ago": 16,
+    "text": "Item 0 for sale 729"
+   },
+   {
+    "minutes_ago": 32,
+    "text": "Item 1 for sale 878"
+   },
+   {
+    "minutes_ago": 21,
+    "text": "Item 2 for sale 805"
+   },
+   {
+    "minutes_ago": 10,
+    "text": "Item 3 for sale 284"
+   },
+   {
+    "minutes_ago": 11,
+    "text": "Item 4 for sale 447"
+   },
+   {
+    "minutes_ago": 35,
+    "text": "Item 5 for sale 922"
+   },
+   {
+    "minutes_ago": 51,
+    "text": "Item 6 for sale 644"
+   }
+  ],
+  "title": "1st floor variant 4",
+  "gold_spam": 0
+ },
+ {
+  "kind": "paraphrase_repeat",
+  "history": [
+   {
+    "minutes_ago": 300,
+    "text": "Hero Sprint cycle for sale"
+   },
+   {
+    "minutes_ago": 500,
+    "text": "Hero Sprint cycle for sale"
+   }
+  ],
+  "title": "Hero Sprint cycle, selling now",
+  "gold_spam": 1
+ },
+ {
+  "kind": "burst_7_in_hour",
+  "history": [
+   {
+    "minutes_ago": 54,
+    "text": "Item 0 for sale 899"
+   },
+   {
+    "minutes_ago": 27,
+    "text": "Item 1 for sale 813"
+   },
+   {
+    "minutes_ago": 5,
+    "text": "Item 2 for sale 236"
+   },
+   {
+    "minutes_ago": 20,
+    "text": "Item 3 for sale 253"
+   },
+   {
+    "minutes_ago": 3,
+    "text": "Item 4 for sale 748"
+   },
+   {
+    "minutes_ago": 8,
+    "text": "Item 5 for sale 804"
+   },
+   {
+    "minutes_ago": 16,
+    "text": "Item 6 for sale 129"
+   }
+  ],
+  "title": "Nilkamal chair variant 5",
+  "gold_spam": 0
+ },
+ {
+  "kind": "different_items",
+  "history": [
+   {
+    "minutes_ago": 1192,
+    "text": "Milton flask 1L"
+   },
+   {
+    "minutes_ago": 739,
+    "text": "Physics textbook 2nd year"
+   },
+   {
+    "minutes_ago": 683,
+    "text": "Hero Sprint cycle for sale"
+   }
+  ],
+  "title": "Casio keyboard CT-S300",
+  "gold_spam": 0
+ },
+ {
+  "kind": "repeat_identical",
+  "history": [
+   {
+    "minutes_ago": 706,
+    "text": "Milton flask 1L"
+   },
+   {
+    "minutes_ago": 766,
+    "text": "Milton flask 1L"
+   }
+  ],
+  "title": "Milton flask 1L",
+  "gold_spam": 1
+ },
+ {
+  "kind": "repeat_once",
+  "history": [
+   {
+    "minutes_ago": 1151,
+    "text": "Study table with drawer"
+   }
+  ],
+  "title": "Study table with drawer",
+  "gold_spam": 0
+ },
+ {
+  "kind": "burst_8_in_hour",
+  "history": [
+   {
+    "minutes_ago": 11,
+    "text": "Item 0 for sale 579"
+   },
+   {
+    "minutes_ago": 19,
+    "text": "Item 1 for sale 420"
+   },
+   {
+    "minutes_ago": 35,
+    "text": "Item 2 for sale 697"
+   },
+   {
+    "minutes_ago": 49,
+    "text": "Item 3 for sale 926"
+   },
+   {
+    "minutes_ago": 29,
+    "text": "Item 4 for sale 512"
+   },
+   {
+    "minutes_ago": 39,
+    "text": "Item 5 for sale 638"
+   },
+   {
+    "minutes_ago": 49,
+    "text": "Item 6 for sale 975"
+   },
+   {
+    "minutes_ago": 8,
+    "text": "Item 7 for sale 981"
+   }
+  ],
+  "title": "Logitech MK270 variant 8",
+  "gold_spam": 1
+ },
+ {
+  "kind": "burst_8_in_hour",
+  "history": [
+   {
+    "minutes_ago": 22,
+    "text": "Item 0 for sale 775"
+   },
+   {
+    "minutes_ago": 20,
+    "text": "Item 1 for sale 996"
+   },
+   {
+    "minutes_ago": 25,
+    "text": "Item 2 for sale 297"
+   },
+   {
+    "minutes_ago": 32,
+    "text": "Item 3 for sale 544"
+   },
+   {
+    "minutes_ago": 1,
+    "text": "Item 4 for sale 549"
+   },
+   {
+    "minutes_ago": 12,
+    "text": "Item 5 for sale 412"
+   },
+   {
+    "minutes_ago": 5,
+    "text": "Item 6 for sale 877"
+   },
+   {
+    "minutes_ago": 3,
+    "text": "Item 7 for sale 478"
+   }
+  ],
+  "title": "LED desk lamp variant 2",
+  "gold_spam": 1
+ },
+ {
+  "kind": "repeat_case_punct",
+  "history": [
+   {
+    "minutes_ago": 608,
+    "text": "nike shoes size 9!!"
+   },
+   {
+    "minutes_ago": 646,
+    "text": "NIKE SHOES SIZE 9"
+   }
+  ],
+  "title": "Nike shoes size 9",
+  "gold_spam": 1
+ },
+ {
+  "kind": "repeat_once",
+  "history": [
+   {
+    "minutes_ago": 1128,
+    "text": "Yonex badminton racket"
+   }
+  ],
+  "title": "Yonex badminton racket",
+  "gold_spam": 0
+ },
+ {
+  "kind": "burst_8_in_hour",
+  "history": [
+   {
+    "minutes_ago": 43,
+    "text": "Item 0 for sale 800"
+   },
+   {
+    "minutes_ago": 19,
+    "text": "Item 1 for sale 917"
+   },
+   {
+    "minutes_ago": 18,
+    "text": "Item 2 for sale 396"
+   },
+   {
+    "minutes_ago": 32,
+    "text": "Item 3 for sale 349"
+   },
+   {
+    "minutes_ago": 10,
+    "text": "Item 4 for sale 297"
+   },
+   {
+    "minutes_ago": 34,
+    "text": "Item 5 for sale 900"
+   },
+   {
+    "minutes_ago": 5,
+    "text": "Item 6 for sale 140"
+   },
+   {
+    "minutes_ago": 28,
+    "text": "Item 7 for sale 988"
+   }
+  ],
+  "title": "Btwin Rockrider ST20 variant 11",
+  "gold_spam": 1
+ },
+ {
+  "kind": "burst_7_in_hour",
+  "history": [
+   {
+    "minutes_ago": 7,
+    "text": "Item 0 for sale 423"
+   },
+   {
+    "minutes_ago": 53,
+    "text": "Item 1 for sale 851"
+   },
+   {
+    "minutes_ago": 44,
+    "text": "Item 2 for sale 288"
+   },
+   {
+    "minutes_ago": 44,
+    "text": "Item 3 for sale 497"
+   },
+   {
+    "minutes_ago": 6,
+    "text": "Item 4 for sale 290"
+   },
+   {
+    "minutes_ago": 33,
+    "text": "Item 5 for sale 629"
+   },
+   {
+    "minutes_ago": 40,
+    "text": "Item 6 for sale 438"
+   }
+  ],
+  "title": "Sony WH-CH520 variant 1",
+  "gold_spam": 0
+ },
+ {
+  "kind": "repeat_identical",
+  "history": [
+   {
+    "minutes_ago": 1160,
+    "text": "Nike shoes size 9"
+   },
+   {
+    "minutes_ago": 521,
+    "text": "Nike shoes size 9"
+   }
+  ],
+  "title": "Nike shoes size 9",
+  "gold_spam": 1
+ },
+ {
+  "kind": "repeat_identical",
+  "history": [
+   {
+    "minutes_ago": 1255,
+    "text": "Dell laptop charger"
+   },
+   {
+    "minutes_ago": 203,
+    "text": "Dell laptop charger"
+   }
+  ],
+  "title": "Dell laptop charger",
+  "gold_spam": 1
+ },
+ {
+  "kind": "different_items",
+  "history": [
+   {
+    "minutes_ago": 1024,
+    "text": "Casio keyboard CT-S300"
+   },
+   {
+    "minutes_ago": 904,
+    "text": "Yonex badminton racket"
+   },
+   {
+    "minutes_ago": 1283,
+    "text": "Dell laptop charger"
+   }
+  ],
+  "title": "Hero Sprint cycle for sale",
+  "gold_spam": 0
+ },
+ {
+  "kind": "repeat_once",
+  "history": [
+   {
+    "minutes_ago": 1000,
+    "text": "Milton flask 1L"
+   }
+  ],
+  "title": "Milton flask 1L",
+  "gold_spam": 0
+ },
+ {
+  "kind": "burst_8_in_hour",
+  "history": [
+   {
+    "minutes_ago": 30,
+    "text": "Item 0 for sale 666"
+   },
+   {
+    "minutes_ago": 37,
+    "text": "Item 1 for sale 811"
+   },
+   {
+    "minutes_ago": 33,
+    "text": "Item 2 for sale 893"
+   },
+   {
+    "minutes_ago": 49,
+    "text": "Item 3 for sale 181"
+   },
+   {
+    "minutes_ago": 31,
+    "text": "Item 4 for sale 803"
+   },
+   {
+    "minutes_ago": 17,
+    "text": "Item 5 for sale 149"
+   },
+   {
+    "minutes_ago": 53,
+    "text": "Item 6 for sale 855"
+   },
+   {
+    "minutes_ago": 54,
+    "text": "Item 7 for sale 363"
+   }
+  ],
+  "title": "JBL Tune 510BT variant 0",
+  "gold_spam": 1
+ }
+]
