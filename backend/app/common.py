@@ -25,6 +25,11 @@ def search_text(q: str | None) -> str | None:
     return q.strip()
 
 
+def like_pattern(q: str) -> str:
+    """Escape LIKE wildcards so a search for "50%" matches the text "50%"; use with ESCAPE '\\'."""
+    return q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 class Page(BaseModel, Generic[T]):
     items: list[T]
     limit: int

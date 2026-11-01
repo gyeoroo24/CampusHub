@@ -1,6 +1,6 @@
 # Database schema
 
-The schema is revision 5, for PostgreSQL 15 or newer: 33 tables, 1 view and 12 enums. The SQL is
+The schema is revision 13, for PostgreSQL 15 or newer (the table counts below are from revision 5): 33 tables, 1 view and 12 enums. The SQL is
 [`backend/db/schema.sql`](../../backend/db/schema.sql). Docker Compose loads it the first time the
 local database starts.
 

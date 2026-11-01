@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../placement/ui/company_forum.dart';
 import '../../../core/utils/web_history_support.dart';
 import '../../../core/utils/date_time_formatter.dart';
 import '../../../core/utils/error_text.dart';
@@ -61,6 +62,10 @@ class NotificationsDialog extends ConsumerStatefulWidget {
         return Icons.trending_down_rounded;
       case 'moderation_action':
         return Icons.shield_outlined;
+      case 'followed_tag_event':
+        return Icons.event_available_rounded;
+      case 'bookmarked_event_update':
+        return Icons.event_note_rounded;
       default:
         return Icons.notifications_none_rounded;
     }
@@ -78,6 +83,19 @@ class NotificationsDialog extends ConsumerStatefulWidget {
       Navigator.pop(context);
       await WebHistoryManager.instance.settled;
       router.go('/messages/$conversationId');
+      return;
+    }
+    final eventId = n.payload['event_id']?.toString();
+    if (eventId != null && n.payload['cancelled'] != true) {
+      final router = GoRouter.of(context);
+      Navigator.pop(context);
+      await WebHistoryManager.instance.settled;
+      router.go('/events/$eventId');
+      return;
+    }
+    final threadId = n.payload['thread_id']?.toString();
+    if (n.type == 'forum_reply' && threadId != null) {
+      await showDialog(context: context, builder: (_) => ThreadDialog(threadId: threadId));
       return;
     }
     try {
@@ -231,7 +249,11 @@ class _NotificationsDialogState extends ConsumerState<NotificationsDialog> {
                 separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (context, i) {
                   final n = items[i];
-                  final opens = n.listingId != null || n.foundReportId != null || n.type == 'chat_message';
+                  final opens = n.listingId != null ||
+                      n.foundReportId != null ||
+                      n.type == 'chat_message' ||
+                      (n.type == 'forum_reply' && n.payload['thread_id'] != null) ||
+                      (n.payload['event_id'] != null && n.payload['cancelled'] != true);
                   final picked = selected?.contains(n.id) ?? false;
                   void toggle() => setState(() => picked ? selected!.remove(n.id) : selected!.add(n.id));
                   return ListTile(

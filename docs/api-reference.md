@@ -1,14 +1,15 @@
 # CampusHub API Reference
 
-Last updated 25 Oct 2026. For the exact JSON of every request and response, run the backend and open Swagger at `http://localhost:8000/docs`.
+Last updated 1 Nov 2026. For the exact JSON of every request and response, run the backend and open Swagger at `http://localhost:8000/docs`.
 
 ## Overview
 
-The CampusHub backend exposes 90 endpoints under `/api/v1`. This page lists each one, who may call it, and the fields it takes and returns, so screens can be designed around real data.
+The CampusHub backend exposes 152 endpoints under `/api/v1`. This page lists each one, who may call it, and the fields it takes and returns, so screens can be designed around real data.
 
 - **Base URL (local):** `http://localhost:8000/api/v1`. The cloud host isn't set up yet; only the host part will change.
 - **Try it live:** `http://localhost:8000/docs` (Swagger) shows the exact JSON for every request and response, and lets you send real calls.
-- **Built so far (Phase 1):** sign-in and profiles, Buy & Sell, Lost & Found, Academic Help, forums, reports and moderation, notifications. Placement Hub and Events come later (last section).
+- **Built so far:** sign-in and profiles, Buy & Sell, Lost & Found, Academic Help, forums, reports and moderation, notifications, messaging, Placement Hub, Community Events and bookmarks.
+- **New on 1 Nov 2026 (`backend_v3`):** Placement Hub (companies, JDs, pre-placement talks, hiring statistics, interview experiences, company forums, placement sheet import) and Community Events (tags, Past/Present/Upcoming, bookmarks, followed tags and their alerts). Both have app screens.
 - **New on 24 Oct 2026 (from "Taking it further"):** saved searches and alerts, Wanted posts, campus services for the landing page, and the course survival guide. Each has its own section below; the backend is done and the app screens aren't built yet.
 
 The **Who** column in every table below uses these roles:
@@ -47,7 +48,7 @@ Moderator roles come in these shapes:
 | `buy_sell` | All listings |
 | `lost_found` | All lost and found reports |
 | `academic_help` | One department (all its courses) or one course |
-| `placement_hub` | All of Placement Hub (API not built yet) |
+| `placement_hub` | All of Placement Hub: companies, JDs, PPTs, sheet imports, and removing interview experiences and company forum posts |
 
 ## Conventions
 
@@ -89,6 +90,7 @@ Only step 3 moves the file itself, so that's the step to show progress on.
 | --- | --- | --- | --- |
 | `listing_photo`, `lost_report_photo`, `found_report_photo` | JPEG, PNG, WebP, HEIC | 10 MB | 10 photos |
 | `course_material` | PDF, PPTX, DOCX, ZIP, TXT, images | 50 MB | 1 file per material |
+| `job_description` (Placement Hub moderators only) | PDF, DOCX, TXT | 20 MB | 1 file per JD (`file_s3_key`) |
 
 - **Photo order:** `photo_keys` are kept in the order sent. The first is the cover (`cover_photo_url` in lists).
 - **Editing photos later:** `PUT .../photos` with the full new list adds, removes and reorders in one call.
@@ -237,6 +239,83 @@ A buyer says what they need ("Need a cycle, budget ₹3,000") instead of waiting
 - **Alerts:** a new matching item (or one edited or made available again so it now matches) sends a `saved_search_match` notification, once per item, never for your own posts. Turn alerts off with `alerts_enabled: false`; `new_count` still updates.
 - **Limits:** name 1–80 characters, `q` up to 200, up to 20 saved searches per person (a 21st returns 409).
 
+## Placement Hub
+
+Company pages for placement prep (FR-15, FR-16, FR-17): what the company does, its JDs, pre-placement talks (PPTs), how many students it selected each year, seniors' interview experiences, and a forum.
+
+| Method | Path | Who | What it does |
+| --- | --- | --- | --- |
+| GET | `/companies` | guest | Browse companies. Filters: `q` (name or industry), `industry`. `sort`: `name` (default), `most_hired` (latest season's hires), `upcoming_ppt` (soonest talk first) |
+| GET | `/companies/{id}` | guest | The company page: details, `job_descriptions`, `ppts`, headline numbers, `viewer_can_manage` |
+| POST | `/companies` | placement moderator, admin | Add one: `name`, `industry`, `website` (must start with `https://` or `http://`), `description`. A name that differs only in case or spacing is a duplicate (409) |
+| PATCH | `/companies/{id}` | placement moderator, admin | Edit any of those fields |
+| DELETE | `/companies/{id}` | admin | Delete it **with** its JDs, PPTs, hiring records, interview experiences and forum |
+| POST | `/companies/{id}/jds` | placement moderator, admin | Add a JD: `role_title`, `description` (the JD text), `compensation` (free text, e.g. "₹32 LPA"), optional `file_s3_key` (upload kind `job_description`: PDF, DOCX or TXT, up to 20 MB) |
+| PATCH | `/jds/{id}` | placement moderator, admin | Edit; `file_s3_key: null` removes the file |
+| DELETE | `/jds/{id}` | placement moderator, admin | Delete a JD |
+| GET | `/placement/ppts` | guest | PPTs across companies. `when`: `upcoming` (default, soonest first), `past`, `all` |
+| POST | `/companies/{id}/ppts` | placement moderator, admin | Add PPT info: `details`, `venue`, `scheduled_at` (leave out until the date is announced). At least one is needed |
+| PATCH / DELETE | `/ppts/{id}` | placement moderator, admin | Edit or delete PPT info |
+| GET | `/companies/{id}/hiring-stats` | guest | Students selected per year and role, newest year first |
+| GET | `/placement/stats` | guest | Seasons at a glance: hires and companies per year (`years`, default 5) and the top recruiters of the latest season (or `year`) |
+| GET | `/interviews` | guest | Interview experiences, newest first. Filters: `company_id`, `q`, `role`, `placement_year`, `mine=true` (signed in) |
+| POST | `/companies/{id}/interviews` | user | Share one: `role_title`, `content`, `placement_year`, `is_anonymous` |
+| GET | `/interviews/{id}` | guest | One interview experience |
+| PATCH | `/interviews/{id}` | owner, admin | Edit. Only the author can change `is_anonymous` |
+| DELETE | `/interviews/{id}` | owner, placement moderator, admin | Remove. Moderators can add `?reason=`; open reports on it close |
+| GET | `/companies/{id}/forum` | guest | The company's forum (created on first visit). Threads and replies use the Forums endpoints below |
+| POST | `/placement/imports` | placement moderator, admin | Import a placement sheet (FR-17): `placement_year` and `sheet` (see below) |
+| GET | `/placement/imports` | placement moderator, admin | Past imports, newest first, with their counts |
+
+**Fields to design with:**
+
+| Object | Fields |
+| --- | --- |
+| Company card (in lists) | `id`, `name`, `industry`, `description`, `role_count`, `interview_count`, `next_ppt_at`, `latest_year`, `latest_year_selected`, `total_selected` |
+| Company page | Everything on the card, plus `website`, `job_descriptions`, `ppts`, `viewer_can_manage`, `created_at`, `updated_at` |
+| JD | `id`, `company_id`, `role_title`, `description`, `compensation`, `file_s3_key`, `file_url` (short-lived link, `null` without a file) |
+| PPT | `id`, `company_id`, `company_name`, `details`, `venue`, `scheduled_at`, `when` (`upcoming`, `past`, `unscheduled`) |
+| Hiring stats | `company_id`, `company_name`, `total_selected`, `years`: [`year`, `students_selected`, `roles`: [`role_title`, `students_selected`]] |
+| Interview experience | `id`, `company_id`, `company_name`, `role_title`, `placement_year`, `content`, `is_anonymous`, `is_mine`, `author` (`null` for guests, and for anonymous posts except to their author) |
+| Import result | `id`, `placement_year`, `rows_total`, `rows_created`, `rows_updated`, `rows_rejected`, `companies_created`, `rejected_rows`: [`line`, `reason`], `imported_at` |
+
+- **Empty states (FR-15):** a company with no JD or PPT returns empty lists, and one with no hiring data has `latest_year: null` and `years: []`. Show "No job description posted yet", never an error.
+- **Hiring statistics are totals only.** Placement records hold students' emails, but no endpoint returns them.
+- **Sheet import:** the moderator pastes the sheet as text: cells copied from a spreadsheet (tab-separated) or a CSV export. The first line is the header: `Company`, `Student email`, `Role`, and optionally `Slot`, in any order (a few common spellings like `Email` or `Designation` work). Each row is created, updated (the same student's email in the same season), or rejected with its line number and reason; good rows import even when others are rejected. Companies are matched by name ignoring case and spacing, and new ones are created. The pasted text is stored in S3 as the import's source. Up to 5,000 rows; a sheet with no usable header returns 422 and imports nothing.
+- **Reporting:** interview experiences and company forum posts can be reported (`interview_experience`, `thread`, `comment`); they go to the Placement Hub moderators' queue.
+
+## Community Events
+
+A campus events timeline (FR-18, FR-19, FR-20): sports, culture, talks, food and more. Anyone signed in can post an event; its organizer (or an admin) edits or cancels it. Events have no moderators of their own.
+
+| Method | Path | Who | What it does |
+| --- | --- | --- | --- |
+| GET | `/event-tags` | guest | All tags with `upcoming_count` and, for signed-in users, `following` |
+| POST | `/event-tags` | admin | Add a tag: `name` |
+| PATCH / DELETE | `/event-tags/{id}` | admin | Rename or delete a tag |
+| GET | `/events` | guest | The timeline. Filters: `when` (repeatable `present`, `upcoming`, `past`; default present + upcoming), `tag_id` (repeatable; events with any of them), `q` (title, description, place), `from_time` / `to_time`, `organizer_id`, `bookmarked=true` (signed in) |
+| GET | `/events/{id}` | guest | One event |
+| POST | `/events` | user | Post one: `title`, `start_time`, `end_time` (with a timezone), `tag_ids` (1–5), `location`, `description` |
+| PATCH | `/events/{id}` | organizer, admin | Edit any field, including `tag_ids` |
+| DELETE | `/events/{id}` | organizer, admin | Cancel (remove) it |
+| GET | `/me/followed-tags` | user | Tags I follow |
+| PUT / DELETE | `/me/followed-tags/{tag_id}` | user | Follow / unfollow a tag (204). Following twice is fine |
+| GET | `/me/bookmarks` | user | My bookmarks (`target_type` `listing` or `event`, optional filter), newest first; removed items drop out |
+| PUT / DELETE | `/me/bookmarks/{target_type}/{id}` | user | Bookmark / un-bookmark a listing or event. Bookmarking twice is fine |
+| POST | `/me/bookmarks/import` | user | `{"items": [{"target_type", "target_id"}, ...]}` (up to 500): save a guest's on-device bookmarks after sign-in. Returns `added`, `already_saved`, `skipped` (no longer exists) |
+
+**Fields to design with:**
+
+| Object | Fields |
+| --- | --- |
+| Event | `id`, `title`, `description`, `location`, `start_time`, `end_time`, `when` (`upcoming`, `present`, `past`), `tags` (`id`, `name`), `organizer` (`id`, `name`), `bookmark_count`, `is_bookmarked`, `can_edit`, `created_at`, `updated_at` |
+| Tag | `id`, `name`, `upcoming_count`, `following` |
+
+- **Past / Present / Upcoming (FR-19)** is worked out from the clock on every request: `present` when start ≤ now ≤ end. The default order is happening now, then soonest upcoming, then most recent past.
+- **Guests' bookmarks** stay on the device (PRD §3.1). The app keeps them locally and calls `/me/bookmarks/import` once the person signs in.
+- **Alerts (FR-20, FR-22):** a new event alerts everyone following one of its tags (`followed_tag_event`); adding a followed tag to an existing event does too. Changing an event's time, place, title or details, or cancelling it, alerts everyone who bookmarked it (`bookmarked_event_update`, with `cancelled: true` for a cancellation). Nobody is alerted about their own changes, or about events that are already over.
+- **Limits:** title 1–150 characters, an event lasts at most 30 days and starts at most about a year ahead, up to 5 tags.
+
 ## Academic Help
 
 The screens go department → course → materials and feedback. Each course and department also has a forum (next section).
@@ -297,12 +376,13 @@ A one-page summary of a course's feedback, semester by semester, with sentiment 
 
 ## Forums
 
-Forums go forum → thread → comments. Each course and each department has exactly one forum, created the first time someone opens it.
+Forums go forum → thread → comments. Each course, department and company (Placement Hub) has exactly one forum, created the first time someone opens it.
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
 | GET | `/courses/{id}/forum` | guest | The course's forum, with `thread_count` |
 | GET | `/departments/{id}/forum` | guest | The department's forum |
+| GET | `/companies/{id}/forum` | guest | The company's forum (Placement Hub moderators remove posts there) |
 | GET | `/forums/{id}/threads` | guest | Threads, newest first |
 | POST | `/forums/{id}/threads` | user | Start a thread: `title` plus `content` (the opening post) |
 | GET | `/threads/{id}` | guest | The thread with every comment in order, and `viewer_can_moderate` |
@@ -410,6 +490,8 @@ A notification has `id`, `type`, `payload`, `is_read` and `created_at`. Every `p
 | `saved_search_match` | A new item matches one of your saved searches | `saved_search_id`, and `listing_id` or `found_report_id` | The listing or found report |
 | `wanted_post_match` | A new listing matches one of your open Wanted posts | `wanted_post_id`, `listing_id` | The listing |
 | `chat_message` | A new message, offer or offer answer, or a buyer wants to chat before you've set up messaging | `conversation_id` | The conversation |
+| `followed_tag_event` | A new event carries a tag you follow | `event_id`, `tags` | The event |
+| `bookmarked_event_update` | An event you bookmarked changed or was cancelled | `event_id`, `cancelled` | The event (nothing when cancelled) |
 
 - **Unread badge:** call with `unread_only=true` and check whether `items` is empty. There's no unread-count endpoint.
 - **Shared devices:** registering a token another account used moves it to the current user.
@@ -434,12 +516,7 @@ Health Centre, Wellness Centre, emergency and grievance links for the landing pa
 
 ## Not available yet
 
-These parts of the app have database tables but no endpoints yet (Phase 2). Design them from the PRD; their endpoints will follow the same conventions as above.
-
 | Area | What's planned |
 | --- | --- |
-| Placement Hub | Company pages, job descriptions, pre-placement talks, hiring stats (totals only, never individual students), interview experiences, a forum per company, bulk import of placement sheets |
-| Community Events | Events with tags, shown as Past, Present or Upcoming; following tags for alerts |
-| Bookmarks | Saving listings and events. Guests keep bookmarks on the device only |
 | Landing page highlights | Featured items across modules (FR-21). Campus services links are ready (see Campus services) |
 | Push delivery | Devices register today, but pushes are only logged; the inbox works |

@@ -1,6 +1,6 @@
 # Deploying CampusHub to the cloud: what still has to change
 
-*Last updated 2 Nov 2026 (database revision 15)*
+*Last updated 2 Nov 2026 (database revision 16)*
 
 Local development takes shortcuts that must not reach a real deployment. This page lists them,
 plus the cloud work each feature still needs. How to build and wire the Lambda, RDS Proxy, S3,
@@ -9,7 +9,7 @@ Update this page whenever a new shortcut or cloud dependency is added.
 
 ## Must do before going live
 
-1. **Run the database migrations** on RDS, in order, if the database is older than revision 15.
+1. **Run the database migrations** on RDS, in order, if the database is older than revision 16.
    A brand-new database only needs `backend/db/schema.sql`.
    - `008_encrypted_chat`
    - `009_server_held_chat_keys`
@@ -18,6 +18,7 @@ Update this page whenever a new shortcut or cloud dependency is added.
    - `012_lf_matching` (then invoke the matcher once with `{"backfill": true}`)
    - `013_seller_trust`, `014_reversible_listing_hide`
    - `015_auto_flags_and_price_watch` (adds a notification type outside the transaction; run as is)
+   - `016_placement_and_events`, then `db/reference-data.sql` (default event tags)
 
    `010` merges older per-listing chats into one chat per person. Back up the `chat_*` tables
    first.

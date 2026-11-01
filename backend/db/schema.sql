@@ -1,10 +1,17 @@
 -- ============================================================================
--- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 15
+-- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 16
 -- DS252 Introduction to Cloud Computing — Team "Order of Phoenix"
 --
 -- Permission modules (FR-2, NFR-6): buy_sell, lost_found, academic_help,
 -- placement_hub. Community Events is a feature, not a permission module:
 -- it has no module moderators (creator + admins manage events).
+--
+-- Changes from rev. 15 (Placement Hub and Community Events APIs, 1-2 Nov 2026; built in
+--   parallel with revs 13-15 and first numbered rev 13):
+--   1. companies.website / industry; job_descriptions.description / compensation (the JD as text,
+--      the file stays optional); ppt_info.venue.
+--   2. interview_experiences.is_anonymous and placement_year (which season the interview was for).
+--   Upgrade: db/migrations/016_placement_and_events.sql.
 --
 -- Changes from rev. 14 (automatic flagging and price watch, 2 Nov 2026):
 --   1. reports.source ('user' or 'system') and reporter_id nullable for system flags (future
@@ -534,6 +541,8 @@ CREATE TABLE companies (
     name        TEXT NOT NULL CHECK (char_length(btrim(name)) >= 1),
     name_key    TEXT GENERATED ALWAYS AS (lower(regexp_replace(btrim(name), '\s+', ' ', 'g'))) STORED UNIQUE,
     description TEXT,
+    website     TEXT,                          -- rev 16
+    industry    TEXT,                          -- rev 16, e.g. 'Software', 'Finance', 'Semiconductors'
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -543,6 +552,8 @@ CREATE TABLE job_descriptions (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id      UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     role_title      TEXT NOT NULL,
+    description     TEXT,                      -- rev 16: the JD as text
+    compensation    TEXT,                      -- rev 16: as announced, e.g. '₹32 LPA'
     jd_s3_key       TEXT,                      -- optional JD file
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -553,6 +564,7 @@ CREATE TABLE ppt_info (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id   UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     details      TEXT,
+    venue        TEXT,                         -- rev 16
     scheduled_at TIMESTAMPTZ,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -565,6 +577,8 @@ CREATE TABLE interview_experiences (
     author_id  UUID NOT NULL REFERENCES users(id),
     role_title TEXT,
     content    TEXT NOT NULL,
+    is_anonymous   BOOLEAN NOT NULL DEFAULT FALSE,   -- rev 16: name hidden from everyone but the author
+    placement_year SMALLINT CHECK (placement_year BETWEEN 2000 AND 2100),   -- rev 16
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at TIMESTAMPTZ,
