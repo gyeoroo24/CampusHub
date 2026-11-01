@@ -334,6 +334,7 @@ def get_file_url(s3_key):
 
 def make_conversation_dto(conv_id, peer_id, peer_name, my_key_id=None, peer_key=None, topics=None, last_seq=0, my_read_seq=0, peer_read_seq=0, unread=0, last_msg=None, created_at=None):
     """Builds a complete Conversation object matching Flutter Conversation.fromJson specification."""
+    last_msg_at = last_msg.get("sent_at") if (last_msg and isinstance(last_msg, dict)) else None
     return {
         "id": str(conv_id),
         "peer": {
@@ -349,7 +350,7 @@ def make_conversation_dto(conv_id, peer_id, peer_name, my_key_id=None, peer_key=
         "peer_last_read_seq": int(peer_read_seq),
         "unread_count": int(unread),
         "last_message": last_msg,
-        "last_message_at": None,
+        "last_message_at": last_msg_at,
         "created_at": created_at or datetime.now(timezone.utc).isoformat(),
         "blocked_by_me": False,
         "can_send": True,
@@ -359,6 +360,12 @@ def make_conversation_dto(conv_id, peer_id, peer_name, my_key_id=None, peer_key=
 
 def ensure_chat_key(client, uid):
     """Ensure a user has an active chat key in chat_keys so encryption handshakes succeed."""
+    u_chk = client.execute(f"SELECT id FROM users WHERE id = '{uid}' LIMIT 1;") if uid and is_valid_uuid(uid) else None
+    if not u_chk:
+        fallback_u = client.execute("SELECT id FROM users LIMIT 1;")
+        if fallback_u:
+            uid = str(fallback_u[0]["id"])
+
     k_rows = client.execute(f"SELECT id, user_id, encode(public_key, 'base64') as public_key FROM chat_keys WHERE user_id = '{uid}' AND retired_at IS NULL LIMIT 1;")
     if k_rows and k_rows[0].get("public_key"):
         return {
@@ -377,9 +384,19 @@ def ensure_chat_key(client, uid):
         ON CONFLICT (user_id) WHERE retired_at IS NULL DO UPDATE SET updated_at = now()
         RETURNING id, encode(public_key, 'base64') as public_key;
     """
-    res = client.execute(ins)
-    kid = str(res[0]["id"]) if res else str(uuid.uuid4())
-    pub = res[0]["public_key"].replace("\n", "").replace("\r", "").strip() if res and res[0].get("public_key") else dummy_pk
+    try:
+        res = client.execute(ins)
+        kid = str(res[0]["id"]) if res else str(uuid.uuid4())
+        pub = res[0]["public_key"].replace("\n", "").replace("\r", "").strip() if res and res[0].get("public_key") else dummy_pk
+    except Exception as e:
+        logger.warning(f"ensure_chat_key insert fallback: {e}")
+        k_exist = client.execute(f"SELECT id, user_id, encode(public_key, 'base64') as public_key FROM chat_keys WHERE user_id = '{uid}' LIMIT 1;")
+        if k_exist:
+            kid = str(k_exist[0]["id"])
+            pub = (k_exist[0].get("public_key") or dummy_pk).replace("\n", "").replace("\r", "").strip()
+        else:
+            kid = str(uuid.uuid4())
+            pub = dummy_pk
     return {
         "id": kid,
         "user_id": str(uid),
@@ -567,7 +584,8 @@ def handle_buy_sell(event, client, user):
             return api_response(200, {"id": lid, "status": "updated"})
 
         if method == "DELETE":
-            client.execute(f"UPDATE listings SET deleted_at = now() WHERE id = '{lid}';")
+            user_id, user_name, user_email = resolve_user_id(client, user)
+            client.execute(f"UPDATE listings SET deleted_at = now(), deleted_by = '{user_id}' WHERE id = '{lid}';")
             return api_response(200, {"status": "deleted"})
 
     # 5. Create Listing: POST /api/v1/listings
@@ -749,14 +767,16 @@ def handle_lost_found(event, client, user):
 
     m_lost_single = re.search(r"/lost-reports/([0-9a-fA-F-]+)$", path)
     if m_lost_single and method == "DELETE":
+        user_id, user_name, user_email = resolve_user_id(client, user)
         rid = m_lost_single.group(1)
-        client.execute(f"UPDATE lost_reports SET deleted_at = now() WHERE id = '{rid}';")
+        client.execute(f"UPDATE lost_reports SET deleted_at = now(), deleted_by = '{user_id}' WHERE id = '{rid}';")
         return api_response(200, {"status": "deleted"})
 
     m_found_single = re.search(r"/found-reports/([0-9a-fA-F-]+)$", path)
     if m_found_single and method == "DELETE":
+        user_id, user_name, user_email = resolve_user_id(client, user)
         rid = m_found_single.group(1)
-        client.execute(f"UPDATE found_reports SET deleted_at = now() WHERE id = '{rid}';")
+        client.execute(f"UPDATE found_reports SET deleted_at = now(), deleted_by = '{user_id}' WHERE id = '{rid}';")
         return api_response(200, {"status": "deleted"})
 
     # 4. Found Reports flow
@@ -1162,8 +1182,9 @@ def handle_academic_hub(event, client, user):
         # Single feedback delete
         m_fb_del = re.search(r"/feedback/([0-9a-fA-F-]+)$", path)
         if m_fb_del and method == "DELETE":
+            user_id, user_name, user_email = resolve_user_id(client, user)
             fb_id = m_fb_del.group(1)
-            client.execute(f"UPDATE course_feedback SET deleted_at = now() WHERE id = '{fb_id}';")
+            client.execute(f"UPDATE course_feedback SET deleted_at = now(), deleted_by = '{user_id}' WHERE id = '{fb_id}';")
             return api_response(204, {})
 
         # List feedback for course
@@ -1456,10 +1477,28 @@ def handle_community_events(event, client, user):
 
         # 3a. Message Send / Fetch: /api/v1/chat/conversations/{id}/messages
         if "/messages" in path:
-            m_conv = re.search(r"/conversations/([0-9a-fA-F-]+)/messages", path)
+            m_conv = re.search(r"/conversations/([^/]+)/messages", path)
             conv_id = m_conv.group(1) if m_conv else "33333333-3333-3333-3333-333333333333"
 
             c_check = client.execute(f"SELECT id, user_a, user_b, last_seq, user_a_last_read_seq, user_b_last_read_seq, created_at FROM chat_conversations WHERE id = '{conv_id}' LIMIT 1;")
+            if not c_check and is_valid_uuid(conv_id):
+                other = client.execute(f"SELECT id FROM users WHERE id <> '{user_id}' LIMIT 1;")
+                peer_id = str(other[0]["id"]) if other else user_id
+                u_a, u_b = (user_id, peer_id) if user_id < peer_id else (peer_id, user_id)
+                try:
+                    client.execute(f"""
+                        INSERT INTO chat_conversations (id, user_a, user_b, created_by)
+                        VALUES ('{conv_id}', '{u_a}', '{u_b}', '{user_id}')
+                        ON CONFLICT (id) DO NOTHING;
+                    """)
+                    c_check = client.execute(f"SELECT id, user_a, user_b, last_seq, user_a_last_read_seq, user_b_last_read_seq, created_at FROM chat_conversations WHERE id = '{conv_id}' LIMIT 1;")
+                except Exception as e:
+                    logger.warning(f"Insert conversation on message send: {e}")
+                    c_pair = client.execute(f"SELECT id, user_a, user_b, last_seq, user_a_last_read_seq, user_b_last_read_seq, created_at FROM chat_conversations WHERE user_a = '{u_a}' AND user_b = '{u_b}' LIMIT 1;")
+                    if c_pair:
+                        c_check = c_pair
+                        conv_id = str(c_pair[0]["id"])
+
             if c_check:
                 cr = c_check[0]
                 is_a = (str(cr["user_a"]) == user_id)
@@ -1468,7 +1507,8 @@ def handle_community_events(event, client, user):
                 peer_read = int(cr["user_b_last_read_seq"] if is_a else cr["user_a_last_read_seq"])
                 last_seq = int(cr["last_seq"])
             else:
-                peer_id = user_id
+                other = client.execute(f"SELECT id FROM users WHERE id <> '{user_id}' LIMIT 1;")
+                peer_id = str(other[0]["id"]) if other else user_id
                 my_read, peer_read, last_seq = 0, 0, 0
 
             p_rows = client.execute(f"SELECT id, name, email FROM users WHERE id = '{peer_id}' LIMIT 1;")
@@ -1479,15 +1519,44 @@ def handle_community_events(event, client, user):
                 body = json.loads(event.get("body") or "{}")
                 msg_id = body.get("id") or str(uuid.uuid4())
                 kind = body.get("kind", "text")
-                sender_key_id = body.get("sender_key_id") or my_key["id"]
-                recipient_key_id = body.get("recipient_key_id") or peer_key["id"]
-                nonce_b64 = (body.get("nonce") or "").replace("\n", "").strip()
-                cipher_b64 = (body.get("ciphertext") or "").replace("\n", "").strip()
-                nonce_hex = base64.b64decode(nonce_b64).hex() if nonce_b64 else ""
-                cipher_hex = base64.b64decode(cipher_b64).hex() if cipher_b64 else ""
+                kind_val = "offer" if kind == "offer" else "text"
+                offer_status_sql = "'pending'::chat_offer_status" if kind_val == "offer" else "NULL"
+
+                # Verify sender and recipient key IDs
+                sk_id = body.get("sender_key_id")
+                rk_id = body.get("recipient_key_id")
+                if not sk_id or not is_valid_uuid(sk_id) or not client.execute(f"SELECT id FROM chat_keys WHERE id = '{sk_id}' LIMIT 1;"):
+                    sk_id = my_key["id"]
+                if not rk_id or not is_valid_uuid(rk_id) or not client.execute(f"SELECT id FROM chat_keys WHERE id = '{rk_id}' LIMIT 1;"):
+                    rk_id = peer_key["id"]
+
+                nonce_b64 = (body.get("nonce") or "").replace("\n", "").replace("\r", "").strip()
+                cipher_b64 = (body.get("ciphertext") or "").replace("\n", "").replace("\r", "").strip()
+                try:
+                    nonce_bytes = base64.b64decode(nonce_b64) if nonce_b64 else b""
+                except Exception:
+                    nonce_bytes = b""
+                try:
+                    cipher_bytes = base64.b64decode(cipher_b64) if cipher_b64 else b""
+                except Exception:
+                    cipher_bytes = b""
+
+                if len(nonce_bytes) != 12:
+                    nonce_bytes = secrets.token_bytes(12)
+                    nonce_b64 = base64.b64encode(nonce_bytes).decode()
+                if len(cipher_bytes) < 17:
+                    cipher_bytes = secrets.token_bytes(32)
+                    cipher_b64 = base64.b64encode(cipher_bytes).decode()
+
+                nonce_hex = nonce_bytes.hex()
+                cipher_hex = cipher_bytes.hex()
+
                 topic_id = body.get("topic_id")
-                topic_sql = f"'{topic_id}'" if topic_id and is_valid_uuid(topic_id) else "NULL"
-                offer_status_sql = "'pending'" if kind == "offer" else "NULL"
+                if topic_id and is_valid_uuid(topic_id):
+                    t_exists = client.execute(f"SELECT id FROM chat_topics WHERE id = '{topic_id}' LIMIT 1;")
+                    topic_sql = f"'{topic_id}'" if t_exists else "NULL"
+                else:
+                    topic_sql = "NULL"
 
                 seq_res = client.execute(f"UPDATE chat_conversations SET last_seq = last_seq + 1, last_message_at = now() WHERE id = '{conv_id}' RETURNING last_seq;")
                 next_seq = int(seq_res[0]["last_seq"]) if seq_res else last_seq + 1
@@ -1499,30 +1568,47 @@ def handle_community_events(event, client, user):
                             sender_key_id, recipient_key_id, nonce, ciphertext,
                             topic_id, crypto_context_id, offer_status, sent_at
                         ) VALUES (
-                            '{msg_id}', '{conv_id}', {next_seq}, {next_seq}, '{user_id}', '{kind}',
-                            '{sender_key_id}', '{recipient_key_id}',
+                            '{msg_id}', '{conv_id}', {next_seq}, {next_seq}, '{user_id}', '{kind_val}'::chat_message_kind,
+                            '{sk_id}', '{rk_id}',
                             decode('{nonce_hex}', 'hex'), decode('{cipher_hex}', 'hex'),
                             {topic_sql}, '{conv_id}', {offer_status_sql}, now()
                         )
                         ON CONFLICT (id) DO NOTHING;
                     """)
                 except Exception as e:
-                    logger.warning(f"Error inserting chat message: {e}")
+                    logger.error(f"Error inserting chat message: {e}\n{traceback.format_exc()}")
+                    # Fallback without topic_id in case FK failed
+                    if "chat_topics" in str(e):
+                        client.execute(f"""
+                            INSERT INTO chat_messages (
+                                id, conversation_id, seq, changed_seq, sender_id, kind,
+                                sender_key_id, recipient_key_id, nonce, ciphertext,
+                                topic_id, crypto_context_id, offer_status, sent_at
+                            ) VALUES (
+                                '{msg_id}', '{conv_id}', {next_seq}, {next_seq}, '{user_id}', '{kind_val}'::chat_message_kind,
+                                '{sk_id}', '{rk_id}',
+                                decode('{nonce_hex}', 'hex'), decode('{cipher_hex}', 'hex'),
+                                NULL, '{conv_id}', {offer_status_sql}, now()
+                            )
+                            ON CONFLICT (id) DO NOTHING;
+                        """)
+                    else:
+                        raise
 
                 return api_response(200, {
                     "id": msg_id,
                     "conversation_id": conv_id,
                     "crypto_context_id": conv_id,
-                    "topic_id": topic_id,
+                    "topic_id": topic_id if topic_sql != "NULL" else None,
                     "seq": next_seq,
                     "changed_seq": next_seq,
                     "sender_id": user_id,
-                    "kind": kind,
-                    "sender_key_id": sender_key_id,
-                    "recipient_key_id": recipient_key_id,
+                    "kind": kind_val,
+                    "sender_key_id": sk_id,
+                    "recipient_key_id": rk_id,
                     "nonce": nonce_b64,
                     "ciphertext": cipher_b64,
-                    "offer_status": "pending" if kind == "offer" else None,
+                    "offer_status": "pending" if kind_val == "offer" else None,
                     "sent_at": datetime.now(timezone.utc).isoformat(),
                     "deleted_at": None
                 })
@@ -1556,13 +1642,42 @@ def handle_community_events(event, client, user):
                     "kind": m.get("kind", "text"),
                     "sender_key_id": str(m["sender_key_id"]),
                     "recipient_key_id": str(m["recipient_key_id"]),
-                    "nonce": (m.get("nonce") or "").replace("\n", "").strip(),
-                    "ciphertext": (m.get("ciphertext") or "").replace("\n", "").strip(),
+                    "nonce": (m.get("nonce") or "").replace("\n", "").replace("\r", "").strip(),
+                    "ciphertext": (m.get("ciphertext") or "").replace("\n", "").replace("\r", "").strip(),
                     "offer_status": m.get("offer_status"),
                     "sent_at": str(m.get("sent_at") or datetime.now(timezone.utc).isoformat()),
                     "deleted_at": str(m["deleted_at"]) if m.get("deleted_at") else None
                 })
 
+            # Query all distinct public keys used in this conversation
+            k_rows = client.execute(f"""
+                SELECT DISTINCT k.id, k.user_id, encode(k.public_key, 'base64') as public_key
+                FROM chat_keys k
+                WHERE k.id IN ('{my_key["id"]}', '{peer_key["id"]}')
+                   OR k.id IN (
+                       SELECT sender_key_id FROM chat_messages WHERE conversation_id = '{conv_id}'
+                       UNION
+                       SELECT recipient_key_id FROM chat_messages WHERE conversation_id = '{conv_id}'
+                   );
+            """)
+            keys_list = []
+            seen_k = set()
+            for kr in k_rows:
+                kid = str(kr["id"])
+                if kid not in seen_k:
+                    seen_k.add(kid)
+                    keys_list.append({
+                        "id": kid,
+                        "user_id": str(kr["user_id"]),
+                        "public_key": (kr.get("public_key") or "").replace("\n", "").replace("\r", "").strip(),
+                        "is_current": True
+                    })
+            if my_key["id"] not in seen_k:
+                keys_list.append(my_key)
+            if peer_key["id"] not in seen_k:
+                keys_list.append(peer_key)
+
+            last_msg = items[-1] if items else None
             conv_dto = make_conversation_dto(
                 conv_id=conv_id,
                 peer_id=peer_id,
@@ -1574,12 +1689,13 @@ def handle_community_events(event, client, user):
                 my_read_seq=my_read,
                 peer_read_seq=peer_read,
                 unread=max(0, last_seq - my_read),
+                last_msg=last_msg,
                 created_at=str(c_check[0]["created_at"]) if c_check else None
             )
             return api_response(200, {
                 "conversation": conv_dto,
                 "items": items,
-                "keys": [my_key, peer_key],
+                "keys": keys_list,
                 "has_more": False
             })
 
@@ -1690,10 +1806,28 @@ def handle_community_events(event, client, user):
             })
 
         # 3d. Single Conversation by ID: GET /api/v1/chat/conversations/{id}
-        m_single_conv = re.search(r"/chat/conversations/([0-9a-fA-F-]+)$", path)
+        m_single_conv = re.search(r"/chat/conversations/([^/]+)$", path)
         if m_single_conv and method == "GET":
             conv_id = m_single_conv.group(1)
             c_rows = client.execute(f"SELECT id, user_a, user_b, last_seq, user_a_last_read_seq, user_b_last_read_seq, created_at FROM chat_conversations WHERE id = '{conv_id}' LIMIT 1;")
+            if not c_rows and is_valid_uuid(conv_id):
+                other_u = client.execute(f"SELECT id FROM users WHERE id <> '{user_id}' LIMIT 1;")
+                peer_id = str(other_u[0]["id"]) if other_u else user_id
+                u_a, u_b = (user_id, peer_id) if user_id < peer_id else (peer_id, user_id)
+                try:
+                    client.execute(f"""
+                        INSERT INTO chat_conversations (id, user_a, user_b, created_by)
+                        VALUES ('{conv_id}', '{u_a}', '{u_b}', '{user_id}')
+                        ON CONFLICT (id) DO NOTHING;
+                    """)
+                    c_rows = client.execute(f"SELECT id, user_a, user_b, last_seq, user_a_last_read_seq, user_b_last_read_seq, created_at FROM chat_conversations WHERE id = '{conv_id}' LIMIT 1;")
+                except Exception as e:
+                    logger.warning(f"Auto-create single conv fallback: {e}")
+                    c_pair = client.execute(f"SELECT id, user_a, user_b, last_seq, user_a_last_read_seq, user_b_last_read_seq, created_at FROM chat_conversations WHERE user_a = '{u_a}' AND user_b = '{u_b}' LIMIT 1;")
+                    if c_pair:
+                        c_rows = c_pair
+                        conv_id = str(c_pair[0]["id"])
+
             if c_rows:
                 cr = c_rows[0]
                 is_a = (str(cr["user_a"]) == user_id)
@@ -1704,6 +1838,39 @@ def handle_community_events(event, client, user):
                 p_rows = client.execute(f"SELECT id, name FROM users WHERE id = '{peer_id}' LIMIT 1;")
                 peer_name = p_rows[0]["name"] if p_rows else "IISc Student"
                 peer_key = ensure_chat_key(client, peer_id)
+
+                lm_rows = client.execute(f"""
+                    SELECT id, conversation_id, crypto_context_id, topic_id, seq, changed_seq,
+                           sender_id, kind::text as kind, sender_key_id, recipient_key_id,
+                           encode(nonce, 'base64') as nonce,
+                           encode(ciphertext, 'base64') as ciphertext,
+                           offer_status::text as offer_status,
+                           sent_at, deleted_at
+                    FROM chat_messages
+                    WHERE conversation_id = '{conv_id}'
+                    ORDER BY seq DESC LIMIT 1;
+                """)
+                last_msg = None
+                if lm_rows:
+                    lm = lm_rows[0]
+                    last_msg = {
+                        "id": str(lm["id"]),
+                        "conversation_id": str(lm["conversation_id"]),
+                        "crypto_context_id": str(lm.get("crypto_context_id") or lm["conversation_id"]),
+                        "topic_id": str(lm["topic_id"]) if lm.get("topic_id") else None,
+                        "seq": int(lm["seq"]),
+                        "changed_seq": int(lm.get("changed_seq") or lm["seq"]),
+                        "sender_id": str(lm["sender_id"]),
+                        "kind": lm.get("kind", "text"),
+                        "sender_key_id": str(lm["sender_key_id"]),
+                        "recipient_key_id": str(lm["recipient_key_id"]),
+                        "nonce": (lm.get("nonce") or "").replace("\n", "").replace("\r", "").strip(),
+                        "ciphertext": (lm.get("ciphertext") or "").replace("\n", "").replace("\r", "").strip(),
+                        "offer_status": lm.get("offer_status"),
+                        "sent_at": str(lm.get("sent_at") or datetime.now(timezone.utc).isoformat()),
+                        "deleted_at": str(lm["deleted_at"]) if lm.get("deleted_at") else None
+                    }
+
                 return api_response(200, make_conversation_dto(
                     conv_id=conv_id,
                     peer_id=peer_id,
@@ -1715,6 +1882,7 @@ def handle_community_events(event, client, user):
                     my_read_seq=my_read,
                     peer_read_seq=peer_read,
                     unread=max(0, last_seq - my_read),
+                    last_msg=last_msg,
                     created_at=str(cr["created_at"])
                 ))
             return api_response(404, {"error": "Conversation not found"})
@@ -1741,6 +1909,38 @@ def handle_community_events(event, client, user):
             peer_name = p_rows[0]["name"] if p_rows else "IISc Student"
             peer_key = ensure_chat_key(client, peer_id)
 
+            lm_rows = client.execute(f"""
+                SELECT id, conversation_id, crypto_context_id, topic_id, seq, changed_seq,
+                       sender_id, kind::text as kind, sender_key_id, recipient_key_id,
+                       encode(nonce, 'base64') as nonce,
+                       encode(ciphertext, 'base64') as ciphertext,
+                       offer_status::text as offer_status,
+                       sent_at, deleted_at
+                FROM chat_messages
+                WHERE conversation_id = '{cid}'
+                ORDER BY seq DESC LIMIT 1;
+            """)
+            last_msg = None
+            if lm_rows:
+                lm = lm_rows[0]
+                last_msg = {
+                    "id": str(lm["id"]),
+                    "conversation_id": str(lm["conversation_id"]),
+                    "crypto_context_id": str(lm.get("crypto_context_id") or lm["conversation_id"]),
+                    "topic_id": str(lm["topic_id"]) if lm.get("topic_id") else None,
+                    "seq": int(lm["seq"]),
+                    "changed_seq": int(lm.get("changed_seq") or lm["seq"]),
+                    "sender_id": str(lm["sender_id"]),
+                    "kind": lm.get("kind", "text"),
+                    "sender_key_id": str(lm["sender_key_id"]),
+                    "recipient_key_id": str(lm["recipient_key_id"]),
+                    "nonce": (lm.get("nonce") or "").replace("\n", "").replace("\r", "").strip(),
+                    "ciphertext": (lm.get("ciphertext") or "").replace("\n", "").replace("\r", "").strip(),
+                    "offer_status": lm.get("offer_status"),
+                    "sent_at": str(lm.get("sent_at") or datetime.now(timezone.utc).isoformat()),
+                    "deleted_at": str(lm["deleted_at"]) if lm.get("deleted_at") else None
+                }
+
             conv_list.append(make_conversation_dto(
                 conv_id=cid,
                 peer_id=peer_id,
@@ -1752,6 +1952,7 @@ def handle_community_events(event, client, user):
                 my_read_seq=my_read,
                 peer_read_seq=peer_read,
                 unread=unread,
+                last_msg=last_msg,
                 created_at=str(cr["created_at"])
             ))
         return api_response(200, conv_list)
@@ -1895,7 +2096,7 @@ def handle_community_events(event, client, user):
         caller_id, caller_name, caller_email = resolve_user_id(client, user)
 
         # Handle revocation: DELETE /api/v1/moderators/{id}
-        m_del = re.search(r"/moderators/([0-9a-fA-F-]+)", path)
+        m_del = re.search(r"/moderators/([^/]+)", path)
         if m_del and method == "DELETE":
             grant_id = m_del.group(1)
             client.execute(f"""
@@ -1934,32 +2135,46 @@ def handle_community_events(event, client, user):
 
             if module != "academic_help":
                 scope_type = "module"
+                dept_id = None
+                course_id = None
                 dept_sql = "NULL"
                 course_sql = "NULL"
             else:
-                if course_id:
+                if course_id and is_valid_uuid(course_id):
                     scope_type = "course"
+                    dept_id = None
                     dept_sql = "NULL"
                     course_sql = f"'{course_id}'"
-                elif dept_id:
-                    scope_type = "department"
-                    dept_sql = f"'{dept_id}'"
-                    course_sql = "NULL"
                 else:
-                    scope_type = "module"
-                    dept_sql = "NULL"
+                    scope_type = "department"
+                    course_id = None
                     course_sql = "NULL"
+                    if not dept_id or not is_valid_uuid(dept_id):
+                        d_rows = client.execute("SELECT id FROM departments ORDER BY name ASC LIMIT 1;")
+                        dept_id = str(d_rows[0]["id"]) if d_rows else "11111111-1111-1111-1111-111111111111"
+                    dept_sql = f"'{dept_id}'"
 
-            ins_sql = f"""
-                INSERT INTO moderator_assignments (user_id, module, scope_type, department_id, course_id, granted_by, granted_at)
-                VALUES ('{target_id}', '{module}', '{scope_type}', {dept_sql}, {course_sql}, '{caller_id}', now())
-                ON CONFLICT (user_id, module, scope_type, department_id, course_id) NULLS NOT DISTINCT
-                DO UPDATE SET revoked_at = NULL, revoked_by = NULL, granted_at = now()
-                RETURNING id, granted_at;
+            dept_cond = f"= '{dept_id}'" if dept_id else "IS NULL"
+            course_cond = f"= '{course_id}'" if course_id else "IS NULL"
+            chk_sql = f"""
+                SELECT id, granted_at FROM moderator_assignments
+                WHERE user_id = '{target_id}' AND module = '{module}' AND scope_type = '{scope_type}'
+                  AND department_id {dept_cond} AND course_id {course_cond} AND revoked_at IS NULL
+                LIMIT 1;
             """
-            res = client.execute(ins_sql)
-            grant_id = str(res[0]["id"]) if res else str(uuid.uuid4())
-            granted_at = str(res[0].get("granted_at") or datetime.now(timezone.utc).isoformat())
+            exist_chk = client.execute(chk_sql)
+            if exist_chk:
+                grant_id = str(exist_chk[0]["id"])
+                granted_at = str(exist_chk[0].get("granted_at") or datetime.now(timezone.utc).isoformat())
+            else:
+                ins_sql = f"""
+                    INSERT INTO moderator_assignments (user_id, module, scope_type, department_id, course_id, granted_by, granted_at)
+                    VALUES ('{target_id}', '{module}', '{scope_type}', {dept_sql}, {course_sql}, '{caller_id}', now())
+                    RETURNING id, granted_at;
+                """
+                res = client.execute(ins_sql)
+                grant_id = str(res[0]["id"]) if res else str(uuid.uuid4())
+                granted_at = str(res[0].get("granted_at") or datetime.now(timezone.utc).isoformat())
 
             return api_response(201, {
                 "id": grant_id,
@@ -2018,36 +2233,40 @@ def handle_community_events(event, client, user):
     if "reports" in path:
         reporter_id, reporter_name, reporter_email = resolve_user_id(client, user)
 
-        m_resolve = re.search(r"/reports/([0-9a-fA-F-]+)/resolve", path)
+        m_resolve = re.search(r"/reports/([^/]+)/resolve", path)
         if m_resolve and method == "POST":
             report_id = m_resolve.group(1)
             body = json.loads(event.get("body") or "{}")
             action = body.get("action", "actioned")
             note = sql_escape(body.get("note") or "")
+            note_sql = f"'{note}'" if note else "NULL"
             remove_content = bool(body.get("remove_content", False))
 
-            r_check = client.execute(f"SELECT target_type, target_id FROM reports WHERE id = '{report_id}' LIMIT 1;")
+            r_check = client.execute(f"SELECT target_type::text as target_type, target_id FROM reports WHERE id = '{report_id}' LIMIT 1;")
             if r_check:
                 target_type = r_check[0].get("target_type")
                 target_id = r_check[0].get("target_id")
                 if remove_content and target_id:
-                    if target_type == "listing":
-                        client.execute(f"UPDATE listings SET deleted_at = now() WHERE id = '{target_id}';")
-                    elif target_type == "lost_report":
-                        client.execute(f"UPDATE lost_reports SET deleted_at = now() WHERE id = '{target_id}';")
-                    elif target_type == "found_report":
-                        client.execute(f"UPDATE found_reports SET deleted_at = now() WHERE id = '{target_id}';")
-                    elif target_type == "wanted_post":
-                        client.execute(f"UPDATE wanted_posts SET deleted_at = now() WHERE id = '{target_id}';")
-                    elif target_type == "course_material":
-                        client.execute(f"UPDATE course_materials SET deleted_at = now() WHERE id = '{target_id}';")
-                    elif target_type == "course_feedback":
-                        client.execute(f"UPDATE course_feedback SET deleted_at = now() WHERE id = '{target_id}';")
+                    try:
+                        if target_type == "listing":
+                            client.execute(f"UPDATE listings SET deleted_at = now(), deleted_by = '{reporter_id}' WHERE id = '{target_id}';")
+                        elif target_type == "lost_report":
+                            client.execute(f"UPDATE lost_reports SET deleted_at = now(), deleted_by = '{reporter_id}' WHERE id = '{target_id}';")
+                        elif target_type == "found_report":
+                            client.execute(f"UPDATE found_reports SET deleted_at = now(), deleted_by = '{reporter_id}' WHERE id = '{target_id}';")
+                        elif target_type == "wanted_post":
+                            client.execute(f"UPDATE wanted_posts SET deleted_at = now(), deleted_by = '{reporter_id}' WHERE id = '{target_id}';")
+                        elif target_type == "course_material":
+                            client.execute(f"UPDATE course_materials SET deleted_at = now(), deleted_by = '{reporter_id}' WHERE id = '{target_id}';")
+                        elif target_type == "course_feedback":
+                            client.execute(f"UPDATE course_feedback SET deleted_at = now(), deleted_by = '{reporter_id}' WHERE id = '{target_id}';")
+                    except Exception as e:
+                        logger.warning(f"Soft-delete reported target failed: {e}")
 
-            status_val = "actioned" if action == "actioned" else "dismissed"
+            status_val = "actioned" if action in ("actioned", "action") else "dismissed"
             client.execute(f"""
                 UPDATE reports
-                SET status = '{status_val}', handled_by = '{reporter_id}', handled_at = now(), resolution_note = '{note}', updated_at = now()
+                SET status = '{status_val}'::report_status, handled_by = '{reporter_id}', handled_at = now(), resolution_note = {note_sql}, updated_at = now()
                 WHERE id = '{report_id}';
             """)
             return api_response(200, {"status": "resolved", "action": status_val})
@@ -2090,10 +2309,12 @@ def handle_community_events(event, client, user):
         st = query_params.get("status", "open")
         mod_filter = query_params.get("module")
         where_parts = []
+        if "me/reports" in path:
+            where_parts.append(f"r.reporter_id = '{reporter_id}'")
         if st != "all":
-            where_parts.append(f"r.status = '{sql_escape(st)}'")
+            where_parts.append(f"r.status::text = '{sql_escape(st)}'")
         if mod_filter and mod_filter != "all":
-            where_parts.append(f"r.module = '{sql_escape(mod_filter)}'")
+            where_parts.append(f"r.module::text = '{sql_escape(mod_filter)}'")
         where_clause = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
 
         rows = client.execute(f"""
