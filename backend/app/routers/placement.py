@@ -3,7 +3,8 @@ hiring statistics, interview experiences and the bulk import of placement sheets
 
   guest / user              read everything (hiring statistics are totals only, never students)
   user                      post interview experiences (optionally anonymous); edit/delete their own
-  placement_hub moderator   add/edit companies, JDs and PPTs; import placement sheets;
+  placement_hub moderator   add/edit companies, JDs and the placement schedule (PPTs, online tests,
+                            interviews); import placement sheets, company lists and schedules as CSV;
                             remove anyone's interview experience (and company forum posts)
   admin                     all of the above, and delete a company with everything under it
 
@@ -24,12 +25,15 @@ from ..common import (Page, PageParams, UserRef, forbidden, like_pattern, make_p
                       search_text, set_clause, text)
 from ..db import get_conn
 from ..permissions import close_reports, is_module_moderator, log_moderation
+from ..placement_csv import parse_companies, parse_schedule
 from ..placement_sheet import SheetError, parse_sheet
 from ..storage import delete_objects, file_url, mark_attached, put_object, verify_own_uploads
 
 router = APIRouter(tags=["Placement Hub"])
 
 MODULE = "placement_hub"
+PptKind = Literal["ppt", "oa", "interview", "other"]
+KIND_NAMES = {"ppt": "Pre-placement talk", "oa": "Online test", "interview": "Interviews", "other": "Placement date"}
 Year = Field(ge=2000, le=2100)
 
 
@@ -74,12 +78,14 @@ class JobDescriptionUpdate(BaseModel):
 
 
 class PptIn(BaseModel):
+    kind: PptKind = Field("ppt", description="ppt: pre-placement talk, oa: online test, interview, other")
     details: text(5000, min_length=0) | None = None
     venue: text(200, min_length=0) | None = Field(None, examples=["Faculty Hall"])
     scheduled_at: datetime | None = Field(None, description="Leave out while the date isn't announced")
 
 
 class PptUpdate(BaseModel):
+    kind: PptKind | None = None
     details: text(5000, min_length=0) | None = None
     venue: text(200, min_length=0) | None = None
     scheduled_at: datetime | None = None
@@ -97,6 +103,10 @@ class InterviewUpdate(BaseModel):
     placement_year: int | None = Field(None, ge=2000, le=2100)
     content: text(20_000) | None = None
     is_anonymous: bool | None = None
+
+
+class CsvImportRequest(BaseModel):
+    csv: str = Field(min_length=1, max_length=2_000_000, description="CSV or tab-separated text with a header row")
 
 
 class ImportRequest(BaseModel):
@@ -119,9 +129,11 @@ class JobDescription(BaseModel):
 
 
 class Ppt(BaseModel):
+    """One date on the placement schedule: a pre-placement talk, online test, interviews or other."""
     id: UUID
     company_id: UUID
     company_name: str
+    kind: PptKind
     details: str | None
     venue: str | None
     scheduled_at: datetime | None
@@ -138,6 +150,8 @@ class CompanySummary(BaseModel):
     role_count: int = Field(description="Job descriptions on file")
     interview_count: int
     next_ppt_at: datetime | None = Field(description="The next scheduled pre-placement talk, if any")
+    next_date_at: datetime | None = Field(None, description="The next date of any kind on its schedule")
+    next_date_kind: PptKind | None = Field(None, description="What next_date_at is")
     latest_year: int | None = Field(description="The latest placement year with hires")
     latest_year_selected: int = Field(description="Students selected in latest_year")
     total_selected: int = Field(description="Students selected across all imported years")
@@ -146,7 +160,7 @@ class CompanySummary(BaseModel):
 class CompanyDetail(CompanySummary):
     website: str | None
     job_descriptions: list[JobDescription] = Field(description="Empty list = no JD yet (show an empty state)")
-    ppts: list[Ppt] = Field(description="Newest first; empty list = no PPT info yet")
+    ppts: list[Ppt] = Field(description="The company's schedule (talks, tests, interviews), newest first")
     viewer_can_manage: bool = Field(description="True for Placement Hub moderators and admins")
     created_at: datetime
     updated_at: datetime
@@ -219,6 +233,15 @@ class ImportResult(BaseModel):
     imported_at: datetime
 
 
+class CsvImportResult(BaseModel):
+    rows_total: int
+    rows_created: int
+    rows_updated: int
+    rows_rejected: int
+    companies_created: list[str]
+    rejected_rows: list[RejectedRowOut]
+
+
 class ImportSummary(BaseModel):
     id: UUID
     placement_year: int
@@ -246,8 +269,9 @@ SELECT c.id, c.name, c.industry, c.description, c.website, c.created_at, c.updat
        (SELECT count(*) FROM job_descriptions j WHERE j.company_id = c.id) AS role_count,
        (SELECT count(*) FROM interview_experiences i WHERE i.company_id = c.id AND i.deleted_at IS NULL)
            AS interview_count,
-       (SELECT min(p.scheduled_at) FROM ppt_info p WHERE p.company_id = c.id AND p.scheduled_at >= now())
-           AS next_ppt_at,
+       (SELECT min(p.scheduled_at) FROM ppt_info p
+        WHERE p.company_id = c.id AND p.kind = 'ppt' AND p.scheduled_at >= now()) AS next_ppt_at,
+       nd.next_date_at, nd.next_date_kind,
        ly.latest_year, coalesce(ly.latest_year_selected, 0) AS latest_year_selected,
        (SELECT count(*) FROM placement_records r WHERE r.company_id = c.id) AS total_selected
 FROM companies c
@@ -256,13 +280,19 @@ LEFT JOIN LATERAL (
     FROM placement_records r WHERE r.company_id = c.id
     GROUP BY r.placement_year ORDER BY r.placement_year DESC LIMIT 1
 ) ly ON true
+LEFT JOIN LATERAL (
+    SELECT p.scheduled_at AS next_date_at, p.kind AS next_date_kind
+    FROM ppt_info p WHERE p.company_id = c.id AND p.scheduled_at >= now()
+    ORDER BY p.scheduled_at LIMIT 1
+) nd ON true
 """
 
 
 def _company_summary(r: asyncpg.Record) -> CompanySummary:
     return CompanySummary(id=r["id"], name=r["name"], industry=r["industry"], description=r["description"],
                           role_count=r["role_count"], interview_count=r["interview_count"],
-                          next_ppt_at=r["next_ppt_at"], latest_year=r["latest_year"],
+                          next_ppt_at=r["next_ppt_at"], next_date_at=r["next_date_at"],
+                          next_date_kind=r["next_date_kind"], latest_year=r["latest_year"],
                           latest_year_selected=r["latest_year_selected"], total_selected=r["total_selected"])
 
 
@@ -275,7 +305,8 @@ def _jd(r: asyncpg.Record) -> JobDescription:
 
 
 _PPT_SELECT = """
-SELECT p.id, p.company_id, c.name AS company_name, p.details, p.venue, p.scheduled_at, p.created_at, p.updated_at
+SELECT p.id, p.company_id, c.name AS company_name, p.kind, p.details, p.venue, p.scheduled_at,
+       p.created_at, p.updated_at
 FROM ppt_info p JOIN companies c ON c.id = p.company_id
 """
 
@@ -283,7 +314,8 @@ FROM ppt_info p JOIN companies c ON c.id = p.company_id
 def _ppt(r: asyncpg.Record) -> Ppt:
     at = r["scheduled_at"]
     when = "unscheduled" if at is None else ("upcoming" if at >= datetime.now(timezone.utc) else "past")
-    return Ppt(id=r["id"], company_id=r["company_id"], company_name=r["company_name"], details=r["details"],
+    return Ppt(id=r["id"], company_id=r["company_id"], company_name=r["company_name"], kind=r["kind"],
+               details=r["details"],
                venue=r["venue"], scheduled_at=at, when=when, created_at=r["created_at"], updated_at=r["updated_at"])
 
 
@@ -315,7 +347,7 @@ async def list_companies(
     order = {
         "name": "lower(x.name), x.id",
         "most_hired": "x.latest_year DESC NULLS LAST, x.latest_year_selected DESC, lower(x.name), x.id",
-        "upcoming_ppt": "x.next_ppt_at ASC NULLS LAST, lower(x.name), x.id",
+        "upcoming_ppt": "x.next_date_at ASC NULLS LAST, lower(x.name), x.id",
     }[sort]
     q = search_text(q)
     rows = await conn.fetch(
@@ -463,17 +495,21 @@ async def _ppt_detail(conn: asyncpg.Connection, ppt_id: UUID) -> Ppt:
     return _ppt(r)
 
 
-@router.get("/placement/ppts", response_model=Page[Ppt], summary="Pre-placement talks across companies")
+@router.get("/placement/ppts", response_model=Page[Ppt],
+            summary="The placement schedule across companies: talks, online tests, interviews")
 async def list_ppts(when: Literal["upcoming", "past", "all"] = Query(
                         "upcoming", description="upcoming: soonest first; past: latest first"),
+                    kind: list[PptKind] | None = Query(None, description="Only these kinds (repeat for several)"),
                     page: PageParams = Depends(page_params), conn: asyncpg.Connection = Depends(get_conn)):
     where, order = {
         "upcoming": ("p.scheduled_at >= now()", "p.scheduled_at ASC"),
         "past": ("p.scheduled_at < now()", "p.scheduled_at DESC"),
         "all": ("true", "p.scheduled_at DESC NULLS FIRST"),
     }[when]
-    rows = await conn.fetch(_PPT_SELECT + f" WHERE {where} ORDER BY {order}, p.id LIMIT $1 OFFSET $2",
-                            page.limit + 1, page.offset)
+    rows = await conn.fetch(
+        _PPT_SELECT + f" WHERE {where} AND ($3::text[] IS NULL OR p.kind = ANY($3::text[])) "
+                      f"ORDER BY {order}, p.id LIMIT $1 OFFSET $2",
+        page.limit + 1, page.offset, kind or None)
     return make_page(rows, page, _ppt)
 
 
@@ -484,10 +520,11 @@ async def create_ppt(company_id: UUID, body: PptIn, user: CurrentUser = Depends(
     await _require_moderator(conn, user)
     await _company_exists(conn, company_id)
     if not (body.details or body.venue or body.scheduled_at):
-        raise HTTPException(422, "Give at least the details, venue or time of the talk.")
+        raise HTTPException(422, "Give at least the details, venue or time.")
     ppt_id = await conn.fetchval(
-        "INSERT INTO ppt_info (company_id, details, venue, scheduled_at) VALUES ($1, $2, $3, $4) RETURNING id",
-        company_id, body.details or None, body.venue or None, body.scheduled_at)
+        """INSERT INTO ppt_info (company_id, kind, details, venue, scheduled_at)
+           VALUES ($1, $2, $3, $4, $5) RETURNING id""",
+        company_id, body.kind, body.details or None, body.venue or None, body.scheduled_at)
     return await _ppt_detail(conn, ppt_id)
 
 
@@ -498,6 +535,8 @@ async def update_ppt(ppt_id: UUID, body: PptUpdate, user: CurrentUser = Depends(
     if not await conn.fetchval("SELECT EXISTS (SELECT 1 FROM ppt_info WHERE id = $1)", ppt_id):
         raise not_found("Pre-placement talk")
     changes = {k: (v or None) if isinstance(v, str) else v for k, v in body.model_dump(exclude_unset=True).items()}
+    if "kind" in changes and changes["kind"] is None:
+        raise HTTPException(422, "kind can't be empty.")
     sql, values = set_clause(changes, start=2)
     async with conn.transaction():
         await conn.execute(f"UPDATE ppt_info SET {sql} WHERE id = $1", ppt_id, *values)
@@ -755,3 +794,91 @@ async def list_imports(page: PageParams = Depends(page_params), user: CurrentUse
         id=r["id"], placement_year=r["placement_year"], rows_total=r["rows_total"], rows_created=r["rows_created"],
         rows_updated=r["rows_updated"], rows_rejected=r["rows_rejected"], imported_at=r["imported_at"],
         moderator=UserRef(id=r["moderator_id"], name=r["moderator_name"])))
+
+
+# ---------------------------------------------------------------- CSV imports: companies and schedule
+async def _company_id_for(conn: asyncpg.Connection, name: str, created: list[str]) -> UUID:
+    row = await conn.fetchrow(
+        """INSERT INTO companies (name) VALUES ($1)
+           ON CONFLICT (name_key) DO UPDATE SET name = companies.name
+           RETURNING id, (xmax = 0) AS was_created""", name)
+    if row["was_created"]:
+        created.append(name)
+    return row["id"]
+
+
+@router.post("/placement/companies/import", response_model=CsvImportResult, status_code=201,
+             summary="Add or update companies from a CSV (Placement Hub moderator or admin)")
+async def import_companies(body: CsvImportRequest, user: CurrentUser = Depends(current_user),
+                           conn: asyncpg.Connection = Depends(get_conn)):
+    """Columns: Name (required), Industry, Website, About. A company that already exists (same name, any
+    case) is updated with the non-empty cells; the rest are created."""
+    await _require_moderator(conn, user)
+    try:
+        rows, rejected = parse_companies(body.csv)
+    except SheetError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    created: list[str] = []
+    updated = 0
+    async with conn.transaction():
+        for row in rows:
+            was_created = await conn.fetchval(
+                """INSERT INTO companies (name, industry, website, description) VALUES ($1, $2, $3, $4)
+                   ON CONFLICT (name_key) DO UPDATE
+                     SET industry = coalesce(EXCLUDED.industry, companies.industry),
+                         website = coalesce(EXCLUDED.website, companies.website),
+                         description = coalesce(EXCLUDED.description, companies.description)
+                   RETURNING (xmax = 0)""", row.name, row.industry, row.website, row.description)
+            if was_created:
+                created.append(row.name)
+            else:
+                updated += 1
+        await log_moderation(conn, user.id, "import_companies", "placement_csv", user.id,
+                             f"{len(created)} created, {updated} updated, {len(rejected)} rejected")
+    return CsvImportResult(rows_total=len(rows) + len(rejected), rows_created=len(created), rows_updated=updated,
+                           rows_rejected=len(rejected), companies_created=created,
+                           rejected_rows=[RejectedRowOut(line=r.line, reason=r.reason) for r in rejected])
+
+
+@router.post("/placement/schedule/import", response_model=CsvImportResult, status_code=201,
+             summary="Add placement dates (talks, online tests, interviews) from a CSV (Placement Hub moderator or admin)")
+async def import_schedule(body: CsvImportRequest, user: CurrentUser = Depends(current_user),
+                          conn: asyncpg.Connection = Depends(get_conn)):
+    """Columns: Company (required), Type (PPT, OA, Interview or Other; default PPT), Date and Time (or one
+    Date and time column; India time unless a timezone is given), Venue, Details. Companies not seen before
+    are created. A row with the same company, type and time as an existing entry updates its venue and
+    details instead of adding it twice."""
+    await _require_moderator(conn, user)
+    try:
+        rows, rejected = parse_schedule(body.csv)
+    except SheetError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    new_companies: list[str] = []
+    company_ids: dict[str, UUID] = {}
+    created = updated = 0
+    async with conn.transaction():
+        for row in rows:
+            key = row.company.lower()
+            if key not in company_ids:
+                company_ids[key] = await _company_id_for(conn, row.company, new_companies)
+            existing = None
+            if row.scheduled_at is not None:
+                existing = await conn.fetchval(
+                    "SELECT id FROM ppt_info WHERE company_id = $1 AND kind = $2 AND scheduled_at = $3",
+                    company_ids[key], row.kind, row.scheduled_at)
+            if existing:
+                await conn.execute(
+                    """UPDATE ppt_info SET venue = coalesce($2, venue), details = coalesce($3, details)
+                       WHERE id = $1""", existing, row.venue, row.details)
+                updated += 1
+            else:
+                await conn.execute(
+                    """INSERT INTO ppt_info (company_id, kind, details, venue, scheduled_at)
+                       VALUES ($1, $2, $3, $4, $5)""",
+                    company_ids[key], row.kind, row.details, row.venue, row.scheduled_at)
+                created += 1
+        await log_moderation(conn, user.id, "import_schedule", "placement_csv", user.id,
+                             f"{created} created, {updated} updated, {len(rejected)} rejected")
+    return CsvImportResult(rows_total=len(rows) + len(rejected), rows_created=created, rows_updated=updated,
+                           rows_rejected=len(rejected), companies_created=new_companies,
+                           rejected_rows=[RejectedRowOut(line=r.line, reason=r.reason) for r in rejected])

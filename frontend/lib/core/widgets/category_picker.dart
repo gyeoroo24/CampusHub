@@ -75,6 +75,10 @@ class _CategoryPickerState extends State<CategoryPicker> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // A shade darker than the form's own fields (#F1F5F9 light / #0F172A dark), not the far
+    // heavier default Material 3 menu surface.
+    final menuColor = isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0);
     final entries = [
       for (final c in widget.categories) DropdownMenuEntry<CategoryRef>(value: c, label: c.name),
       if (widget.addNewLabel != null)
@@ -95,6 +99,7 @@ class _CategoryPickerState extends State<CategoryPicker> {
         initialSelection: widget.value,
         expandedInsets: EdgeInsets.zero,
         menuHeight: CategoryPicker.visibleEntries * CategoryPicker._entryHeight + 16,
+        menuStyle: MenuStyle(backgroundColor: WidgetStatePropertyAll(menuColor)),
         label: Text(widget.label),
         requestFocusOnTap: true,
         enableSearch: true,

@@ -1,5 +1,5 @@
 /// Placement Hub read models: companies, JDs, pre-placement talks, hiring statistics,
-/// interview experiences, sheet imports and the company forum.
+/// interview experiences and the imports. Company forums live in features/forums.
 library;
 
 int _int(dynamic v) => v is int ? v : int.tryParse('$v') ?? 0;
@@ -17,6 +17,10 @@ class Company {
   final int roleCount;
   final int interviewCount;
   final DateTime? nextPptAt;
+
+  /// The next date of any kind on its schedule (talk, online test, interviews).
+  final DateTime? nextDateAt;
+  final PptKind? nextDateKind;
   final int? latestYear;
   final int latestYearSelected;
   final int totalSelected;
@@ -35,6 +39,8 @@ class Company {
     this.roleCount = 0,
     this.interviewCount = 0,
     this.nextPptAt,
+    this.nextDateAt,
+    this.nextDateKind,
     this.latestYear,
     this.latestYearSelected = 0,
     this.totalSelected = 0,
@@ -52,6 +58,8 @@ class Company {
         roleCount: _int(json['role_count']),
         interviewCount: _int(json['interview_count']),
         nextPptAt: _date(json['next_ppt_at']),
+        nextDateAt: _date(json['next_date_at']),
+        nextDateKind: json['next_date_kind'] == null ? null : PptKind.parse(json['next_date_kind']),
         latestYear: _intOrNull(json['latest_year']),
         latestYearSelected: _int(json['latest_year_selected']),
         totalSelected: _int(json['total_selected']),
@@ -101,10 +109,26 @@ class JobDescription {
 
 enum PptWhen { upcoming, past, unscheduled }
 
+/// What a date on the placement schedule is.
+enum PptKind {
+  ppt('Pre-placement talk', 'PPT'),
+  oa('Online test', 'OA'),
+  interview('Interviews', 'Interview'),
+  other('Other', 'Date');
+
+  final String label;
+  final String short;
+
+  const PptKind(this.label, this.short);
+
+  static PptKind parse(dynamic v) => PptKind.values.firstWhere((k) => k.name == v, orElse: () => PptKind.ppt);
+}
+
 class Ppt {
   final String id;
   final String companyId;
   final String companyName;
+  final PptKind kind;
   final String? details;
   final String? venue;
   final DateTime? scheduledAt;
@@ -114,6 +138,7 @@ class Ppt {
     required this.id,
     required this.companyId,
     required this.companyName,
+    this.kind = PptKind.ppt,
     this.details,
     this.venue,
     this.scheduledAt,
@@ -124,6 +149,7 @@ class Ppt {
         id: '${json['id']}',
         companyId: '${json['company_id']}',
         companyName: json['company_name']?.toString() ?? '',
+        kind: PptKind.parse(json['kind']),
         details: _str(json['details']),
         venue: _str(json['venue']),
         scheduledAt: _date(json['scheduled_at']),
@@ -298,73 +324,33 @@ class ImportResult {
       );
 }
 
-// ---------------------------------------------------------------- company forum
-class ForumThread {
-  final String id;
-  final String forumId;
-  final String title;
-  final String authorId;
-  final String authorName;
-  final int commentCount;
-  final DateTime? lastCommentAt;
-  final DateTime createdAt;
+// ---------------------------------------------------------------- CSV imports
+/// Result of importing a company list or a placement schedule.
+class CsvImportResult {
+  final int rowsTotal;
+  final int rowsCreated;
+  final int rowsUpdated;
+  final int rowsRejected;
+  final List<String> companiesCreated;
+  final List<RejectedSheetRow> rejectedRows;
 
-  /// Only on the thread page, in order; the first one is the opening post.
-  final List<ForumComment> comments;
-  final bool viewerCanModerate;
-
-  const ForumThread({
-    required this.id,
-    required this.forumId,
-    required this.title,
-    required this.authorId,
-    required this.authorName,
-    this.commentCount = 0,
-    this.lastCommentAt,
-    required this.createdAt,
-    this.comments = const [],
-    this.viewerCanModerate = false,
+  const CsvImportResult({
+    required this.rowsTotal,
+    required this.rowsCreated,
+    required this.rowsUpdated,
+    required this.rowsRejected,
+    this.companiesCreated = const [],
+    this.rejectedRows = const [],
   });
 
-  factory ForumThread.fromJson(Map<String, dynamic> json) => ForumThread(
-        id: '${json['id']}',
-        forumId: '${json['forum_id']}',
-        title: json['title']?.toString() ?? '',
-        authorId: '${(json['author'] as Map?)?['id'] ?? ''}',
-        authorName: '${(json['author'] as Map?)?['name'] ?? ''}',
-        commentCount: _int(json['comment_count']),
-        lastCommentAt: _date(json['last_comment_at']),
-        createdAt: _date(json['created_at']) ?? DateTime.now(),
-        comments: _list(json['comments']).map(ForumComment.fromJson).toList(),
-        viewerCanModerate: json['viewer_can_moderate'] == true,
-      );
-}
-
-class ForumComment {
-  final String id;
-  final String authorId;
-  final String authorName;
-
-  /// null when the comment was removed.
-  final String? content;
-  final bool removed;
-  final DateTime createdAt;
-
-  const ForumComment({
-    required this.id,
-    required this.authorId,
-    required this.authorName,
-    this.content,
-    this.removed = false,
-    required this.createdAt,
-  });
-
-  factory ForumComment.fromJson(Map<String, dynamic> json) => ForumComment(
-        id: '${json['id']}',
-        authorId: '${(json['author'] as Map?)?['id'] ?? ''}',
-        authorName: '${(json['author'] as Map?)?['name'] ?? ''}',
-        content: _str(json['content']),
-        removed: json['removed'] == true,
-        createdAt: _date(json['created_at']) ?? DateTime.now(),
+  factory CsvImportResult.fromJson(Map<String, dynamic> json) => CsvImportResult(
+        rowsTotal: _int(json['rows_total']),
+        rowsCreated: _int(json['rows_created']),
+        rowsUpdated: _int(json['rows_updated']),
+        rowsRejected: _int(json['rows_rejected']),
+        companiesCreated: (json['companies_created'] as List<dynamic>? ?? []).map((e) => '$e').toList(),
+        rejectedRows: _list(json['rejected_rows'])
+            .map((r) => RejectedSheetRow(_int(r['line']), r['reason']?.toString() ?? ''))
+            .toList(),
       );
 }

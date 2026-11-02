@@ -17,7 +17,8 @@ router = APIRouter(prefix="/uploads", tags=["Uploads"])
 
 
 class UploadRequest(BaseModel):
-    kind: Literal["listing_photo", "lost_report_photo", "found_report_photo", "course_material", "job_description"]
+    kind: Literal["listing_photo", "lost_report_photo", "found_report_photo", "course_material", "job_description",
+                  "event_poster"]
     content_type: str = Field(examples=["image/jpeg"])
     size_bytes: int = Field(gt=0)
     checksum_sha256: str = Field(description="Base64 of the file's SHA-256 digest (NFR-8)")

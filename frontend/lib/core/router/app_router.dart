@@ -159,7 +159,7 @@ const _tabDestinations = [
   (
     icon: Icons.work_outline_rounded,
     selectedIcon: Icons.work_rounded,
-    label: 'Placements',
+    label: 'Placement Hub',
   ),
   (
     icon: Icons.event_outlined,

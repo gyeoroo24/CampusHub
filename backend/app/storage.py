@@ -70,6 +70,8 @@ UPLOAD_KINDS: dict[str, UploadKind] = {
     "course_material": UploadKind("course-materials", MATERIAL_TYPES, 50 * MB),
     # Placement Hub: a JD file attached to a company's role (placement moderators only).
     "job_description": UploadKind("job-descriptions", DOCUMENT_TYPES, 20 * MB),
+    # Community Events: an optional poster image for an event.
+    "event_poster": UploadKind("event-posters", IMAGE_TYPES, 10 * MB),
 }
 
 

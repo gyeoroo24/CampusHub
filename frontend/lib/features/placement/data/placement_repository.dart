@@ -16,7 +16,8 @@ abstract class IPlacementRepository {
 
   Future<PlacementOverview> fetchOverview();
 
-  Future<List<Ppt>> fetchUpcomingPpts({int limit = 10});
+  /// Upcoming dates on the placement schedule, soonest first; [kinds] empty = every kind.
+  Future<List<Ppt>> fetchUpcomingPpts({int limit = 10, Set<PptKind> kinds = const {}});
 
   /// Newest first. [companyId] null = across all companies.
   Future<List<InterviewExperience>> fetchInterviews({String? companyId, String? query, int limit = 30});
@@ -41,26 +42,18 @@ abstract class IPlacementRepository {
 
   Future<void> deleteJobDescription(String jdId);
 
-  Future<void> savePpt({String? pptId, required String companyId, String? details, String? venue, DateTime? scheduledAt});
+  Future<void> savePpt({String? pptId, required String companyId, PptKind kind = PptKind.ppt, String? details,
+      String? venue, DateTime? scheduledAt});
 
   Future<void> deletePpt(String pptId);
 
   Future<ImportResult> importSheet(int placementYear, String sheet);
 
-  // Company forum
-  Future<String> companyForumId(String companyId);
+  /// Add companies from a CSV (Name, Industry, Website, About).
+  Future<CsvImportResult> importCompanies(String csv);
 
-  Future<List<ForumThread>> fetchThreads(String forumId);
-
-  Future<ForumThread> getThread(String threadId);
-
-  Future<ForumThread> createThread(String forumId, String title, String content);
-
-  Future<void> reply(String threadId, String content);
-
-  Future<void> deleteThread(String threadId);
-
-  Future<void> deleteComment(String commentId);
+  /// Add placement dates from a CSV (Company, Type, Date, Time, Venue, Details).
+  Future<CsvImportResult> importSchedule(String csv);
 }
 
 List<Map<String, dynamic>> _items(dynamic data) =>
@@ -102,8 +95,12 @@ class ApiPlacementRepository implements IPlacementRepository {
   }
 
   @override
-  Future<List<Ppt>> fetchUpcomingPpts({int limit = 10}) async {
-    final response = await apiClient.get(ApiEndpoints.placementPpts, queryParameters: {'when': 'upcoming', 'limit': limit});
+  Future<List<Ppt>> fetchUpcomingPpts({int limit = 10, Set<PptKind> kinds = const {}}) async {
+    final response = await apiClient.get(ApiEndpoints.placementPpts, queryParameters: {
+      'when': 'upcoming',
+      'limit': limit,
+      if (kinds.isNotEmpty) 'kind': kinds.map((k) => k.name).toList(),
+    });
     return _items(response.data).map(Ppt.fromJson).toList();
   }
 
@@ -188,9 +185,10 @@ class ApiPlacementRepository implements IPlacementRepository {
   }
 
   @override
-  Future<void> savePpt({String? pptId, required String companyId, String? details, String? venue,
-      DateTime? scheduledAt}) async {
+  Future<void> savePpt({String? pptId, required String companyId, PptKind kind = PptKind.ppt, String? details,
+      String? venue, DateTime? scheduledAt}) async {
     final body = {
+      'kind': kind.name,
       'details': _blankToNull(details),
       'venue': _blankToNull(venue),
       'scheduled_at': scheduledAt?.toUtc().toIso8601String(),
@@ -215,43 +213,15 @@ class ApiPlacementRepository implements IPlacementRepository {
   }
 
   @override
-  Future<String> companyForumId(String companyId) async {
-    final response = await apiClient.get(ApiEndpoints.companyForum(companyId));
-    return '${(response.data as Map<String, dynamic>)['id']}';
+  Future<CsvImportResult> importCompanies(String csv) async {
+    final response = await apiClient.post(ApiEndpoints.placementCompaniesImport, data: {'csv': csv});
+    return CsvImportResult.fromJson(response.data as Map<String, dynamic>);
   }
 
   @override
-  Future<List<ForumThread>> fetchThreads(String forumId) async {
-    final response = await apiClient.get(ApiEndpoints.forumThreads(forumId), queryParameters: {'limit': 50});
-    return _items(response.data).map(ForumThread.fromJson).toList();
-  }
-
-  @override
-  Future<ForumThread> getThread(String threadId) async {
-    final response = await apiClient.get(ApiEndpoints.thread(threadId));
-    return ForumThread.fromJson(response.data as Map<String, dynamic>);
-  }
-
-  @override
-  Future<ForumThread> createThread(String forumId, String title, String content) async {
-    final response =
-        await apiClient.post(ApiEndpoints.forumThreads(forumId), data: {'title': title, 'content': content});
-    return ForumThread.fromJson(response.data as Map<String, dynamic>);
-  }
-
-  @override
-  Future<void> reply(String threadId, String content) async {
-    await apiClient.post(ApiEndpoints.threadComments(threadId), data: {'content': content});
-  }
-
-  @override
-  Future<void> deleteThread(String threadId) async {
-    await apiClient.delete(ApiEndpoints.thread(threadId));
-  }
-
-  @override
-  Future<void> deleteComment(String commentId) async {
-    await apiClient.delete(ApiEndpoints.comment(commentId));
+  Future<CsvImportResult> importSchedule(String csv) async {
+    final response = await apiClient.post(ApiEndpoints.placementScheduleImport, data: {'csv': csv});
+    return CsvImportResult.fromJson(response.data as Map<String, dynamic>);
   }
 }
 
@@ -286,8 +256,6 @@ class MockPlacementRepository implements IPlacementRepository {
         createdAt: DateTime(2025, 12, 10)),
   ];
 
-  static final _threads = <ForumThread>[];
-
   static const _stats = {
     'co_google': [
       YearStats(year: 2026, studentsSelected: 6, roles: [RoleCount('Software Engineer', 4), RoleCount('Research Engineer', 2)]),
@@ -312,7 +280,7 @@ class MockPlacementRepository implements IPlacementRepository {
         website: c.website,
         roleCount: _jds.where((j) => j.companyId == c.id).length,
         interviewCount: _interviews.where((i) => i.companyId == c.id).length,
-        nextPptAt: c.nextPptAt,
+        nextPptAt: c.nextPptAt, nextDateAt: c.nextPptAt, nextDateKind: c.nextPptAt == null ? null : PptKind.ppt,
         latestYear: c.latestYear,
         latestYearSelected: c.latestYearSelected,
         totalSelected: c.totalSelected,
@@ -365,8 +333,10 @@ class MockPlacementRepository implements IPlacementRepository {
       );
 
   @override
-  Future<List<Ppt>> fetchUpcomingPpts({int limit = 10}) async =>
-      _ppts.where((p) => p.when == PptWhen.upcoming).take(limit).toList();
+  Future<List<Ppt>> fetchUpcomingPpts({int limit = 10, Set<PptKind> kinds = const {}}) async => _ppts
+      .where((p) => p.when == PptWhen.upcoming && (kinds.isEmpty || kinds.contains(p.kind)))
+      .take(limit)
+      .toList();
 
   @override
   Future<List<InterviewExperience>> fetchInterviews({String? companyId, String? query, int limit = 30}) async {
@@ -435,12 +405,13 @@ class MockPlacementRepository implements IPlacementRepository {
   Future<void> deleteJobDescription(String jdId) async => _jds.removeWhere((j) => j.id == jdId);
 
   @override
-  Future<void> savePpt({String? pptId, required String companyId, String? details, String? venue,
-      DateTime? scheduledAt}) async {
+  Future<void> savePpt({String? pptId, required String companyId, PptKind kind = PptKind.ppt, String? details,
+      String? venue, DateTime? scheduledAt}) async {
     final company = await getCompany(companyId);
     _ppts.removeWhere((p) => p.id == pptId);
     _ppts.add(Ppt(
         id: pptId ?? 'ppt_${DateTime.now().microsecondsSinceEpoch}', companyId: companyId, companyName: company.name,
+        kind: kind,
         details: _blankToNull(details), venue: _blankToNull(venue), scheduledAt: scheduledAt,
         when: scheduledAt == null
             ? PptWhen.unscheduled
@@ -459,43 +430,11 @@ class MockPlacementRepository implements IPlacementRepository {
   }
 
   @override
-  Future<String> companyForumId(String companyId) async => 'forum_$companyId';
-
-  @override
-  Future<List<ForumThread>> fetchThreads(String forumId) async => _threads.where((t) => t.forumId == forumId).toList();
-
-  @override
-  Future<ForumThread> getThread(String threadId) async => _threads.firstWhere((t) => t.id == threadId);
-
-  @override
-  Future<ForumThread> createThread(String forumId, String title, String content) async {
-    final now = DateTime.now();
-    final thread = ForumThread(
-        id: 'th_${now.microsecondsSinceEpoch}', forumId: forumId, title: title, authorId: 'me', authorName: 'You',
-        commentCount: 1, lastCommentAt: now, createdAt: now, viewerCanModerate: true,
-        comments: [ForumComment(id: 'cm_${now.microsecondsSinceEpoch}', authorId: 'me', authorName: 'You',
-            content: content, createdAt: now)]);
-    _threads.insert(0, thread);
-    return thread;
+  Future<CsvImportResult> importCompanies(String csv) async {
+    final rows = const LineSplitter().convert(csv).where((l) => l.trim().isNotEmpty).length - 1;
+    return CsvImportResult(rowsTotal: rows, rowsCreated: rows, rowsUpdated: 0, rowsRejected: 0);
   }
 
   @override
-  Future<void> reply(String threadId, String content) async {
-    final i = _threads.indexWhere((t) => t.id == threadId);
-    if (i < 0) return;
-    final t = _threads[i];
-    final now = DateTime.now();
-    _threads[i] = ForumThread(
-        id: t.id, forumId: t.forumId, title: t.title, authorId: t.authorId, authorName: t.authorName,
-        commentCount: t.commentCount + 1, lastCommentAt: now, createdAt: t.createdAt,
-        viewerCanModerate: t.viewerCanModerate,
-        comments: [...t.comments, ForumComment(id: 'cm_${now.microsecondsSinceEpoch}', authorId: 'me',
-            authorName: 'You', content: content, createdAt: now)]);
-  }
-
-  @override
-  Future<void> deleteThread(String threadId) async => _threads.removeWhere((t) => t.id == threadId);
-
-  @override
-  Future<void> deleteComment(String commentId) async {}
+  Future<CsvImportResult> importSchedule(String csv) => importCompanies(csv);
 }

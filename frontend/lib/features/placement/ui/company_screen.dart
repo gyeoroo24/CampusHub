@@ -10,14 +10,15 @@ import '../../auth/providers/auth_providers.dart';
 import '../../auth/ui/auth_dialog.dart';
 import '../domain/placement_models.dart';
 import '../providers/placement_providers.dart';
-import 'company_forum.dart';
+import '../../forums/domain/forum_models.dart';
+import '../../forums/ui/forum_board.dart';
 import 'placement_dialogs.dart';
-import 'placement_screen.dart' show CompanyAvatar;
+import 'placement_screen.dart' show CompanyAvatar, ScheduleTile;
 
-const _tabs = ['overview', 'stats', 'interviews', 'forum'];
+const _tabs = ['overview', 'interviews', 'stats', 'forum'];
 
-/// A company's page (FR-15, FR-16): details, JDs and PPTs, hiring statistics, interview
-/// experiences and its forum. [initialTab] is one of overview / stats / interviews / forum.
+/// A company's page (FR-15, FR-16): details, JDs and its placement dates, interview experiences,
+/// hiring statistics and its forum. [initialTab] is one of overview / interviews / stats / forum.
 class CompanyScreen extends ConsumerWidget {
   final String companyId;
   final String? initialTab;
@@ -64,21 +65,29 @@ class CompanyScreen extends ConsumerWidget {
             tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: 'Overview'),
+              Tab(text: 'Interview experiences'),
               Tab(text: 'Hiring stats'),
-              Tab(text: 'Interviews'),
               Tab(text: 'Forum'),
             ],
           ),
         ),
+        // A reload (sign-in, edits) keeps the tabs on screen: swapping them for a spinner would
+        // dispose an open forum or form part-way through.
         body: companyAsync.when(
+          skipLoadingOnReload: true,
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ErrorState(message: errorText(e), onRetry: () => ref.invalidate(companyProvider(companyId))),
           data: (company) => TabBarView(
             children: [
               _OverviewTab(company: company),
-              _StatsTab(companyId: companyId),
               _InterviewsTab(company: company),
-              CompanyForumTab(companyId: companyId),
+              _StatsTab(companyId: companyId),
+              ForumBoard(
+                scope: ForumScope.company,
+                scopeId: companyId,
+                placeName: company.name,
+                blurb: 'ask about ${company.name}\'s process, prep and offers',
+              ),
             ],
           ),
         ),
@@ -316,7 +325,7 @@ class _OverviewTab extends ConsumerWidget {
         ),
         const SizedBox(height: 16),
         _Section(
-          title: 'Pre-placement talks',
+          title: 'Placement dates',
           action: manage
               ? TextButton.icon(
                   onPressed: () => edit(PptFormDialog(companyId: company.id)),
@@ -325,30 +334,18 @@ class _OverviewTab extends ConsumerWidget {
                 )
               : null,
           child: company.ppts.isEmpty
-              ? const _Empty('No pre-placement talk announced yet.')
+              ? const _Empty('No pre-placement talk, online test or interview announced yet.')
               : Column(
                   children: [
-                    for (final p in company.ppts)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(
-                          p.when == PptWhen.upcoming ? Icons.event_available_rounded : Icons.event_note_outlined,
-                          color: p.when == PptWhen.upcoming ? theme.colorScheme.primary : theme.hintColor,
-                        ),
-                        title: Text(
-                          p.scheduledAt == null ? 'Date to be announced' : DateTimeFormatter.fullDateTime(p.scheduledAt!),
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        subtitle: Text([
-                          if (p.when == PptWhen.past) 'Done',
-                          if (p.venue != null) p.venue!,
-                          if (p.details != null) p.details!,
-                        ].join(' · ')),
+                    // Upcoming first (soonest first), then dates to be announced, then past ones.
+                    for (final p in _scheduleOrder(company.ppts))
+                      ScheduleTile(
+                        date: p,
                         trailing: manage
                             ? PopupMenuButton<String>(
                                 onSelected: (v) => v == 'edit'
                                     ? edit(PptFormDialog(companyId: company.id, ppt: p))
-                                    : remove('pre-placement talk', () => repo.deletePpt(p.id)),
+                                    : remove(p.kind.label.toLowerCase(), () => repo.deletePpt(p.id)),
                                 itemBuilder: (_) => const [
                                   PopupMenuItem(value: 'edit', child: Text('Edit')),
                                   PopupMenuItem(value: 'delete', child: Text('Delete')),
@@ -362,6 +359,16 @@ class _OverviewTab extends ConsumerWidget {
       ],
     ));
   }
+}
+
+List<Ppt> _scheduleOrder(List<Ppt> ppts) {
+  int rank(Ppt p) => switch (p.when) { PptWhen.upcoming => 0, PptWhen.unscheduled => 1, PptWhen.past => 2 };
+  return [...ppts]..sort((a, b) {
+      final r = rank(a).compareTo(rank(b));
+      if (r != 0) return r;
+      if (a.scheduledAt == null || b.scheduledAt == null) return 0;
+      return a.when == PptWhen.past ? b.scheduledAt!.compareTo(a.scheduledAt!) : a.scheduledAt!.compareTo(b.scheduledAt!);
+    });
 }
 
 class _Stat extends StatelessWidget {
@@ -508,6 +515,7 @@ class _InterviewsTab extends ConsumerWidget {
     }
 
     return ref.watch(companyInterviewsProvider(company.id)).when(
+          skipLoadingOnReload: true,
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) =>
               ErrorState(message: errorText(e), onRetry: () => ref.invalidate(companyInterviewsProvider(company.id))),

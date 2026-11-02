@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/utils/error_text.dart';
 import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/skeleton_loader.dart';
@@ -24,13 +25,38 @@ String eventTimeRange(CampusEvent e) {
   return '$day, ${_time(s)} – ${_weekdays[end.weekday - 1]} ${end.day} ${_months[end.month - 1]}, ${_time(end)}';
 }
 
-/// Events tab: a timeline of campus events, filtered by tag (FR-18), split into happening now /
-/// upcoming and past (FR-19), with bookmarks and tag follows for alerts (FR-20).
-class EventsScreen extends ConsumerWidget {
+/// Events tab: campus events as posters, filtered by tag (FR-18), split into happening now /
+/// upcoming and past (FR-19), with bookmarks and tag follows for alerts (FR-20). Opening an event
+/// shows its page, with the poster, details and a discussion forum.
+class EventsScreen extends ConsumerStatefulWidget {
   const EventsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<EventsScreen> createState() => _EventsScreenState();
+}
+
+class _EventsScreenState extends ConsumerState<EventsScreen> {
+  final _search = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    // The search box starts empty on every visit (e.g. back from an event), so the filter must too.
+    Future.microtask(() {
+      if (!mounted) return;
+      final filter = ref.read(eventsFilterProvider);
+      if (filter.query.isNotEmpty) ref.read(eventsFilterProvider.notifier).state = filter.copyWith(query: '');
+    });
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final filter = ref.watch(eventsFilterProvider);
@@ -105,6 +131,7 @@ class EventsScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   TextField(
+                    controller: _search,
                     decoration: const InputDecoration(
                       prefixIcon: Icon(Icons.search_rounded, size: 18),
                       hintText: 'Search events, places…',
@@ -180,39 +207,42 @@ class EventsScreen extends ConsumerWidget {
                   ),
                 );
               }
-              return SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) {
-                      final e = events[i];
-                      final header = i == 0 || events[i - 1].when != e.when;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (header)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 10, bottom: 6),
-                              child: Text(e.when.label.toUpperCase(),
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      letterSpacing: 0.8,
-                                      fontWeight: FontWeight.bold,
-                                      color: e.when == EventWhen.present ? Colors.green.shade700 : theme.hintColor)),
-                            ),
-                          Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 860),
-                              child: EventCard(event: e),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                        ],
-                      );
-                    },
-                    childCount: events.length,
-                  ),
-                ),
+              final groups = <EventWhen, List<CampusEvent>>{};
+              for (final e in events) {
+                groups.putIfAbsent(e.when, () => []).add(e);
+              }
+              return SliverMainAxisGroup(
+                slivers: [
+                  for (final entry in groups.entries) ...[
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                      sliver: SliverToBoxAdapter(
+                        child: Text('${entry.key.label.toUpperCase()} · ${entry.value.length}',
+                            style: TextStyle(
+                                fontSize: 11,
+                                letterSpacing: 0.8,
+                                fontWeight: FontWeight.bold,
+                                color: entry.key == EventWhen.present ? Colors.green.shade700 : theme.hintColor)),
+                      ),
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      sliver: SliverGrid(
+                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 300,
+                          childAspectRatio: 0.66,
+                          crossAxisSpacing: 14,
+                          mainAxisSpacing: 14,
+                        ),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, i) => EventPosterCard(event: entry.value[i]),
+                          childCount: entry.value.length,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                ],
               );
             },
           ),
@@ -241,104 +271,256 @@ class EventsScreen extends ConsumerWidget {
   }
 }
 
-class EventCard extends ConsumerWidget {
-  final CampusEvent event;
+IconData eventTagIcon(String? tag) => switch ((tag ?? '').toLowerCase()) {
+      'sports' => Icons.sports_soccer_rounded,
+      'food/mess' => Icons.restaurant_rounded,
+      'nature' => Icons.park_rounded,
+      'photography' => Icons.photo_camera_rounded,
+      'culture' => Icons.theater_comedy_rounded,
+      'music' => Icons.music_note_rounded,
+      'tech talks' => Icons.mic_rounded,
+      'workshops' => Icons.construction_rounded,
+      _ => Icons.celebration_rounded,
+    };
 
-  const EventCard({super.key, required this.event});
+const _posterGradients = [
+  [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+  [Color(0xFF0EA5E9), Color(0xFF14B8A6)],
+  [Color(0xFFF97316), Color(0xFFDB2777)],
+  [Color(0xFF16A34A), Color(0xFF65A30D)],
+  [Color(0xFFDC2626), Color(0xFFF59E0B)],
+  [Color(0xFF0F766E), Color(0xFF1D4ED8)],
+];
+
+/// The event's poster, or a generated one (its first tag's icon, date and title on a gradient)
+/// when it has none.
+class EventPoster extends StatelessWidget {
+  final CampusEvent event;
+  final BoxFit fit;
+
+  /// Print the date on a generated poster (off on cards, which show a date badge instead).
+  final bool showDate;
+
+  const EventPoster({super.key, required this.event, this.fit = BoxFit.cover, this.showDate = true});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
+  Widget build(BuildContext context) {
     final e = event;
-    final live = e.when == EventWhen.present;
-    final past = e.when == EventWhen.past;
-    final accent = live ? Colors.green.shade600 : theme.colorScheme.primary;
-    return Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: live ? accent.withValues(alpha: 0.6) : theme.dividerColor.withValues(alpha: 0.4)),
+    final generated = _GeneratedPoster(event: e, showDate: showDate);
+    if (e.posterUrl == null) return generated;
+    return Image.network(e.posterUrl!, fit: fit, gaplessPlayback: true, errorBuilder: (_, __, ___) => generated);
+  }
+}
+
+class _GeneratedPoster extends StatelessWidget {
+  final CampusEvent event;
+  final bool showDate;
+
+  const _GeneratedPoster({required this.event, required this.showDate});
+
+  @override
+  Widget build(BuildContext context) {
+    final e = event;
+    final colors = _posterGradients[e.title.codeUnits.fold<int>(0, (a, b) => a + b) % _posterGradients.length];
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: colors),
       ),
-      child: InkWell(
-        // The dialog refreshes the list itself after a bookmark, edit or cancellation.
-        onTap: () => showDialog(context: context, builder: (_) => EventDetailDialog(eventId: e.id)),
-        child: Opacity(
-          opacity: past ? 0.75 : 1.0,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
+      child: Stack(
+        children: [
+          Positioned(
+            right: -24,
+            bottom: -24,
+            child: Icon(eventTagIcon(e.tags.isEmpty ? null : e.tags.first.name),
+                size: 150, color: Colors.white.withValues(alpha: 0.16)),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(16, showDate ? 28 : 72, 16, 16),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 54,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  decoration: BoxDecoration(color: accent.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
-                  child: Column(
+                if (showDate)
+                  Text('${_weekdays[e.startTime.weekday - 1]} ${e.startTime.day} ${_months[e.startTime.month - 1]}'.toUpperCase(),
+                    style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w700, fontSize: 12, letterSpacing: 1)),
+                if (showDate) const SizedBox(height: 6),
+                Text(e.title,
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 22, height: 1.15)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// An event as a poster card: the poster with the date and bookmark on it, then the title, time,
+/// place and tags. Opens the event's page.
+class EventPosterCard extends StatefulWidget {
+  final CampusEvent event;
+
+  const EventPosterCard({super.key, required this.event});
+
+  @override
+  State<EventPosterCard> createState() => _EventPosterCardState();
+}
+
+class _EventPosterCardState extends State<EventPosterCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final e = widget.event;
+    final live = e.when == EventWhen.present;
+    final past = e.when == EventWhen.past;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        transform: Matrix4.translationValues(0, _hovered ? -3 : 0, 0),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: live
+                ? Colors.green.shade500
+                : (_hovered
+                    ? theme.colorScheme.primary.withValues(alpha: 0.6)
+                    : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0))),
+            width: live || _hovered ? 1.5 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? (_hovered ? 0.4 : 0.2) : (_hovered ? 0.08 : 0.03)),
+              blurRadius: _hovered ? 16 : 8,
+              offset: Offset(0, _hovered ? 6 : 2),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => context.go('/events/${e.id}'),
+          child: Opacity(
+            opacity: past ? 0.7 : 1,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: 13,
+                  child: Stack(
+                    fit: StackFit.expand,
                     children: [
-                      Text(_months[e.startTime.month - 1].toUpperCase(),
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: accent)),
-                      Text('${e.startTime.day}',
-                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: accent, height: 1.1)),
-                      Text(_weekdays[e.startTime.weekday - 1], style: TextStyle(fontSize: 11, color: accent)),
+                      EventPoster(event: e, showDate: false),
+                      Positioned.fill(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.center,
+                              colors: [Colors.black.withValues(alpha: 0.35), Colors.transparent],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 10,
+                        left: 10,
+                        child: Container(
+                          width: 46,
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 4)],
+                          ),
+                          child: Column(
+                            children: [
+                              Text(_months[e.startTime.month - 1].toUpperCase(),
+                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFDC2626))),
+                              Text('${e.startTime.day}',
+                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.black87, height: 1.1)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (live)
+                        Positioned(
+                          top: 12,
+                          left: 64,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(color: Colors.green.shade600, borderRadius: BorderRadius.circular(6)),
+                            child: const Text('LIVE',
+                                style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 0.6)),
+                          ),
+                        ),
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: Container(
+                          decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.45), shape: BoxShape.circle),
+                          child: IconTheme(
+                            data: const IconThemeData(color: Colors.white),
+                            child: EventBookmarkButton(event: e, onDark: true),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          if (live)
-                            Container(
-                              margin: const EdgeInsets.only(right: 6),
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                              decoration: BoxDecoration(color: accent, borderRadius: BorderRadius.circular(4)),
-                              child: const Text('LIVE',
-                                  style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
-                            ),
+                  flex: 7,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(e.title, maxLines: 2, overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, height: 1.2)),
+                        const SizedBox(height: 4),
+                        Row(children: [
+                          Icon(Icons.schedule_rounded, size: 13, color: theme.hintColor),
+                          const SizedBox(width: 3),
                           Expanded(
-                            child: Text(e.title, maxLines: 2, overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                            child: Text(eventTimeRange(e), maxLines: 1, overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 12, color: theme.hintColor)),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(eventTimeRange(e), style: TextStyle(fontSize: 12, color: theme.hintColor)),
-                      if (e.location != null)
-                        Row(
-                          children: [
+                        ]),
+                        if (e.location != null)
+                          Row(children: [
                             Icon(Icons.place_outlined, size: 13, color: theme.hintColor),
-                            const SizedBox(width: 2),
+                            const SizedBox(width: 3),
                             Expanded(
                               child: Text(e.location!, maxLines: 1, overflow: TextOverflow.ellipsis,
                                   style: TextStyle(fontSize: 12, color: theme.hintColor)),
                             ),
+                          ]),
+                        const Spacer(),
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: [
+                            for (final t in e.tags.take(3))
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.6),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(t.name, style: const TextStyle(fontSize: 11)),
+                              ),
                           ],
                         ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 4,
-                        runSpacing: 4,
-                        children: [
-                          for (final t in e.tags)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.6),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(t.name, style: const TextStyle(fontSize: 11)),
-                            ),
-                        ],
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-                EventBookmarkButton(event: e),
               ],
             ),
           ),
@@ -351,14 +533,17 @@ class EventCard extends ConsumerWidget {
 class EventBookmarkButton extends ConsumerWidget {
   final CampusEvent event;
 
-  const EventBookmarkButton({super.key, required this.event});
+  /// Drawn over a poster: white icons.
+  final bool onDark;
+
+  const EventBookmarkButton({super.key, required this.event, this.onDark = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return IconButton(
       tooltip: event.isBookmarked ? 'Remove bookmark' : 'Bookmark',
       icon: Icon(event.isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
-          color: event.isBookmarked ? Theme.of(context).colorScheme.primary : null),
+          color: onDark ? Colors.white : (event.isBookmarked ? Theme.of(context).colorScheme.primary : null)),
       onPressed: () async {
         try {
           await toggleEventBookmark(ref, event);

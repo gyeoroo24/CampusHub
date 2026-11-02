@@ -19,15 +19,18 @@ Update this page whenever a new shortcut or cloud dependency is added.
    - `013_seller_trust`, `014_reversible_listing_hide`
    - `015_auto_flags_and_price_watch` (adds a notification type outside the transaction; run as is)
    - `016_placement_and_events`, then `db/reference-data.sql` (default event tags)
+   - `017_forums_events_moderation` (adds enum values outside the transaction; run as is)
 
    `010` merges older per-listing chats into one chat per person. Back up the `chat_*` tables
    first.
 2. **Sign-in must use Cognito:**
    - Keep `CAMPUSHUB_AUTH_MODE=cognito` (the default). Dev sign-in (`X-Dev-User` with an emailed
      code) refuses to start inside Lambda, but on EC2 nothing stops it if the `.env` says `dev`.
-   - Do not deploy any build where `backend/app/otp.py` accepts a fixed code. During local
-     testing that file has a "TEMP HARDCODED OTP" block that accepts `123456`. It has never been
-     committed, and must not be.
+   - Do not deploy any build where `backend/app/otp.py` accepts a fixed code. That file has a
+     "TEMP HARDCODED OTP" block that accepts `123456` for local testing — **as of 2 Nov 2026 this
+     block is committed on `backend_v2`** (commit `7bce283`), not just a local-only edit as this
+     line used to claim. It makes `verify_otp()` accept the code for any email, unconditionally,
+     with no dev-mode gate. Remove it before merging into `main` or building any deploy image.
    - Set `CAMPUSHUB_SMTP_*` if dev sign-in is ever used on a shared server.
 3. **The web app must renew Cognito tokens.**
    - Cognito ID tokens expire after about an hour, and the Flutter app does not yet use the

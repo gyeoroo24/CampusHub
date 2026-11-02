@@ -1,10 +1,19 @@
 -- ============================================================================
--- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 16
+-- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 17
 -- DS252 Introduction to Cloud Computing — Team "Order of Phoenix"
 --
 -- Permission modules (FR-2, NFR-6): buy_sell, lost_found, academic_help,
--- placement_hub. Community Events is a feature, not a permission module:
--- it has no module moderators (creator + admins manage events).
+-- placement_hub, events (rev 17: Community Events moderators).
+--
+-- Changes from rev. 16 (Placement Hub and Events follow-ups, 2 Nov 2026):
+--   1. module_name 'events': Community Events moderators remove any event and moderate event forums.
+--   2. Events have forums: forum_scope_type 'event', forums.event_id.
+--   3. Reddit-style forums: thread_votes and comment_votes (+1 / -1 per person), and
+--      comments.parent_id for replies to a reply (NULL = top-level reply).
+--   4. ppt_info.kind: the placement schedule holds pre-placement talks, online tests (OA),
+--      interviews and other dates, not only talks.
+--   5. events.poster_s3_key: an optional poster image (upload kind event_poster).
+--   Upgrade: db/migrations/017_forums_events_moderation.sql.
 --
 -- Changes from rev. 15 (Placement Hub and Community Events APIs, 1-2 Nov 2026; built in
 --   parallel with revs 13-15 and first numbered rev 13):
@@ -118,12 +127,12 @@ CREATE EXTENSION IF NOT EXISTS citext;    -- case-insensitive text for emails (s
 -- ENUM TYPES
 -- ============================================================================
 CREATE TYPE user_role            AS ENUM ('signed_in', 'admin');   -- "moderator" is derived from moderator_assignments
-CREATE TYPE module_name          AS ENUM ('buy_sell', 'lost_found', 'academic_help', 'placement_hub');
+CREATE TYPE module_name          AS ENUM ('buy_sell', 'lost_found', 'academic_help', 'placement_hub', 'events');
 CREATE TYPE mod_scope_type       AS ENUM ('module', 'department', 'course');
 CREATE TYPE listing_status       AS ENUM ('available', 'reserved', 'sold');
 CREATE TYPE lost_found_status    AS ENUM ('open', 'matched', 'closed');  -- 'matched' unused since rev 11
 CREATE TYPE material_type        AS ENUM ('notes', 'slides', 'past_assignment', 'exam_material', 'other');
-CREATE TYPE forum_scope_type     AS ENUM ('course', 'department', 'company');
+CREATE TYPE forum_scope_type     AS ENUM ('course', 'department', 'company', 'event');
 CREATE TYPE bookmark_target_type AS ENUM ('listing', 'event');
 CREATE TYPE notification_type    AS ENUM ('lost_found_match', 'forum_reply', 'listing_status_change',
                                           'bookmarked_event_update', 'followed_tag_event', 'moderation_action',
@@ -563,6 +572,8 @@ CREATE INDEX idx_jd_company ON job_descriptions(company_id);
 CREATE TABLE ppt_info (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id   UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    kind         TEXT NOT NULL DEFAULT 'ppt'   -- rev 17: ppt, oa (online test), interview, other
+                 CHECK (kind IN ('ppt', 'oa', 'interview', 'other')),
     details      TEXT,
     venue        TEXT,                         -- rev 16
     scheduled_at TIMESTAMPTZ,
@@ -665,12 +676,9 @@ CREATE TABLE forums (
     course_id     UUID UNIQUE REFERENCES courses(id)     ON DELETE CASCADE,
     department_id UUID UNIQUE REFERENCES departments(id) ON DELETE CASCADE,
     company_id    UUID UNIQUE REFERENCES companies(id)   ON DELETE CASCADE,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    -- exactly one owner, matching scope_type; UNIQUE on each id = one forum per course/department/company
-    CONSTRAINT forum_scope_shape_chk CHECK (
-        (scope_type = 'course'     AND course_id IS NOT NULL     AND department_id IS NULL AND company_id IS NULL) OR
-        (scope_type = 'department' AND department_id IS NOT NULL AND course_id IS NULL     AND company_id IS NULL) OR
-        (scope_type = 'company'    AND company_id IS NOT NULL    AND course_id IS NULL     AND department_id IS NULL))
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    -- event_id and forum_scope_shape_chk (exactly one owner, matching scope_type) are added after
+    -- the events table below; UNIQUE on each id = one forum per course/department/company/event
 );
 
 CREATE TABLE threads (
@@ -698,6 +706,7 @@ CREATE TABLE comments (
     seq        BIGINT GENERATED ALWAYS AS IDENTITY,
     thread_id  UUID NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
     user_id    UUID NOT NULL REFERENCES users(id),
+    parent_id  UUID REFERENCES comments(id) ON DELETE CASCADE,  -- rev 17: reply to a reply; NULL = top level
     content    TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -707,6 +716,24 @@ CREATE TABLE comments (
 );
 CREATE INDEX idx_comments_thread_seq ON comments(thread_id, seq);   -- not partial: show removed ones as "[removed]"
 CREATE INDEX idx_comments_user       ON comments(user_id);          -- "my comments"; reply-notification recipients
+CREATE INDEX idx_comments_parent     ON comments(parent_id) WHERE parent_id IS NOT NULL;
+
+-- rev 17: Reddit-style votes. One vote per person per thread / comment: +1 up, -1 down;
+-- taking a vote back deletes the row. A thread's score is the sum of its thread_votes.
+CREATE TABLE thread_votes (
+    thread_id  UUID NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    value      SMALLINT NOT NULL CHECK (value IN (-1, 1)),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (thread_id, user_id)
+);
+CREATE TABLE comment_votes (
+    comment_id UUID NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    value      SMALLINT NOT NULL CHECK (value IN (-1, 1)),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (comment_id, user_id)
+);
 
 -- Removing a thread removes its comments: when a thread is soft-deleted,
 -- its still-visible comments are soft-deleted with the same time and actor.
@@ -729,7 +756,8 @@ CREATE TRIGGER trg_threads_cascade_soft_delete
 --   course forum      -> that course's course moderator, or a department
 --                        moderator of the course's department;
 --   department forum  -> that department's department moderator;
---   company forum     -> a placement_hub moderator.
+--   company forum     -> a placement_hub moderator;
+--   event forum       -> an events moderator (rev 17).
 -- The API checks: author_id = :user OR can_moderate_forum(:user, forum_id)
 --   UPDATE threads SET deleted_at = now(), deleted_by = :user
 --   WHERE id = :tid AND deleted_at IS NULL
@@ -749,7 +777,8 @@ LANGUAGE sql STABLE AS $$
                        AND (m.course_id = f.course_id OR m.department_id = c.department_id))
                    OR (f.scope_type = 'department' AND m.module = 'academic_help'
                        AND m.department_id = f.department_id)
-                   OR (f.scope_type = 'company'    AND m.module = 'placement_hub')));
+                   OR (f.scope_type = 'company'    AND m.module = 'placement_hub')
+                   OR (f.scope_type = 'event'      AND m.module = 'events')));
 $$;
 
 -- ============================================================================
@@ -808,13 +837,13 @@ CREATE TABLE reports (
         WHEN 'interview_experience' THEN interview_experience_id IS NOT NULL
         WHEN 'wanted_post'          THEN wanted_post_id IS NOT NULL END),
     -- module must fit the target (thread/comment: academic_help for course/department
-    -- forums, placement_hub for company forums — the API sets it from the forum)
+    -- forums, placement_hub for company forums, events for event forums — the API sets it from the forum)
     CONSTRAINT reports_module_chk CHECK (
         (target_type IN ('listing', 'wanted_post')            AND module = 'buy_sell') OR
         (target_type IN ('lost_report', 'found_report')       AND module = 'lost_found') OR
         (target_type IN ('course_material', 'course_feedback') AND module = 'academic_help') OR
         (target_type = 'interview_experience'                 AND module = 'placement_hub') OR
-        (target_type IN ('thread', 'comment')                 AND module IN ('academic_help', 'placement_hub'))),
+        (target_type IN ('thread', 'comment')                 AND module IN ('academic_help', 'placement_hub', 'events'))),
     CONSTRAINT reports_source_chk CHECK ((source = 'user') = (reporter_id IS NOT NULL)),
     -- open reports have no handler; handled ones always record who and when
     CONSTRAINT reports_handled_chk CHECK (
@@ -895,8 +924,8 @@ CREATE INDEX idx_listing_watches_listing ON listing_watches(listing_id);
 
 -- ============================================================================
 -- PHASE 2 — COMMUNITY / CULTURE EVENTS  (FR-18, FR-19, FR-20, FR-21, FR-22)
--- Not a permission module: the creator edits/deletes their event; admins
--- can edit/delete any event.
+-- The creator edits/deletes their event; admins can edit/delete any event, and
+-- events moderators (rev 17) can remove any event.
 -- ============================================================================
 CREATE TABLE event_tags (
     id         SERIAL PRIMARY KEY,
@@ -912,6 +941,7 @@ CREATE TABLE events (
     location    TEXT,
     start_time  TIMESTAMPTZ NOT NULL,
     end_time    TIMESTAMPTZ NOT NULL,
+    poster_s3_key TEXT,                                 -- rev 17: optional poster image
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),     -- FR-20: detect "event updated"
     deleted_at  TIMESTAMPTZ,
@@ -924,6 +954,15 @@ CREATE TABLE events (
 --        WHEN now() <= end_time  THEN 'present'
 --        ELSE 'past' END
 CREATE INDEX idx_events_time ON events(start_time, end_time) WHERE deleted_at IS NULL;
+
+-- rev 17: every event has a discussion forum too (forums is defined before events).
+ALTER TABLE forums ADD COLUMN event_id UUID UNIQUE REFERENCES events(id) ON DELETE CASCADE;
+ALTER TABLE forums ADD CONSTRAINT forum_scope_shape_chk CHECK (
+    num_nonnulls(course_id, department_id, company_id, event_id) = 1 AND CASE scope_type
+        WHEN 'course'     THEN course_id IS NOT NULL
+        WHEN 'department' THEN department_id IS NOT NULL
+        WHEN 'company'    THEN company_id IS NOT NULL
+        WHEN 'event'      THEN event_id IS NOT NULL END);
 
 CREATE TABLE event_tag_map (
     event_id   UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,

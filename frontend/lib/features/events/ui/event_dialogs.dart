@@ -3,9 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/utils/date_time_formatter.dart';
 import '../../../core/utils/error_text.dart';
+import '../../../core/widgets/photo_picker_field.dart';
+import '../../forums/domain/forum_models.dart';
+import '../../forums/ui/forum_board.dart';
 import '../domain/event_models.dart';
 import '../providers/events_providers.dart';
-import 'events_screen.dart' show EventBookmarkButton, eventTimeRange;
+import 'events_screen.dart' show EventBookmarkButton, EventPoster, eventTimeRange;
 
 void _snack(BuildContext context, String message) => ScaffoldMessenger.of(context)
     .showSnackBar(SnackBar(content: Text(message), behavior: SnackBarBehavior.floating));
@@ -160,7 +163,20 @@ class EventDetailDialog extends ConsumerWidget {
                   child: Center(child: CircularProgressIndicator()),
                 ),
                 error: (e, _) => Text(errorText(e)),
-                data: (event) => _EventDetails(event: event, onRemoved: () => Navigator.pop(context)),
+                data: (event) => Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (event.posterUrl != null) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: SizedBox(height: 260, child: EventPoster(event: event, fit: BoxFit.contain)),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    _EventDetails(event: event, onRemoved: () => Navigator.pop(context)),
+                  ],
+                ),
               ),
         ),
       ),
@@ -169,7 +185,8 @@ class EventDetailDialog extends ConsumerWidget {
   }
 }
 
-/// /events/:id, opened from a notification or a shared link.
+/// /events/:id: the poster, the details, and the event's discussion forum. Opened from the Events
+/// page, a notification or a shared link.
 class EventDetailScreen extends ConsumerWidget {
   final String eventId;
 
@@ -189,13 +206,44 @@ class EventDetailScreen extends ConsumerWidget {
       body: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
+          constraints: const BoxConstraints(maxWidth: 820),
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: ref.watch(eventProvider(eventId)).when(
+                  skipLoadingOnReload: true,
                   loading: () => const Center(child: CircularProgressIndicator()),
                   error: (e, _) => Text(errorText(e)),
-                  data: (event) => _EventDetails(event: event, onRemoved: () => context.go('/events')),
+                  data: (event) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          color: Colors.black,
+                          height: event.posterUrl == null ? 220 : 420,
+                          child: EventPoster(event: event, fit: BoxFit.contain),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      _EventDetails(event: event, onRemoved: () => context.go('/events')),
+                      const SizedBox(height: 28),
+                      Row(
+                        children: [
+                          const Icon(Icons.forum_outlined, size: 20),
+                          const SizedBox(width: 8),
+                          Text('Discussion', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      ForumBoard(
+                        scope: ForumScope.event,
+                        scopeId: event.id,
+                        placeName: event.title,
+                        blurb: 'ask about it, find people to go with, share photos after',
+                        embedded: true,
+                      ),
+                    ],
+                  ),
                 ),
           ),
         ),
@@ -222,6 +270,8 @@ class _EventFormDialogState extends ConsumerState<EventFormDialog> {
   late DateTime _start = widget.event?.startTime ?? _nextHour();
   late DateTime _end = widget.event?.endTime ?? _nextHour().add(const Duration(hours: 2));
   late final Set<int> _tags = {...?widget.event?.tags.map((t) => t.id)};
+  List<PickedPhoto> _poster = const [];
+  late bool _keepPoster = widget.event?.posterUrl != null;
   bool _busy = false;
   String? _error;
 
@@ -266,16 +316,23 @@ class _EventFormDialogState extends ConsumerState<EventFormDialog> {
       _busy = true;
       _error = null;
     });
-    final draft = EventDraft(
-      title: _title.text.trim(),
-      description: _description.text,
-      location: _location.text,
-      startTime: _start,
-      endTime: _end,
-      tagIds: _tags.toList(),
-    );
     try {
       final repo = ref.read(eventsRepositoryProvider);
+      String? posterKey;
+      if (_poster.isNotEmpty) {
+        final uploaded = await uploadPickedPhotos(ref, _poster, kind: 'event_poster');
+        posterKey = uploaded.first.s3Key.isEmpty ? null : uploaded.first.s3Key;
+      }
+      final draft = EventDraft(
+        title: _title.text.trim(),
+        description: _description.text,
+        location: _location.text,
+        startTime: _start,
+        endTime: _end,
+        tagIds: _tags.toList(),
+        posterKey: posterKey,
+        removePoster: widget.event?.posterUrl != null && !_keepPoster && _poster.isEmpty,
+      );
       final saved = widget.event == null ? await repo.createEvent(draft) : await repo.updateEvent(widget.event!.id, draft);
       if (mounted) Navigator.pop(context, saved);
     } catch (e) {
@@ -357,6 +414,32 @@ class _EventFormDialogState extends ConsumerState<EventFormDialog> {
                       ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                if (_keepPoster && _poster.isEmpty) ...[
+                  Text('Poster', style: TextStyle(color: theme.hintColor, fontSize: 12)),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(width: 72, height: 96, child: EventPoster(event: widget.event!)),
+                      ),
+                      const SizedBox(width: 12),
+                      TextButton.icon(
+                        onPressed: _busy ? null : () => setState(() => _keepPoster = false),
+                        icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+                        label: const Text('Replace or remove'),
+                      ),
+                    ],
+                  ),
+                ] else
+                  PhotoPickerField(
+                    photos: _poster,
+                    maxPhotos: 1,
+                    enabled: !_busy,
+                    label: 'Poster (optional). Without one, a poster is made from the title and tag.',
+                    onChanged: (p) => setState(() => _poster = p),
+                  ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _description,

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/date_time_formatter.dart';
 import '../../../core/utils/error_text.dart';
 import '../../../core/widgets/skeleton_loader.dart';
+import '../../auth/providers/auth_providers.dart';
 import '../../buy_sell/providers/buy_sell_providers.dart';
 import '../domain/wanted_post.dart';
 import '../providers/wanted_providers.dart';
@@ -49,6 +50,8 @@ class WantedFeedSliver extends ConsumerWidget {
     final narrowed = listingFilter.category != 'All' || listingFilter.query.isNotEmpty;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final user = ref.watch(currentUserProvider);
+    final signedIn = user != null && !user.isGuest;
 
     return SliverMainAxisGroup(
       slivers: [
@@ -61,22 +64,42 @@ class WantedFeedSliver extends ConsumerWidget {
                 bottom: BorderSide(color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
               ),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.info_outline_rounded, size: 16, color: theme.hintColor),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'What fellow students are looking for. Have one of these? List it, and the buyer gets notified.',
-                    style: TextStyle(fontSize: 11, color: theme.hintColor),
+                Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded, size: 16, color: theme.hintColor),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'What fellow students are looking for. Have one of these? List it, and the buyer gets notified.',
+                        style: TextStyle(fontSize: 11, color: theme.hintColor),
+                      ),
+                    ),
+                    FilterChip(
+                      label: const Text('Show closed', style: TextStyle(fontSize: 11)),
+                      selected: filter.showClosed,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (v) =>
+                          ref.read(wantedFilterProvider.notifier).state = filter.copyWith(showClosed: v),
+                    ),
+                  ],
+                ),
+                if (signedIn) ...[
+                  const SizedBox(height: 8),
+                  SegmentedButton<bool>(
+                    showSelectedIcon: false,
+                    style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                    segments: const [
+                      ButtonSegment(value: true, label: Text('What I want', style: TextStyle(fontSize: 12))),
+                      ButtonSegment(value: false, label: Text('What others want', style: TextStyle(fontSize: 12))),
+                    ],
+                    selected: {filter.mine},
+                    onSelectionChanged: (s) =>
+                        ref.read(wantedFilterProvider.notifier).state = filter.copyWith(mine: s.first),
                   ),
-                ),
-                FilterChip(
-                  label: const Text('Show closed', style: TextStyle(fontSize: 11)),
-                  selected: filter.showClosed,
-                  visualDensity: VisualDensity.compact,
-                  onSelected: (v) => ref.read(wantedFilterProvider.notifier).state = WantedFilter(showClosed: v),
-                ),
+                ],
               ],
             ),
           ),

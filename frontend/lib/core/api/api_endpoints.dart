@@ -130,12 +130,17 @@ class ApiEndpoints {
   static const String placementStats = '$version/placement/stats';
   static const String placementPpts = '$version/placement/ppts';
   static const String placementImports = '$version/placement/imports';
+  static const String placementCompaniesImport = '$version/placement/companies/import';
+  static const String placementScheduleImport = '$version/placement/schedule/import';
 
   // --- Forums ---
   static String forumThreads(String forumId) => '$version/forums/$forumId/threads';
   static String thread(String id) => '$version/threads/$id';
   static String threadComments(String threadId) => '$version/threads/$threadId/comments';
   static String comment(String id) => '$version/comments/$id';
+  static String threadVote(String id) => '$version/threads/$id/vote';
+  static String commentVote(String id) => '$version/comments/$id/vote';
+  static String eventForum(String eventId) => '$version/events/$eventId/forum';
 
   // --- Community Events and bookmarks ---
   static const String events = '$version/events';

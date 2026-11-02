@@ -11,7 +11,8 @@ final placementRepositoryProvider = Provider<IPlacementRepository>((ref) {
   return ApiPlacementRepository(ref.watch(apiClientProvider));
 });
 
-/// Company list search box and sort on the Placements tab.
+/// Company list search box and sort on the Placement Hub page. The page clears the search each time it
+/// opens, so coming back from a company shows every company again.
 final companySearchProvider = StateProvider<String>((ref) => '');
 final companySortProvider = StateProvider<String>((ref) => 'name');
 
@@ -26,14 +27,17 @@ final placementOverviewProvider = FutureProvider<PlacementOverview>((ref) {
   return ref.watch(placementRepositoryProvider).fetchOverview();
 });
 
+/// The next few dates on the placement schedule (the landing page's "Coming up" strip).
 final upcomingPptsProvider = FutureProvider<List<Ppt>>((ref) {
-  return ref.watch(placementRepositoryProvider).fetchUpcomingPpts();
+  return ref.watch(placementRepositoryProvider).fetchUpcomingPpts(limit: 6);
 });
 
-/// Newest interview experiences across all companies (Placements tab).
-final recentInterviewsProvider = FutureProvider<List<InterviewExperience>>((ref) {
-  ref.watch(currentUserProvider); // names and "mine" depend on who is viewing
-  return ref.watch(placementRepositoryProvider).fetchInterviews(limit: 5);
+/// Which kinds the Schedule tab shows (empty = all).
+final scheduleKindsProvider = StateProvider<Set<PptKind>>((ref) => const {});
+
+/// The full upcoming schedule (Schedule tab).
+final scheduleProvider = FutureProvider<List<Ppt>>((ref) {
+  return ref.watch(placementRepositoryProvider).fetchUpcomingPpts(limit: 50, kinds: ref.watch(scheduleKindsProvider));
 });
 
 final companyProvider = FutureProvider.family<Company, String>((ref, companyId) {
@@ -50,26 +54,13 @@ final companyInterviewsProvider = FutureProvider.family<List<InterviewExperience
   return ref.watch(placementRepositoryProvider).fetchInterviews(companyId: companyId, limit: 50);
 });
 
-final companyForumIdProvider = FutureProvider.family<String, String>((ref, companyId) {
-  return ref.watch(placementRepositoryProvider).companyForumId(companyId);
-});
-
-final forumThreadsProvider = FutureProvider.family<List<ForumThread>, String>((ref, forumId) {
-  return ref.watch(placementRepositoryProvider).fetchThreads(forumId);
-});
-
-final forumThreadProvider = FutureProvider.family<ForumThread, String>((ref, threadId) {
-  ref.watch(currentUserProvider);
-  return ref.watch(placementRepositoryProvider).getThread(threadId);
-});
-
-/// Refresh everything a company page and the Placements tab show after a change.
+/// Refresh everything a company page and the Placement Hub page show after a change.
 void refreshCompany(WidgetRef ref, String companyId) {
   ref.invalidate(companyProvider(companyId));
   ref.invalidate(hiringStatsProvider(companyId));
   ref.invalidate(companyInterviewsProvider(companyId));
   ref.invalidate(companiesProvider);
   ref.invalidate(upcomingPptsProvider);
-  ref.invalidate(recentInterviewsProvider);
+  ref.invalidate(scheduleProvider);
   ref.invalidate(placementOverviewProvider);
 }

@@ -192,7 +192,7 @@ class _WantedDetailDialogState extends ConsumerState<WantedDetailDialog> {
           Wrap(
             spacing: 6,
             children: [
-              for (final s in WantedStatus.values)
+              for (final s in const [WantedStatus.open, WantedStatus.closed])
                 ChoiceChip(
                   label: Text(s.label, style: const TextStyle(fontSize: 12)),
                   selected: _post.status == s,

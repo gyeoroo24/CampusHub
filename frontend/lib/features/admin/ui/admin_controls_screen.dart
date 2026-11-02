@@ -908,7 +908,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
                 children: [
                   const Text('Appeal:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                   const SizedBox(width: 8),
-                  for (final f in const ['pending', 'resolved', 'none', 'all']) ...[
+                  for (final f in const ['pending', 'resolved', 'all']) ...[
                     ChoiceChip(
                       label: Text(f.toUpperCase()),
                       selected: filter == f,

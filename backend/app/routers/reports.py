@@ -34,7 +34,7 @@ router = APIRouter(tags=["Reports & moderation"])
 
 TargetType = Literal["listing", "lost_report", "found_report", "course_material", "course_feedback",
                      "thread", "comment", "interview_experience", "wanted_post"]
-Module = Literal["buy_sell", "lost_found", "academic_help", "placement_hub"]
+Module = Literal["buy_sell", "lost_found", "academic_help", "placement_hub", "events"]
 
 # target_type -> (table, column in reports)
 TARGETS: dict[str, tuple[str, str]] = {
@@ -51,7 +51,8 @@ TARGETS: dict[str, tuple[str, str]] = {
 FIXED_MODULE = {"listing": "buy_sell", "lost_report": "lost_found", "found_report": "lost_found",
                 "course_material": "academic_help", "course_feedback": "academic_help",
                 "interview_experience": "placement_hub", "wanted_post": "buy_sell"}
-FORUM_MODULE = {"course": "academic_help", "department": "academic_help", "company": "placement_hub"}
+FORUM_MODULE = {"course": "academic_help", "department": "academic_help", "company": "placement_hub",
+                "event": "events"}
 
 # target_type -> (table, owner column, SQL for a short title, what to call it in a notification)
 OWNED: dict[str, tuple[str, str, str, str]] = {

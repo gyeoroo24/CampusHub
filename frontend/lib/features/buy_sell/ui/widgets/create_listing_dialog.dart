@@ -2,6 +2,7 @@ import 'dart:async';
 import '../../../../core/widgets/category_picker.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/models/category_ref.dart';
 import '../../../../core/utils/error_text.dart';
@@ -152,6 +153,7 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
         child: SingleChildScrollView(
           child: Form(
             key: _formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -174,6 +176,7 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
                 TextFormField(
                   controller: _priceController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
                   decoration: const InputDecoration(
                     labelText: 'Price (₹) *',
                     hintText: 'e.g. 1500',
@@ -198,7 +201,7 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
                   dense: true,
                   controlAffinity: ListTileControlAffinity.leading,
                   title: const Text('Price is negotiable'),
-                  subtitle: const Text('Shows a "Negotiable" badge; people watching it are told'),
+                  subtitle: const Text('Shows a "Negotiable" badge'),
                 ),
                 const SizedBox(height: 8),
                 if (_isLoadingCategories)

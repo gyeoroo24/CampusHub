@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../../core/widgets/category_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/models/category_ref.dart';
@@ -100,6 +101,7 @@ class _EditListingDialogState extends ConsumerState<EditListingDialog> {
         child: SingleChildScrollView(
           child: Form(
             key: _formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -122,6 +124,7 @@ class _EditListingDialogState extends ConsumerState<EditListingDialog> {
                 TextFormField(
                   controller: _priceController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
                   decoration: const InputDecoration(
                     labelText: 'Price (₹) *',
                     prefixText: '₹ ',
@@ -145,7 +148,7 @@ class _EditListingDialogState extends ConsumerState<EditListingDialog> {
                   dense: true,
                   controlAffinity: ListTileControlAffinity.leading,
                   title: const Text('Price is negotiable'),
-                  subtitle: const Text('Shows a "Negotiable" badge; people watching it are told'),
+                  subtitle: const Text('Shows a "Negotiable" badge'),
                 ),
                 const SizedBox(height: 8),
                 categoriesAsync.when(

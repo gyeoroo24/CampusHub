@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../placement/ui/company_forum.dart';
+import '../../forums/ui/thread_view.dart';
 import '../../../core/utils/web_history_support.dart';
 import '../../../core/utils/date_time_formatter.dart';
 import '../../../core/utils/error_text.dart';

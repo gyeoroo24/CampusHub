@@ -44,6 +44,9 @@ class CampusEvent {
   final DateTime endTime;
   final EventWhen when;
   final List<EventTag> tags;
+
+  /// Short-lived link to the poster image, if the event has one.
+  final String? posterUrl;
   final String organizerId;
   final String organizerName;
   final int bookmarkCount;
@@ -62,6 +65,7 @@ class CampusEvent {
     required this.endTime,
     required this.when,
     this.tags = const [],
+    this.posterUrl,
     required this.organizerId,
     required this.organizerName,
     this.bookmarkCount = 0,
@@ -81,6 +85,7 @@ class CampusEvent {
         tags: (json['tags'] as List<dynamic>? ?? [])
             .map((t) => EventTag.fromJson(t as Map<String, dynamic>))
             .toList(),
+        posterUrl: json['poster_url'] == null || '${json['poster_url']}'.isEmpty ? null : '${json['poster_url']}',
         organizerId: '${(json['organizer'] as Map?)?['id'] ?? ''}',
         organizerName: '${(json['organizer'] as Map?)?['name'] ?? ''}',
         bookmarkCount: json['bookmark_count'] is int ? json['bookmark_count'] as int : 0,
@@ -98,6 +103,7 @@ class CampusEvent {
         endTime: endTime,
         when: when,
         tags: tags,
+        posterUrl: posterUrl,
         organizerId: organizerId,
         organizerName: organizerName,
         bookmarkCount: bookmarkCount ?? this.bookmarkCount,
@@ -116,6 +122,12 @@ class EventDraft {
   final DateTime endTime;
   final List<int> tagIds;
 
+  /// A newly uploaded poster (s3_key), or null to leave the poster as it is.
+  final String? posterKey;
+
+  /// Take the current poster off (when editing).
+  final bool removePoster;
+
   const EventDraft({
     required this.title,
     this.description,
@@ -123,6 +135,8 @@ class EventDraft {
     required this.startTime,
     required this.endTime,
     required this.tagIds,
+    this.posterKey,
+    this.removePoster = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -132,5 +146,6 @@ class EventDraft {
         'start_time': startTime.toUtc().toIso8601String(),
         'end_time': endTime.toUtc().toIso8601String(),
         'tag_ids': tagIds,
+        if (posterKey != null) 'poster_s3_key': posterKey else if (removePoster) 'poster_s3_key': null,
       };
 }

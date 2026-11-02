@@ -20,11 +20,11 @@ from ..permissions import can_manage_department, log_moderation
 
 router = APIRouter(prefix="/moderators", tags=["Moderators"])
 
-Module = Literal["buy_sell", "lost_found", "academic_help", "placement_hub"]
+Module = Literal["buy_sell", "lost_found", "academic_help", "placement_hub", "events"]
 
 
 MODULE_NAMES = {"buy_sell": "Buy & Sell", "lost_found": "Lost & Found", "academic_help": "Academic Help",
-                "placement_hub": "Placement Hub"}
+                "placement_hub": "Placement Hub", "events": "Events"}
 
 
 async def role_label(conn: asyncpg.Connection, module: str, scope_type: str, department_id: UUID | None,

@@ -111,7 +111,7 @@ Ten endpoints cover the signed-in user's profile, other people's public profiles
 | GET | `/users/lookup?email=` | admin | Find an account by email; returns `id`, `email`, `name`, `is_active`, `is_admin`. 404 if nobody with that email has signed in yet. Use it before deactivating or handing over the admin role |
 | PATCH | `/users/{user_id}` | admin | Deactivate or reactivate an account: `{"is_active": false}`. Not your own. Returns `id`, `email`, `name`, `is_active`, `is_admin` |
 | POST | `/users/{user_id}/make-admin` | admin | Hand the admin role to this user. There is only ever one admin, so the caller becomes a normal signed-in user. 403 for anyone else; 422 for yourself or a deactivated account |
-| POST | `/moderators` | admin; department moderator (for their courses) | Make someone a moderator: `email`, `module`, `scope_type`, `department_id` or `course_id` |
+| POST | `/moderators` | admin; department moderator (for their courses) | Make someone a moderator: `email`, `module` (`buy_sell`, `lost_found`, `placement_hub`, `events`: module-wide; `academic_help`: per department or course), `scope_type`, `department_id` or `course_id` |
 | GET | `/moderators` | admin, department moderator | List roles. Filters: `module`, `department_id`, `course_id`, `include_revoked` |
 | DELETE | `/moderators/{grant_id}` | same as POST, or the moderator themselves | Revoke a role. A moderator can step down by revoking their own role |
 | POST | `/uploads` | user | Get an upload ticket (see File uploads) |
@@ -245,7 +245,7 @@ Company pages for placement prep (FR-15, FR-16, FR-17): what the company does, i
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
-| GET | `/companies` | guest | Browse companies. Filters: `q` (name or industry), `industry`. `sort`: `name` (default), `most_hired` (latest season's hires), `upcoming_ppt` (soonest talk first) |
+| GET | `/companies` | guest | Browse companies. Filters: `q` (name or industry), `industry`. `sort`: `name` (default), `most_hired` (latest season's hires), `upcoming_ppt` (soonest date of any kind first) |
 | GET | `/companies/{id}` | guest | The company page: details, `job_descriptions`, `ppts`, headline numbers, `viewer_can_manage` |
 | POST | `/companies` | placement moderator, admin | Add one: `name`, `industry`, `website` (must start with `https://` or `http://`), `description`. A name that differs only in case or spacing is a duplicate (409) |
 | PATCH | `/companies/{id}` | placement moderator, admin | Edit any of those fields |
@@ -253,9 +253,9 @@ Company pages for placement prep (FR-15, FR-16, FR-17): what the company does, i
 | POST | `/companies/{id}/jds` | placement moderator, admin | Add a JD: `role_title`, `description` (the JD text), `compensation` (free text, e.g. "₹32 LPA"), optional `file_s3_key` (upload kind `job_description`: PDF, DOCX or TXT, up to 20 MB) |
 | PATCH | `/jds/{id}` | placement moderator, admin | Edit; `file_s3_key: null` removes the file |
 | DELETE | `/jds/{id}` | placement moderator, admin | Delete a JD |
-| GET | `/placement/ppts` | guest | PPTs across companies. `when`: `upcoming` (default, soonest first), `past`, `all` |
-| POST | `/companies/{id}/ppts` | placement moderator, admin | Add PPT info: `details`, `venue`, `scheduled_at` (leave out until the date is announced). At least one is needed |
-| PATCH / DELETE | `/ppts/{id}` | placement moderator, admin | Edit or delete PPT info |
+| GET | `/placement/ppts` | guest | The placement schedule across companies. `when`: `upcoming` (default, soonest first), `past`, `all`; `kind` (repeatable): `ppt`, `oa`, `interview`, `other` |
+| POST | `/companies/{id}/ppts` | placement moderator, admin | Add a date: `kind` (`ppt` pre-placement talk (default), `oa` online test, `interview`, `other`), `details`, `venue`, `scheduled_at` (leave out until announced). At least one of the last three is needed |
+| PATCH / DELETE | `/ppts/{id}` | placement moderator, admin | Edit or delete a date |
 | GET | `/companies/{id}/hiring-stats` | guest | Students selected per year and role, newest year first |
 | GET | `/placement/stats` | guest | Seasons at a glance: hires and companies per year (`years`, default 5) and the top recruiters of the latest season (or `year`) |
 | GET | `/interviews` | guest | Interview experiences, newest first. Filters: `company_id`, `q`, `role`, `placement_year`, `mine=true` (signed in) |
@@ -266,15 +266,18 @@ Company pages for placement prep (FR-15, FR-16, FR-17): what the company does, i
 | GET | `/companies/{id}/forum` | guest | The company's forum (created on first visit). Threads and replies use the Forums endpoints below |
 | POST | `/placement/imports` | placement moderator, admin | Import a placement sheet (FR-17): `placement_year` and `sheet` (see below) |
 | GET | `/placement/imports` | placement moderator, admin | Past imports, newest first, with their counts |
+| POST | `/placement/companies/import` | placement moderator, admin | `{"csv": "..."}`: add or update companies. Columns `Name` (required), `Industry`, `Website`, `About`. An existing company (same name) gets the cells you filled in |
+| POST | `/placement/schedule/import` | placement moderator, admin | `{"csv": "..."}`: add dates. Columns `Company` (required), `Type` (PPT, OA, Interview, Other), `Date`, `Time` (or one date-and-time column; India time unless a timezone is given), `Venue`, `Details`. New companies are created; the same company, type and time again updates the entry |
 
 **Fields to design with:**
 
 | Object | Fields |
 | --- | --- |
-| Company card (in lists) | `id`, `name`, `industry`, `description`, `role_count`, `interview_count`, `next_ppt_at`, `latest_year`, `latest_year_selected`, `total_selected` |
+| Company card (in lists) | `id`, `name`, `industry`, `description`, `role_count`, `interview_count`, `next_ppt_at`, `next_date_at`, `next_date_kind`, `latest_year`, `latest_year_selected`, `total_selected` |
 | Company page | Everything on the card, plus `website`, `job_descriptions`, `ppts`, `viewer_can_manage`, `created_at`, `updated_at` |
 | JD | `id`, `company_id`, `role_title`, `description`, `compensation`, `file_s3_key`, `file_url` (short-lived link, `null` without a file) |
-| PPT | `id`, `company_id`, `company_name`, `details`, `venue`, `scheduled_at`, `when` (`upcoming`, `past`, `unscheduled`) |
+| Schedule date (PPT) | `id`, `company_id`, `company_name`, `kind`, `details`, `venue`, `scheduled_at`, `when` (`upcoming`, `past`, `unscheduled`) |
+| CSV import result | `rows_total`, `rows_created`, `rows_updated`, `rows_rejected`, `companies_created`, `rejected_rows`: [`line`, `reason`] |
 | Hiring stats | `company_id`, `company_name`, `total_selected`, `years`: [`year`, `students_selected`, `roles`: [`role_title`, `students_selected`]] |
 | Interview experience | `id`, `company_id`, `company_name`, `role_title`, `placement_year`, `content`, `is_anonymous`, `is_mine`, `author` (`null` for guests, and for anonymous posts except to their author) |
 | Import result | `id`, `placement_year`, `rows_total`, `rows_created`, `rows_updated`, `rows_rejected`, `companies_created`, `rejected_rows`: [`line`, `reason`], `imported_at` |
@@ -286,18 +289,18 @@ Company pages for placement prep (FR-15, FR-16, FR-17): what the company does, i
 
 ## Community Events
 
-A campus events timeline (FR-18, FR-19, FR-20): sports, culture, talks, food and more. Anyone signed in can post an event; its organizer (or an admin) edits or cancels it. Events have no moderators of their own.
+A campus events timeline (FR-18, FR-19, FR-20): sports, culture, talks, food and more. Anyone signed in can post an event, optionally with a poster image; its organizer, an Events moderator or an admin edits or cancels it. Every event has a discussion forum (see Forums).
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
 | GET | `/event-tags` | guest | All tags with `upcoming_count` and, for signed-in users, `following` |
-| POST | `/event-tags` | admin | Add a tag: `name` |
-| PATCH / DELETE | `/event-tags/{id}` | admin | Rename or delete a tag |
+| POST | `/event-tags` | events moderator, admin | Add a tag: `name` |
+| PATCH / DELETE | `/event-tags/{id}` | events moderator, admin | Rename or delete a tag |
 | GET | `/events` | guest | The timeline. Filters: `when` (repeatable `present`, `upcoming`, `past`; default present + upcoming), `tag_id` (repeatable; events with any of them), `q` (title, description, place), `from_time` / `to_time`, `organizer_id`, `bookmarked=true` (signed in) |
 | GET | `/events/{id}` | guest | One event |
-| POST | `/events` | user | Post one: `title`, `start_time`, `end_time` (with a timezone), `tag_ids` (1–5), `location`, `description` |
-| PATCH | `/events/{id}` | organizer, admin | Edit any field, including `tag_ids` |
-| DELETE | `/events/{id}` | organizer, admin | Cancel (remove) it |
+| POST | `/events` | user | Post one: `title`, `start_time`, `end_time` (with a timezone), `tag_ids` (1–5), `location`, `description`, optional `poster_s3_key` (upload kind `event_poster`: JPEG, PNG, WebP or HEIC, up to 10 MB) |
+| PATCH | `/events/{id}` | organizer, events moderator, admin | Edit any field, including `tag_ids`; `poster_s3_key: null` removes the poster |
+| DELETE | `/events/{id}` | organizer, events moderator, admin | Cancel (remove) it |
 | GET | `/me/followed-tags` | user | Tags I follow |
 | PUT / DELETE | `/me/followed-tags/{tag_id}` | user | Follow / unfollow a tag (204). Following twice is fine |
 | GET | `/me/bookmarks` | user | My bookmarks (`target_type` `listing` or `event`, optional filter), newest first; removed items drop out |
@@ -308,7 +311,7 @@ A campus events timeline (FR-18, FR-19, FR-20): sports, culture, talks, food and
 
 | Object | Fields |
 | --- | --- |
-| Event | `id`, `title`, `description`, `location`, `start_time`, `end_time`, `when` (`upcoming`, `present`, `past`), `tags` (`id`, `name`), `organizer` (`id`, `name`), `bookmark_count`, `is_bookmarked`, `can_edit`, `created_at`, `updated_at` |
+| Event | `id`, `title`, `description`, `location`, `start_time`, `end_time`, `when` (`upcoming`, `present`, `past`), `tags` (`id`, `name`), `poster_url` (short-lived link, `null` without a poster), `organizer` (`id`, `name`), `bookmark_count`, `is_bookmarked`, `can_edit`, `created_at`, `updated_at` |
 | Tag | `id`, `name`, `upcoming_count`, `following` |
 
 - **Past / Present / Upcoming (FR-19)** is worked out from the clock on every request: `present` when start ≤ now ≤ end. The default order is happening now, then soonest upcoming, then most recent past.
@@ -376,19 +379,22 @@ A one-page summary of a course's feedback, semester by semester, with sentiment 
 
 ## Forums
 
-Forums go forum → thread → comments. Each course, department and company (Placement Hub) has exactly one forum, created the first time someone opens it.
+Forums go forum → thread → comments, Reddit style. Each course, department, company (Placement Hub) and event has exactly one forum, created the first time someone opens it. Signed-in users vote threads and replies up or down (their own start upvoted), and a reply can answer another reply (`parent_id`), so the app shows a comment tree.
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
 | GET | `/courses/{id}/forum` | guest | The course's forum, with `thread_count` |
 | GET | `/departments/{id}/forum` | guest | The department's forum |
 | GET | `/companies/{id}/forum` | guest | The company's forum (Placement Hub moderators remove posts there) |
-| GET | `/forums/{id}/threads` | guest | Threads, newest first |
+| GET | `/events/{id}/forum` | guest | The event's forum (Events moderators remove posts there); 404 once the event is cancelled |
+| GET | `/forums/{id}/threads` | guest | Threads. `sort`: `new` (default), `hot` (votes and replies, fading with age), `top`; `q` searches titles and opening posts |
 | POST | `/forums/{id}/threads` | user | Start a thread: `title` plus `content` (the opening post) |
 | GET | `/threads/{id}` | guest | The thread with every comment in order, and `viewer_can_moderate` |
 | PATCH | `/threads/{id}` | owner, admin | Rename: `title` |
 | DELETE | `/threads/{id}` | owner, forum moderator, admin | Remove the thread and all its comments. Optional `?reason=` |
-| POST | `/threads/{id}/comments` | user | Reply: `content` |
+| POST | `/threads/{id}/comments` | user | Reply: `content`, optional `parent_id` (the reply being answered) |
+| PUT | `/threads/{id}/vote` | user | `{"value": 1}` up, `-1` down, `0` take it back. Returns `score`, `viewer_vote` |
+| PUT | `/comments/{id}/vote` | user | Same, for a reply |
 | PATCH | `/comments/{id}` | owner, admin | Edit `content` |
 | DELETE | `/comments/{id}` | owner, forum moderator, admin | Remove. Optional `?reason=` |
 
@@ -396,9 +402,9 @@ Forums go forum → thread → comments. Each course, department and company (Pl
 
 | Object | Fields |
 | --- | --- |
-| Thread (in lists) | `id`, `forum_id`, `title`, `author` (`id`, `name`), `comment_count`, `last_comment_at`, `created_at` |
+| Thread (in lists) | `id`, `forum_id`, `title`, `author` (`id`, `name`), `preview` (start of the opening post), `score`, `viewer_vote`, `comment_count`, `reply_count`, `last_comment_at`, `created_at` |
 | Thread detail | Everything in the list item, plus `comments` and `viewer_can_moderate` |
-| Comment | `id`, `seq`, `author`, `content`, `removed`, `created_at`, `updated_at` |
+| Comment | `id`, `seq`, `parent_id`, `author`, `content`, `removed`, `score`, `viewer_vote`, `created_at`, `updated_at` |
 
 - **Opening post:** the first comment in `comments`. Edit it like any comment.
 - **Removed comments** stay in place with `removed: true` and `content: null`, so replies keep their context.
