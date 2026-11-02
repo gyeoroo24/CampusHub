@@ -1,9 +1,31 @@
 -- ============================================================================
--- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 17
+-- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 20
 -- DS252 Introduction to Cloud Computing — Team "Order of Phoenix"
 --
 -- Permission modules (FR-2, NFR-6): buy_sell, lost_found, academic_help,
 -- placement_hub, events (rev 17: Community Events moderators).
+--
+-- Changes from rev. 19 (mess cards and schedule times, 3 Nov 2026):
+--   1. messes.event_id: every mess has a Food/Mess event card (its meal times and dishes), created
+--      and updated with its menus.
+--   2. ppt_info.time_tbd: a date imported without a time shows "time to be announced".
+--   Upgrade: db/migrations/020_mess_event_cards_and_tba_times.sql.
+--
+-- Changes from rev. 18 (chat and placement follow-ups, 2 Nov 2026):
+--   1. chat_conversations.user_a_cleared_seq / user_b_cleared_seq: "delete chat" hides a chat from
+--      one person only; chat_message_hides: "delete for me" on one message.
+--   2. placement_records.student_email takes any email address (counted in the hiring numbers;
+--      only IISc addresses are listed as seniors to contact).
+--   Upgrade: db/migrations/019_chat_hiding_and_any_email.sql.
+--
+-- Changes from rev. 17 (senior contacts and mess menus, 2 Nov 2026):
+--   1. company_seniors: people to contact about a company (off-campus offers and others moderators
+--      add); placement_records.contact_hidden takes a sheet student off a company's contact list.
+--   2. Mess menus: messes (with meal times), mess_menus (a month's menu, optionally with the
+--      PDF/image), mess_menu_items (what each meal has on each weekday), mess_follows (meal alerts)
+--      and mess_alerts_sent; notification type mess_menu.
+--   3. Forum posts start at 0 votes: the author's automatic upvote from rev 17 is gone.
+--   Upgrade: db/migrations/018_seniors_and_mess_menus.sql.
 --
 -- Changes from rev. 16 (Placement Hub and Events follow-ups, 2 Nov 2026):
 --   1. module_name 'events': Community Events moderators remove any event and moderate event forums.
@@ -137,7 +159,7 @@ CREATE TYPE bookmark_target_type AS ENUM ('listing', 'event');
 CREATE TYPE notification_type    AS ENUM ('lost_found_match', 'forum_reply', 'listing_status_change',
                                           'bookmarked_event_update', 'followed_tag_event', 'moderation_action',
                                           'saved_search_match', 'wanted_post_match', 'chat_message',
-                                          'listing_watch');
+                                          'listing_watch', 'mess_menu');
 CREATE TYPE report_target_type   AS ENUM ('listing', 'lost_report', 'found_report', 'course_material',
                                           'course_feedback', 'thread', 'comment', 'interview_experience',
                                           'wanted_post');
@@ -578,7 +600,8 @@ CREATE TABLE ppt_info (
     venue        TEXT,                         -- rev 16
     scheduled_at TIMESTAMPTZ,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    time_tbd     BOOLEAN NOT NULL DEFAULT FALSE  -- rev 20: imported without a time (shown as TBA)
 );
 CREATE INDEX idx_ppt_company ON ppt_info(company_id);
 
@@ -633,8 +656,10 @@ CREATE TABLE placement_bulk_imports (
 --         role_title = EXCLUDED.role_title, import_id = EXCLUDED.import_id
 --   RETURNING (xmax = 0) AS was_created;   -- true = created, false = updated
 -- student_email is plain data, not a users FK: most placed students never
--- sign up. These are individual students' outcomes, so the API should only
--- expose the hiring_stats aggregates below, never raw rows.
+-- sign up. Guests only see the hiring_stats aggregates below. Since rev 18,
+-- signed-in students also see the last two seasons' rows as "seniors to
+-- contact" on the company's page (name, role, season and how to reach them),
+-- unless a moderator hid the row (contact_hidden).
 CREATE TABLE placement_records (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     import_id      UUID REFERENCES placement_bulk_imports(id) ON DELETE SET NULL,
@@ -642,7 +667,10 @@ CREATE TABLE placement_records (
     slot           TEXT,                                  -- e.g. 'Slot 2'
     company_id     UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     role_title     TEXT NOT NULL CHECK (char_length(btrim(role_title)) >= 1),
-    student_email  iisc_email NOT NULL,                   -- malformed emails rejected (FR-17)
+    student_email  citext NOT NULL                        -- rev 19: any email; malformed ones rejected (FR-17)
+                   CONSTRAINT placement_records_email_chk
+                   CHECK (student_email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'),
+    contact_hidden BOOLEAN NOT NULL DEFAULT FALSE,        -- rev 18: not listed as a senior to contact
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (placement_year, student_email)
@@ -658,6 +686,25 @@ SELECT company_id,
        count(*) AS students_selected
 FROM placement_records
 GROUP BY company_id, placement_year, role_title;
+
+-- rev 18: seniors to contact about a company who aren't on a placement sheet: off-campus offers,
+-- PPOs, alumni. Added and edited by Placement Hub moderators; shown to signed-in students.
+CREATE TABLE company_seniors (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id     UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    name           TEXT NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 120),
+    email          TEXT NOT NULL CHECK (email ~* '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'),
+    phone          TEXT CHECK (phone ~ '^\+?[0-9]{10,15}$'),
+    role_title     TEXT CHECK (char_length(role_title) <= 200),
+    placement_year SMALLINT NOT NULL CHECK (placement_year BETWEEN 2000 AND 2100),
+    offer_type     TEXT NOT NULL DEFAULT 'off_campus'
+                   CHECK (offer_type IN ('on_campus', 'off_campus', 'ppo', 'internship')),
+    note           TEXT CHECK (char_length(note) <= 500),
+    added_by       UUID NOT NULL REFERENCES users(id),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (company_id, email, placement_year)
+);
 
 -- ============================================================================
 -- SHARED — FORUMS  (FR-14; course/department forums for Academic Help,
@@ -983,6 +1030,58 @@ CREATE TABLE tag_follows (
 );
 CREATE INDEX idx_tag_follows_tag ON tag_follows(tag_id);   -- "who follows this tag?" for notification fan-out
 
+-- rev 18: mess menus. A mess posts its menu for a month (or so): what each meal has on each
+-- weekday, repeating every week, plus the PDF/image it came from. People who follow a mess get an
+-- alert shortly before each meal they chose, with that day's dishes (app/mess_alerts.py, run every
+-- few minutes; mess_alerts_sent makes it send each meal once). Events moderators and admins manage menus.
+CREATE TABLE messes (
+    id           SERIAL PRIMARY KEY,
+    name         TEXT UNIQUE NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 60),   -- 'C Mess'
+    breakfast_at TIME NOT NULL DEFAULT '07:30',      -- India time
+    lunch_at     TIME NOT NULL DEFAULT '12:30',
+    snacks_at    TIME NOT NULL DEFAULT '16:45',
+    dinner_at    TIME NOT NULL DEFAULT '19:30',
+    event_id     UUID REFERENCES events(id) ON DELETE SET NULL,   -- rev 20: its Food/Mess event card
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE mess_menus (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    mess_id     INT NOT NULL REFERENCES messes(id) ON DELETE CASCADE,
+    valid_from  DATE NOT NULL,
+    valid_to    DATE NOT NULL,                       -- menus of one mess don't overlap (checked by the API)
+    file_s3_key TEXT,                                -- upload kind mess_menu: the menu as a PDF or image
+    notes       TEXT CHECK (char_length(notes) <= 2000),
+    created_by  UUID NOT NULL REFERENCES users(id),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (valid_to >= valid_from AND valid_to - valid_from <= 92)
+);
+CREATE INDEX idx_mess_menus_mess ON mess_menus(mess_id, valid_from);
+CREATE TABLE mess_menu_items (
+    menu_id UUID NOT NULL REFERENCES mess_menus(id) ON DELETE CASCADE,
+    weekday SMALLINT NOT NULL CHECK (weekday BETWEEN 1 AND 7),     -- ISO: 1 = Monday
+    meal    TEXT NOT NULL CHECK (meal IN ('breakfast', 'lunch', 'snacks', 'dinner')),
+    items   TEXT NOT NULL CHECK (char_length(btrim(items)) BETWEEN 1 AND 1000),
+    PRIMARY KEY (menu_id, weekday, meal)
+);
+CREATE TABLE mess_follows (
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    mess_id    INT NOT NULL REFERENCES messes(id) ON DELETE CASCADE,
+    meals      TEXT[] NOT NULL CHECK (cardinality(meals) >= 1
+                   AND meals <@ ARRAY['breakfast', 'lunch', 'snacks', 'dinner']),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, mess_id)
+);
+CREATE INDEX idx_mess_follows_mess ON mess_follows(mess_id);
+CREATE TABLE mess_alerts_sent (
+    mess_id    INT NOT NULL REFERENCES messes(id) ON DELETE CASCADE,
+    day        DATE NOT NULL,
+    meal       TEXT NOT NULL,
+    recipients INT NOT NULL,
+    sent_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (mess_id, day, meal)
+);
+
 -- ============================================================================
 -- PHASE 2 — BOOKMARKS  (FR-20; signed-in only — guest bookmarks stay on-device)
 -- ============================================================================
@@ -1087,6 +1186,9 @@ CREATE TABLE chat_conversations (
     last_seq             BIGINT NOT NULL DEFAULT 0,
     user_a_last_read_seq BIGINT NOT NULL DEFAULT 0,
     user_b_last_read_seq BIGINT NOT NULL DEFAULT 0,
+    -- rev 19: "delete chat" for one person: their view starts after this seq; nothing is erased
+    user_a_cleared_seq   BIGINT NOT NULL DEFAULT 0,
+    user_b_cleared_seq   BIGINT NOT NULL DEFAULT 0,
     last_message_at      TIMESTAMPTZ,
     created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT chat_pair_ordered CHECK (user_a < user_b),
@@ -1143,6 +1245,14 @@ CREATE INDEX idx_chat_messages_changes ON chat_messages(conversation_id, changed
 CREATE INDEX idx_chat_messages_sender  ON chat_messages(sender_id, sent_at DESC);         -- send rate limit
 CREATE UNIQUE INDEX uq_chat_one_pending_offer ON chat_messages(topic_id) WHERE offer_status = 'pending';
 CREATE INDEX idx_chat_messages_topic ON chat_messages(topic_id, seq);
+
+-- rev 19: "delete for me" on one message; the other person still sees it.
+CREATE TABLE chat_message_hides (
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    message_id UUID NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, message_id)
+);
 
 CREATE TABLE chat_blocks (
     blocker_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

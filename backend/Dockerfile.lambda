@@ -12,4 +12,8 @@ RUN python /tmp/fetch_match_models.py --suggest-only ${LAMBDA_TASK_ROOT}/models 
 
 COPY app ${LAMBDA_TASK_ROOT}/app
 
+# Reading mess menus from files needs the `tesseract` program, which the Lambda base image doesn't
+# have. Without it, POST /mess-menus/extract says so and moderators type or paste the meals; to turn it
+# on, add a Tesseract Lambda layer (or build it into this image) so `tesseract` is on the PATH.
+
 CMD ["app.main.handler"]

@@ -34,6 +34,23 @@ a suggestion needs a calibrated score and a clear lead over the runner-up
 (`scripts/calibrate_category_suggest.py`). So the footprint is now five small models, not four. The
 AWS alternative for it is still Titan Text Embeddings V2, with the same trade-offs as §3.
 
+**Update (3 Nov 2026): reading mess menus (OCR).** Mess committees share the month's menu as a PDF
+or photo, usually a scanned table. `backend/app/mess_extract.py` prefills the menu form from it:
+pypdfium2 renders the page, the table's ruled lines are found with plain numpy, and each cell is read
+by **Tesseract 5** (`tesseract` program, LSTM English model ~4 MB, Apache-2.0), three ways per cell
+(grey and two colour thresholds, since veg/non-veg items are printed in colour) keeping the cleanest
+reading. On the sample C Mess menu it reads all 28 meals and the "every day" rows in ~5 s; a few words
+per page come out misspelt ("Matta nce"), which is why the moderator always reviews the table before
+posting. Nothing is posted automatically.
+
+We also tried **RapidOCR** (PaddleOCR's det/rec models as ONNX, ~15 MB, on the onnxruntime we already
+ship): it deploys more easily on Lambda but ran words together on this menu ("ChapatiMattaceRamei"),
+so Tesseract won. The AWS-managed alternative is **Amazon Textract** (`AnalyzeDocument` with TABLES):
+it returns the table cells directly and reads coloured text well, at about **$0.015 per page** (tables)
+— a few dollars a year for ~10 messes posting monthly — with no binary to package. It is the natural
+choice if the API stays on Lambda, where Tesseract needs a layer; the code would swap `_read_cell` and
+the grid detection for one Textract call and keep the same review step.
+
 ---
 
 ## 2. AWS-native alternative for each

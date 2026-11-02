@@ -86,6 +86,27 @@ class MessagesRepository {
     await apiClient.delete(ApiEndpoints.chatMessage(messageId));
   }
 
+  /// Deletes a message for me only; the other person still sees it.
+  Future<void> hideMessage(String messageId) async {
+    await apiClient.post(ApiEndpoints.chatMessageHide(messageId));
+  }
+
+  /// Deletes a chat for me only: it leaves my list until they write again, and then only new
+  /// messages show. Nothing is erased for the other person.
+  Future<void> deleteConversation(String conversationId) async {
+    await apiClient.delete(ApiEndpoints.chatConversation(conversationId));
+  }
+
+  /// People to start a chat with, by name or email.
+  Future<List<({String id, String name, String email, String? programme})>> searchUsers(String q) async {
+    final r = await apiClient.get(ApiEndpoints.userSearch, queryParameters: {'q': q});
+    return [
+      for (final j in r.data as List)
+        (id: j['id'] as String, name: j['name'] as String, email: j['email'] as String,
+            programme: j['programme'] as String?),
+    ];
+  }
+
   Future<void> block(String userId) async {
     await apiClient.put(ApiEndpoints.chatBlock(userId));
   }

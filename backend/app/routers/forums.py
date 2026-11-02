@@ -3,8 +3,8 @@
 Every course, department, company (Placement Hub) and event has one forum, created the first time it's
 opened. A thread has a title and an author; its first comment (lowest seq) is the opening post. Replies
 can answer the opening post or another reply (parent_id), so the app shows them as a tree.
-Signed-in users vote threads and replies up or down (one vote each; their own posts start upvoted).
-Threads sort by hot (score and replies, decaying with age), new or top.
+Signed-in users vote threads and replies up or down (one vote each; every post starts at 0, and voting
+the same way again takes the vote back). Threads sort by new or top.
 The author can edit or remove their thread/comment, and admins can edit anyone's. Admins
 and the relevant moderators (see can_moderate_forum() in schema.sql) can remove anyone's.
 Removing a thread removes all its comments (database trigger).
@@ -205,9 +205,7 @@ async def _live_thread(conn: asyncpg.Connection, thread_id: UUID) -> asyncpg.Rec
     return row
 
 
-# hot: Reddit-like; votes and replies push a thread up, age pulls it down (half as strong after ~1 day).
 _THREAD_ORDER = {
-    "hot": "(x.score + 0.5 * x.comment_count + 1) / power(extract(epoch FROM now() - x.created_at) / 3600 + 2, 1.2) DESC",
     "new": "x.created_at DESC",
     "top": "x.score DESC, x.comment_count DESC, x.created_at DESC",
 }
@@ -215,7 +213,7 @@ _THREAD_ORDER = {
 
 @router.get("/forums/{forum_id}/threads", response_model=Page[ThreadSummary], summary="Threads in a forum")
 async def list_threads(forum_id: UUID,
-                       sort: Literal["hot", "new", "top"] = Query("new", description="hot, new (default) or top"),
+                       sort: Literal["new", "top"] = Query("new", description="new (default) or top"),
                        q: str | None = Query(None, max_length=200, description="Words in the title"),
                        page: PageParams = Depends(page_params), viewer: CurrentUser | None = Depends(optional_user),
                        conn: asyncpg.Connection = Depends(get_conn)):
@@ -242,8 +240,6 @@ async def create_thread(forum_id: UUID, body: ThreadCreate, user: CurrentUser = 
             forum_id, user.id, body.title)
         await conn.execute("INSERT INTO comments (thread_id, user_id, content) VALUES ($1, $2, $3)",
                            thread_id, user.id, body.content)
-        await conn.execute("INSERT INTO thread_votes (thread_id, user_id, value) VALUES ($1, $2, 1)",
-                           thread_id, user.id)
     return await _thread_detail(conn, thread_id, user)
 
 
@@ -322,8 +318,6 @@ async def create_comment(thread_id: UUID, body: ReplyIn, background: BackgroundT
         comment_id = await conn.fetchval(
             "INSERT INTO comments (thread_id, user_id, content, parent_id) VALUES ($1, $2, $3, $4) RETURNING id",
             thread_id, user.id, body.content, body.parent_id)
-        await conn.execute("INSERT INTO comment_votes (comment_id, user_id, value) VALUES ($1, $2, 1)",
-                           comment_id, user.id)
         # FR-22 "forum reply": tell the thread's author and everyone who has commented, except the replier.
         participants = await conn.fetch(
             """SELECT DISTINCT user_id FROM comments WHERE thread_id = $1 AND deleted_at IS NULL AND user_id <> $2

@@ -93,7 +93,7 @@ class WantedFeedSliver extends ConsumerWidget {
                     style: const ButtonStyle(visualDensity: VisualDensity.compact),
                     segments: const [
                       ButtonSegment(value: true, label: Text('What I want', style: TextStyle(fontSize: 12))),
-                      ButtonSegment(value: false, label: Text('What others want', style: TextStyle(fontSize: 12))),
+                      ButtonSegment(value: false, label: Text('See what others want', style: TextStyle(fontSize: 12))),
                     ],
                     selected: {filter.mine},
                     onSelectionChanged: (s) =>

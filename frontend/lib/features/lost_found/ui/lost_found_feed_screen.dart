@@ -28,8 +28,10 @@ class _LostFoundFeedScreenState extends ConsumerState<LostFoundFeedScreen> {
   void dispose() {
     // Filters are scoped to a visit of this tab, not the whole session — reset them
     // on the way out so switching tabs and back starts from a clean feed. Riverpod forbids
-    // writing a provider while the widget tree is being torn down, so this is deferred a tick.
-    Future(() => _filterNotifier.state = LostFoundFilterState());
+    // writing a provider while the widget tree is being torn down, so this runs right after the teardown (a microtask, not a timer); nothing to reset if the app went away.
+    Future.microtask(() {
+      if (_filterNotifier.mounted) _filterNotifier.state = LostFoundFilterState();
+    });
     super.dispose();
   }
 

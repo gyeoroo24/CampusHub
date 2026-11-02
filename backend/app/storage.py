@@ -72,6 +72,8 @@ UPLOAD_KINDS: dict[str, UploadKind] = {
     "job_description": UploadKind("job-descriptions", DOCUMENT_TYPES, 20 * MB),
     # Community Events: an optional poster image for an event.
     "event_poster": UploadKind("event-posters", IMAGE_TYPES, 10 * MB),
+    # Mess menus: the month's menu as the mess shared it, a PDF or a photo (events moderators).
+    "mess_menu": UploadKind("mess-menus", {**IMAGE_TYPES, "application/pdf": "pdf"}, 20 * MB),
 }
 
 
@@ -184,6 +186,13 @@ async def mark_attached(keys: list[str]) -> None:
             await asyncio.to_thread(tag, key)
         except Exception:  # noqa: BLE001 - the post is already saved; never fail the request here
             log.exception("Could not mark %s as attached; the lifecycle rule may delete it", key)
+
+
+async def get_object(key: str) -> tuple[bytes, str]:
+    """A stored file's bytes and content type (e.g. a mess menu PDF to read the meals from)."""
+    s = get_settings()
+    obj = await asyncio.to_thread(s3_client().get_object, Bucket=s.s3_bucket, Key=key)
+    return await asyncio.to_thread(obj["Body"].read), obj.get("ContentType", "")
 
 
 async def put_object(key: str, body: bytes, content_type: str) -> None:

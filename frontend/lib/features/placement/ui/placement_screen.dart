@@ -79,10 +79,6 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> with TickerPr
                       ],
                     ),
                   ),
-                  if (canManage) ...[
-                    const SizedBox(width: 8),
-                    const PlacementManageMenu(),
-                  ],
                 ],
               ),
               TabBar(
@@ -122,11 +118,9 @@ Future<void> _runManageAction(BuildContext context, WidgetRef ref, String action
   final saved = await showDialog<bool>(
     context: context,
     builder: (_) => switch (action) {
-      'company' => const CompanyFormDialog(),
-      'date' => const PptFormDialog(),
-      'sheet' => const ImportSheetDialog(),
-      'companies_csv' => const CsvImportDialog(kind: CsvImportKind.companies),
-      _ => const CsvImportDialog(kind: CsvImportKind.schedule),
+      'company' => const AddOrImportDialog(kind: CsvImportKind.companies),
+      'date' => const AddOrImportDialog(kind: CsvImportKind.schedule),
+      _ => const ImportSheetDialog(),
     },
   );
   if (saved == true) {
@@ -138,39 +132,12 @@ Future<void> _runManageAction(BuildContext context, WidgetRef ref, String action
 }
 
 const _manageActions = [
-  ('company', Icons.add_business_rounded, 'Add a company', 'Name, industry, careers page and about.'),
-  ('date', Icons.event_available_rounded, 'Add a placement date', 'A pre-placement talk, online test or interviews.'),
-  ('sheet', Icons.table_view_rounded, 'Import placement sheet (CSV)',
-      'Selected students per company, for the hiring statistics.'),
-  ('companies_csv', Icons.domain_add_rounded, 'Import companies (CSV)', 'Many companies at once.'),
-  ('schedule_csv', Icons.edit_calendar_rounded, 'Import placement dates (CSV)',
-      'Talks, online tests and interviews for many companies.'),
+  ('company', Icons.add_business_rounded, 'Add companies', 'One by one, or many from a spreadsheet file.'),
+  ('date', Icons.event_available_rounded, 'Add placement dates',
+      'Pre-placement talks, online tests and interviews, by hand or from a schedule file.'),
+  ('sheet', Icons.table_view_rounded, 'Import placement sheet',
+      'Selected students per company, for the hiring statistics and senior contacts.'),
 ];
-
-/// The "Manage" button for Placement Hub moderators and admins.
-class PlacementManageMenu extends ConsumerWidget {
-  const PlacementManageMenu({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return PopupMenuButton<String>(
-      tooltip: 'Manage Placement Hub',
-      onSelected: (value) => _runManageAction(context, ref, value),
-      itemBuilder: (_) => [
-        for (final (value, icon, title, _) in _manageActions)
-          PopupMenuItem(
-            value: value,
-            child: ListTile(leading: Icon(icon), title: Text(title), contentPadding: EdgeInsets.zero),
-          ),
-      ],
-      child: const Chip(
-        avatar: Icon(Icons.shield_outlined, size: 16),
-        label: Text('Manage'),
-        visualDensity: VisualDensity.compact,
-      ),
-    );
-  }
-}
 
 class _ManageTab extends ConsumerWidget {
   const _ManageTab();
@@ -183,7 +150,7 @@ class _ManageTab extends ConsumerWidget {
       children: [
         Text('You moderate Placement Hub', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
         const SizedBox(height: 2),
-        Text('Add companies and dates one by one, or import them from CSV files exported from a spreadsheet. '
+        Text('Add companies and dates one by one, or upload a CSV file exported from a spreadsheet. '
             'On a company\'s page you can also edit it, add JDs and dates, and remove interview experiences or '
             'forum posts.', style: TextStyle(fontSize: 12, color: theme.hintColor)),
         const SizedBox(height: 12),
@@ -538,7 +505,7 @@ class _ComingUpCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(date.companyName, maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.w700)),
-                    Text([_time(at), if (date.venue != null) date.venue!].join(' · '),
+                    Text([date.timeTbd ? 'Time TBA' : _time(at), if (date.venue != null) date.venue!].join(' · '),
                         maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 12, color: theme.hintColor)),
                   ],
@@ -642,6 +609,7 @@ class _ScheduleTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final kinds = ref.watch(scheduleKindsProvider);
+    final past = ref.watch(schedulePastProvider);
     void setKinds(Set<PptKind> k) => ref.read(scheduleKindsProvider.notifier).state = k;
     return RefreshIndicator(
       onRefresh: () async => ref.invalidate(scheduleProvider),
@@ -652,14 +620,31 @@ class _ScheduleTab extends ConsumerWidget {
             spacing: 6,
             runSpacing: 6,
             children: [
-              ChoiceChip(label: const Text('All'), selected: kinds.isEmpty, onSelected: (_) => setKinds(const {})),
+              // One type at a time; tapping the selected one again goes back to All.
+              ChoiceChip(
+                  showCheckmark: false,
+                  label: const Text('All'),
+                  selected: kinds.isEmpty,
+                  onSelected: (_) => setKinds(const {})),
               for (final k in PptKind.values)
-                FilterChip(
+                ChoiceChip(
+                  showCheckmark: false,
                   avatar: Icon(scheduleKindIcon(k), size: 16, color: scheduleKindColor(k)),
                   label: Text(k.label),
-                  selected: kinds.contains(k),
-                  onSelected: (on) => setKinds(on ? {...kinds, k} : ({...kinds}..remove(k))),
+                  selected: kinds.length == 1 && kinds.contains(k),
+                  onSelected: (_) => setKinds(kinds.length == 1 && kinds.contains(k) ? const {} : {k}),
                 ),
+              const SizedBox(width: 8),
+              SegmentedButton<bool>(
+                showSelectedIcon: false,
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Upcoming')),
+                  ButtonSegment(value: true, label: Text('Past')),
+                ],
+                selected: {past},
+                onSelectionChanged: (v) => ref.read(schedulePastProvider.notifier).state = v.first,
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -672,7 +657,7 @@ class _ScheduleTab extends ConsumerWidget {
                     return [
                       Padding(
                         padding: const EdgeInsets.all(32),
-                        child: Text('Nothing scheduled yet.',
+                        child: Text(past ? 'Nothing in the past yet.' : 'Nothing coming up. Earlier dates are under Past.',
                             textAlign: TextAlign.center, style: TextStyle(color: theme.hintColor)),
                       ),
                     ];
@@ -687,7 +672,8 @@ class _ScheduleTab extends ConsumerWidget {
                       out.add(Padding(
                         padding: const EdgeInsets.only(top: 12, bottom: 6),
                         child: Text(
-                          '${_weekdays[at.weekday - 1]} ${at.day} ${_months[at.month - 1]} · ${_countdown(at)}'.toUpperCase(),
+                          (past ? '${_weekdays[at.weekday - 1]} ${at.day} ${_months[at.month - 1]} ${at.year}'
+                              : '${_weekdays[at.weekday - 1]} ${at.day} ${_months[at.month - 1]} · ${_countdown(at)}').toUpperCase(),
                           style: TextStyle(fontSize: 11, letterSpacing: 0.6, fontWeight: FontWeight.bold, color: theme.hintColor),
                         ),
                       ));
@@ -743,7 +729,7 @@ class ScheduleTile extends StatelessWidget {
                             // On a company's page the day matters as much as the time.
                             if (!showCompany)
                               Text(_shortDate(at), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-                            Text(_time(at),
+                            Text(date.timeTbd ? 'Time TBA' : _time(at),
                                 style: TextStyle(
                                     fontWeight: showCompany ? FontWeight.w700 : FontWeight.w500,
                                     fontSize: showCompany ? 13 : 12,

@@ -35,9 +35,13 @@ final upcomingPptsProvider = FutureProvider<List<Ppt>>((ref) {
 /// Which kinds the Schedule tab shows (empty = all).
 final scheduleKindsProvider = StateProvider<Set<PptKind>>((ref) => const {});
 
-/// The full upcoming schedule (Schedule tab).
+/// Schedule tab: dates that have passed instead of upcoming ones (newest first).
+final schedulePastProvider = StateProvider<bool>((ref) => false);
+
+/// The Schedule tab's dates.
 final scheduleProvider = FutureProvider<List<Ppt>>((ref) {
-  return ref.watch(placementRepositoryProvider).fetchUpcomingPpts(limit: 50, kinds: ref.watch(scheduleKindsProvider));
+  return ref.watch(placementRepositoryProvider).fetchUpcomingPpts(
+      limit: 50, kinds: ref.watch(scheduleKindsProvider), past: ref.watch(schedulePastProvider));
 });
 
 final companyProvider = FutureProvider.family<Company, String>((ref, companyId) {

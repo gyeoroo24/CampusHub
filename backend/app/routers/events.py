@@ -113,6 +113,8 @@ class Event(BaseModel):
     bookmark_count: int
     is_bookmarked: bool = Field(description="The viewer bookmarked it (always false for guests)")
     can_edit: bool = Field(description="The viewer created it, or is an events moderator or admin")
+    mess_id: int | None = Field(None, description="This is a mess's card (rev 20): its menu is at GET /messes, "
+                                                  "and it's kept in step with the menu, so edit the menu instead")
     created_at: datetime
     updated_at: datetime
 
@@ -149,6 +151,7 @@ _WHEN = ("CASE WHEN now() < e.start_time THEN 'upcoming' WHEN now() <= e.end_tim
 _SELECT = f"""
 SELECT e.id, e.title, e.description, e.location, e.start_time, e.end_time, e.created_at, e.updated_at,
        e.created_by, e.poster_s3_key, u.name AS organizer_name, {_WHEN} AS phase,
+       (SELECT ms.id FROM messes ms WHERE ms.event_id = e.id) AS mess_id,
        (SELECT coalesce(jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name) ORDER BY t.name), '[]'::jsonb)
         FROM event_tag_map m JOIN event_tags t ON t.id = m.tag_id WHERE m.event_id = e.id) AS tags,
        (SELECT count(*) FROM bookmarks b WHERE b.target_type = 'event' AND b.target_id = e.id) AS bookmark_count,
@@ -165,7 +168,8 @@ def _event(r: asyncpg.Record, viewer: CurrentUser | None, moderator: bool = Fals
                  tags=[CategoryRef(**t) for t in r["tags"]], poster_url=file_url(key) if key else None,
                  organizer=UserRef(id=r["created_by"], name=r["organizer_name"]),
                  bookmark_count=r["bookmark_count"], is_bookmarked=r["is_bookmarked"],
-                 can_edit=viewer is not None and (moderator or viewer.id == r["created_by"]),
+                 can_edit=viewer is not None and r["mess_id"] is None and (moderator or viewer.id == r["created_by"]),
+                 mess_id=r["mess_id"],
                  created_at=r["created_at"], updated_at=r["updated_at"])
 
 

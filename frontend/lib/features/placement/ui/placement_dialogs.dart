@@ -14,6 +14,7 @@ class _FormDialog extends StatefulWidget {
   final List<Widget> children;
   final Future<void> Function() onSave;
   final double width;
+  final Widget? header;
 
   const _FormDialog({
     required this.title,
@@ -21,6 +22,7 @@ class _FormDialog extends StatefulWidget {
     required this.onSave,
     this.saveLabel = 'Save',
     this.width = 480,
+    this.header,
   });
 
   @override
@@ -61,6 +63,7 @@ class _FormDialogState extends State<_FormDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (widget.header != null) ...[widget.header!, const SizedBox(height: 16)],
                 for (final child in widget.children) ...[child, const SizedBox(height: 12)],
                 if (_error != null)
                   Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 13)),
@@ -90,8 +93,9 @@ InputDecoration _field(String label, {String? hint, String? helper}) =>
 // ---------------------------------------------------------------- company
 class CompanyFormDialog extends ConsumerStatefulWidget {
   final Company? company;
+  final Widget? header;
 
-  const CompanyFormDialog({super.key, this.company});
+  const CompanyFormDialog({super.key, this.company, this.header});
 
   @override
   ConsumerState<CompanyFormDialog> createState() => _CompanyFormDialogState();
@@ -114,7 +118,9 @@ class _CompanyFormDialogState extends ConsumerState<CompanyFormDialog> {
   @override
   Widget build(BuildContext context) {
     return _FormDialog(
-      title: widget.company == null ? 'Add a company' : 'Edit ${widget.company!.name}',
+      title: widget.company == null ? 'Add companies' : 'Edit ${widget.company!.name}',
+      header: widget.header,
+      width: widget.header == null ? 480 : 640,
       onSave: () async {
         await ref.read(placementRepositoryProvider).saveCompany(
               companyId: widget.company?.id,
@@ -205,8 +211,9 @@ class PptFormDialog extends ConsumerStatefulWidget {
   final String? companyId;
   final Ppt? ppt;
   final PptKind initialKind;
+  final Widget? header;
 
-  const PptFormDialog({super.key, this.companyId, this.ppt, this.initialKind = PptKind.ppt});
+  const PptFormDialog({super.key, this.companyId, this.ppt, this.initialKind = PptKind.ppt, this.header});
 
   @override
   ConsumerState<PptFormDialog> createState() => _PptFormDialogState();
@@ -243,7 +250,10 @@ class _PptFormDialogState extends ConsumerState<PptFormDialog> {
   @override
   Widget build(BuildContext context) {
     return _FormDialog(
-      title: widget.ppt == null ? 'Add a placement date' : 'Edit ${_kind.label.toLowerCase()}',
+      title: widget.ppt == null ? (widget.header == null ? 'Add a placement date' : 'Add placement dates')
+          : 'Edit ${_kind.label.toLowerCase()}',
+      header: widget.header,
+      width: widget.header == null ? 480 : 640,
       onSave: () async {
         final companyId = widget.companyId ?? _company?.id;
         if (companyId == null) throw Exception('Pick the company.');
@@ -487,19 +497,12 @@ class _ImportSheetDialogState extends ConsumerState<ImportSheetDialog> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    _CsvFileButton(enabled: !_busy, onPicked: (text) => setState(() => _sheet.text = text)),
-                    const SizedBox(height: 8),
-                    TextField(
+                    _CsvSource(
                       controller: _sheet,
                       enabled: !_busy,
-                      minLines: 10,
-                      maxLines: 16,
-                      style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: 'Slot\tCompany\tStudent email\tRole\n'
-                            'Slot 2\tWalmart\tchandus@iisc.ac.in\tSoftware Engineer',
-                      ),
+                      hint: 'Slot\tCompany\tStudent email\tRole\n'
+                          'Slot 2\tWalmart\tchandus@iisc.ac.in\tSoftware Engineer',
+                      onChanged: () => setState(() => _error = null),
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 8),
@@ -579,54 +582,120 @@ class _ImportSummary extends StatelessWidget {
   }
 }
 
-/// "Choose CSV file": reads the file into the text box, where it can be checked before importing.
-class _CsvFileButton extends StatefulWidget {
+/// Where an import's rows come from: a chosen CSV file (shown as a file card) or cells pasted in a text box.
+class _CsvSource extends StatefulWidget {
+  final TextEditingController controller;
   final bool enabled;
-  final ValueChanged<String> onPicked;
+  final String hint;
+  final VoidCallback onChanged;
 
-  const _CsvFileButton({required this.enabled, required this.onPicked});
+  const _CsvSource({required this.controller, required this.enabled, required this.hint, required this.onChanged});
 
   @override
-  State<_CsvFileButton> createState() => _CsvFileButtonState();
+  State<_CsvSource> createState() => _CsvSourceState();
 }
 
-class _CsvFileButtonState extends State<_CsvFileButton> {
-  String? _fileName;
+class _CsvSourceState extends State<_CsvSource> {
+  PickedTextFile? _file;
   String? _error;
 
   Future<void> _pick() async {
     try {
       final file = await pickTextFile();
       if (file == null || !mounted) return;
-      widget.onPicked(file.text);
+      if (file.text.trim().isEmpty) throw Exception('${file.name} is empty.');
+      widget.controller.text = file.text;
       setState(() {
-        _fileName = file.name;
+        _file = file;
         _error = null;
       });
+      widget.onChanged();
     } catch (e) {
       if (mounted) setState(() => _error = errorText(e));
     }
   }
 
+  void _clear() {
+    widget.controller.clear();
+    setState(() => _file = null);
+    widget.onChanged();
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (!canPickTextFiles) return const SizedBox.shrink();
     final theme = Theme.of(context);
-    return Row(
-      children: [
-        OutlinedButton.icon(
-          onPressed: widget.enabled ? _pick : null,
-          icon: const Icon(Icons.upload_file_rounded, size: 18),
-          label: const Text('Choose CSV file'),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            _error ?? (_fileName == null ? 'or paste below' : 'Loaded $_fileName. Check it below, then import.'),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 12, color: _error != null ? theme.colorScheme.error : theme.hintColor),
+    final file = _file;
+    final error = _error == null
+        ? const SizedBox.shrink()
+        : Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(_error!, style: TextStyle(fontSize: 12, color: theme.colorScheme.error)),
+          );
+    if (file != null) {
+      final rows = file.text.split(RegExp(r'\r?\n')).where((l) => l.trim().isNotEmpty).length;
+      final kb = (file.text.length / 1024).toStringAsFixed(file.text.length < 10240 ? 1 : 0);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.description_rounded, color: theme.colorScheme.primary, size: 30),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(file.name, style: const TextStyle(fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis),
+                      Text('$rows lines · $kb KB · ready to import',
+                          style: TextStyle(fontSize: 12, color: theme.hintColor)),
+                    ],
+                  ),
+                ),
+                TextButton(onPressed: widget.enabled ? _pick : null, child: const Text('Change')),
+                IconButton(
+                  tooltip: 'Remove file',
+                  onPressed: widget.enabled ? _clear : null,
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                ),
+              ],
+            ),
           ),
+          error,
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (canPickTextFiles) ...[
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 18)),
+            onPressed: widget.enabled ? _pick : null,
+            icon: const Icon(Icons.upload_file_rounded),
+            label: const Text('Choose a CSV file'),
+          ),
+          error,
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text('or paste the rows', textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: theme.hintColor)),
+          ),
+        ],
+        TextField(
+          controller: widget.controller,
+          enabled: widget.enabled,
+          minLines: 6,
+          maxLines: 12,
+          onChanged: (_) => widget.onChanged(),
+          style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+          decoration: InputDecoration(border: const OutlineInputBorder(), hintText: widget.hint),
         ),
       ],
     );
@@ -635,8 +704,8 @@ class _CsvFileButtonState extends State<_CsvFileButton> {
 
 /// What a CSV import adds: companies, or dates on the placement schedule.
 enum CsvImportKind {
-  companies('Import companies', 'Name,Industry,Website,About\nIBM,Software and hardware,https://www.ibm.com/careers,'),
-  schedule('Import placement dates',
+  companies('Add companies', 'Name,Industry,Website,About\nIBM,Software and hardware,https://www.ibm.com/careers,'),
+  schedule('Add placement dates',
       'Company,Type,Date,Time,Venue,Details\nGoogle,PPT,2026-11-20,17:30,Faculty Hall,Roles and process\n'
       'Google,OA,2026-11-22,18:00,HackerRank,90 minute coding test');
 
@@ -649,8 +718,9 @@ enum CsvImportKind {
 /// Import a company list or a placement schedule from a CSV file (or pasted cells).
 class CsvImportDialog extends ConsumerStatefulWidget {
   final CsvImportKind kind;
+  final Widget? header;
 
-  const CsvImportDialog({super.key, required this.kind});
+  const CsvImportDialog({super.key, required this.kind, this.header});
 
   @override
   ConsumerState<CsvImportDialog> createState() => _CsvImportDialogState();
@@ -697,8 +767,9 @@ class _CsvImportDialogState extends ConsumerState<CsvImportDialog> {
     final help = widget.kind == CsvImportKind.companies
         ? 'Columns: Name (required), Industry, Website, About, in any order. A company that already exists '
             '(same name) is updated with the cells you fill in.'
-        : 'Columns: Company (required), Type (PPT, OA, Interview or Other), Date, Time, Venue, Details. Dates like '
-            '2026-11-20 or 20/11/2026, times like 18:00 or 6:00 pm, in India time. New companies are added. '
+        : 'Columns: Company (required), Type (PPT, OA, Interview or Other), Date, Time, Venue, Details; placement '
+            'office sheets with columns like Test Date, Test Timings, Mode and Remarks work too. Dates like 2026-11-20, '
+            '20/11/2026 or Oct 17th 2026, times like 18:00 or 6:00 pm, in India time. New companies are added. '
             'Importing the same file again updates the entries instead of repeating them.';
     return AlertDialog(
       title: Text(widget.kind.title),
@@ -711,17 +782,14 @@ class _CsvImportDialogState extends ConsumerState<CsvImportDialog> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (widget.header != null) ...[widget.header!, const SizedBox(height: 16)],
                     Text(help, style: TextStyle(fontSize: 12, color: theme.hintColor)),
                     const SizedBox(height: 12),
-                    _CsvFileButton(enabled: !_busy, onPicked: (text) => setState(() => _text.text = text)),
-                    const SizedBox(height: 8),
-                    TextField(
+                    _CsvSource(
                       controller: _text,
                       enabled: !_busy,
-                      minLines: 8,
-                      maxLines: 14,
-                      style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                      decoration: InputDecoration(border: const OutlineInputBorder(), hintText: widget.kind.sample),
+                      hint: widget.kind.sample,
+                      onChanged: () => setState(() => _error = null),
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 8),
@@ -772,6 +840,12 @@ class _CsvSummary extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text('${result.rowsTotal} rows read.', style: const TextStyle(fontWeight: FontWeight.w600)),
+        if (result.kinds.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text('Saved as ${result.kinds.entries.map((e) => '${e.key.label} (${e.value})').join(', ')}.'
+              '${result.pastRows > 0 ? ' ${result.pastRows} of these dates have passed: see Past in the Schedule tab.' : ''}',
+              style: const TextStyle(fontSize: 13)),
+        ],
         const SizedBox(height: 12),
         Row(children: [
           stat('Added', result.rowsCreated, Colors.teal),
@@ -797,5 +871,36 @@ class _CsvSummary extends StatelessWidget {
         ],
       ],
     );
+  }
+}
+
+/// "Add companies" / "Add placement dates" from the Manage menu: one at a time in a form, or many from a file.
+class AddOrImportDialog extends StatefulWidget {
+  final CsvImportKind kind;
+
+  const AddOrImportDialog({super.key, required this.kind});
+
+  @override
+  State<AddOrImportDialog> createState() => _AddOrImportDialogState();
+}
+
+class _AddOrImportDialogState extends State<AddOrImportDialog> {
+  bool _fromFile = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final toggle = SegmentedButton<bool>(
+      showSelectedIcon: false,
+      segments: const [
+        ButtonSegment(value: false, icon: Icon(Icons.edit_note_rounded, size: 18), label: Text('Fill in a form')),
+        ButtonSegment(value: true, icon: Icon(Icons.upload_file_rounded, size: 18), label: Text('Upload a CSV file')),
+      ],
+      selected: {_fromFile},
+      onSelectionChanged: (s) => setState(() => _fromFile = s.first),
+    );
+    if (_fromFile) return CsvImportDialog(key: const ValueKey('file'), kind: widget.kind, header: toggle);
+    return widget.kind == CsvImportKind.companies
+        ? CompanyFormDialog(key: const ValueKey('form'), header: toggle)
+        : PptFormDialog(key: const ValueKey('form'), header: toggle);
   }
 }

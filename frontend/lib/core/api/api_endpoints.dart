@@ -38,6 +38,7 @@ class ApiEndpoints {
 
   // --- Seller trust score (future plan §1.5) ---
   static const String mySellerStrikes = '$version/me/seller-strikes';
+  static const String mySellerStrikeSummary = '$version/me/seller-strikes/summary';
   static String appealSellerStrike(String id) => '$version/me/seller-strikes/$id/appeal';
   static const String sellerStrikes = '$version/seller-strikes';
   static String overturnSellerStrike(String id) => '$version/seller-strikes/$id/overturn';
@@ -112,6 +113,8 @@ class ApiEndpoints {
   static String chatRead(String conversationId) => '$version/chat/conversations/$conversationId/read';
   static String chatMessage(String messageId) => '$version/chat/messages/$messageId';
   static String chatOffer(String messageId) => '$version/chat/messages/$messageId/offer';
+  static String chatMessageHide(String messageId) => '$version/chat/messages/$messageId/hide';
+  static const String userSearch = '$version/users/search';
   static const String chatBlocks = '$version/chat/blocks';
   static String chatBlock(String userId) => '$version/chat/blocks/$userId';
 
@@ -123,6 +126,16 @@ class ApiEndpoints {
   static String companyPpts(String id) => '$version/companies/$id/ppts';
   static String companyInterviews(String id) => '$version/companies/$id/interviews';
   static String companyForum(String id) => '$version/companies/$id/forum';
+  static String companySeniors(String id) => '$version/companies/$id/seniors';
+  static String senior(String id) => '$version/seniors/$id';
+  static String placementRecordContactHidden(String id) => '$version/placement/records/$id/contact-hidden';
+  static const String messes = '$version/messes';
+  static String mess(int id) => '$version/messes/$id';
+  static String messFollow(int id) => '$version/messes/$id/follow';
+  static String messMenus(int id) => '$version/messes/$id/menus';
+  static String messMenu(String id) => '$version/mess-menus/$id';
+  static const String messMenusByName = '$version/mess-menus';
+  static const String messMenuExtract = '$version/mess-menus/extract';
   static String jd(String id) => '$version/jds/$id';
   static String ppt(String id) => '$version/ppts/$id';
   static const String interviews = '$version/interviews';

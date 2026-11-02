@@ -12,6 +12,7 @@ import '../domain/placement_models.dart';
 import '../providers/placement_providers.dart';
 import '../../forums/domain/forum_models.dart';
 import '../../forums/ui/forum_board.dart';
+import 'company_seniors.dart';
 import 'placement_dialogs.dart';
 import 'placement_screen.dart' show CompanyAvatar, ScheduleTile;
 
@@ -277,6 +278,8 @@ class _OverviewTab extends ConsumerWidget {
             ],
           ),
         ),
+        const SizedBox(height: 16),
+        CompanySeniorsSection(company: company),
         const SizedBox(height: 16),
         _Section(
           title: 'Job descriptions',

@@ -17,7 +17,8 @@ abstract class IPlacementRepository {
   Future<PlacementOverview> fetchOverview();
 
   /// Upcoming dates on the placement schedule, soonest first; [kinds] empty = every kind.
-  Future<List<Ppt>> fetchUpcomingPpts({int limit = 10, Set<PptKind> kinds = const {}});
+  /// Upcoming dates soonest first, or with [past] those that have passed, newest first.
+  Future<List<Ppt>> fetchUpcomingPpts({int limit = 10, Set<PptKind> kinds = const {}, bool past = false});
 
   /// Newest first. [companyId] null = across all companies.
   Future<List<InterviewExperience>> fetchInterviews({String? companyId, String? query, int limit = 30});
@@ -95,9 +96,9 @@ class ApiPlacementRepository implements IPlacementRepository {
   }
 
   @override
-  Future<List<Ppt>> fetchUpcomingPpts({int limit = 10, Set<PptKind> kinds = const {}}) async {
+  Future<List<Ppt>> fetchUpcomingPpts({int limit = 10, Set<PptKind> kinds = const {}, bool past = false}) async {
     final response = await apiClient.get(ApiEndpoints.placementPpts, queryParameters: {
-      'when': 'upcoming',
+      'when': past ? 'past' : 'upcoming',
       'limit': limit,
       if (kinds.isNotEmpty) 'kind': kinds.map((k) => k.name).toList(),
     });
@@ -333,8 +334,8 @@ class MockPlacementRepository implements IPlacementRepository {
       );
 
   @override
-  Future<List<Ppt>> fetchUpcomingPpts({int limit = 10, Set<PptKind> kinds = const {}}) async => _ppts
-      .where((p) => p.when == PptWhen.upcoming && (kinds.isEmpty || kinds.contains(p.kind)))
+  Future<List<Ppt>> fetchUpcomingPpts({int limit = 10, Set<PptKind> kinds = const {}, bool past = false}) async => _ppts
+      .where((p) => p.when == (past ? PptWhen.past : PptWhen.upcoming) && (kinds.isEmpty || kinds.contains(p.kind)))
       .take(limit)
       .toList();
 

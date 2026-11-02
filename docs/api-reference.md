@@ -91,6 +91,8 @@ Only step 3 moves the file itself, so that's the step to show progress on.
 | `listing_photo`, `lost_report_photo`, `found_report_photo` | JPEG, PNG, WebP, HEIC | 10 MB | 10 photos |
 | `course_material` | PDF, PPTX, DOCX, ZIP, TXT, images | 50 MB | 1 file per material |
 | `job_description` (Placement Hub moderators only) | PDF, DOCX, TXT | 20 MB | 1 file per JD (`file_s3_key`) |
+| `event_poster` | JPEG, PNG, WebP, HEIC | 10 MB | 1 poster per event (`poster_s3_key`) |
+| `mess_menu` (Events moderators only) | PDF, JPEG, PNG, WebP, HEIC | 20 MB | 1 file per menu (`file_s3_key`) |
 
 - **Photo order:** `photo_keys` are kept in the order sent. The first is the cover (`cover_photo_url` in lists).
 - **Editing photos later:** `PUT .../photos` with the full new list adds, removes and reorders in one call.
@@ -267,7 +269,11 @@ Company pages for placement prep (FR-15, FR-16, FR-17): what the company does, i
 | POST | `/placement/imports` | placement moderator, admin | Import a placement sheet (FR-17): `placement_year` and `sheet` (see below) |
 | GET | `/placement/imports` | placement moderator, admin | Past imports, newest first, with their counts |
 | POST | `/placement/companies/import` | placement moderator, admin | `{"csv": "..."}`: add or update companies. Columns `Name` (required), `Industry`, `Website`, `About`. An existing company (same name) gets the cells you filled in |
-| POST | `/placement/schedule/import` | placement moderator, admin | `{"csv": "..."}`: add dates. Columns `Company` (required), `Type` (PPT, OA, Interview, Other), `Date`, `Time` (or one date-and-time column; India time unless a timezone is given), `Venue`, `Details`. New companies are created; the same company, type and time again updates the entry |
+| POST | `/placement/schedule/import` | placement moderator, admin | `{"csv": "..."}`: add dates. Columns `Company` (required), `Type` (PPT, OA, Interview, Other), `Date`, `Time` (or one date-and-time column; India time unless a timezone is given), `Venue`, `Details`. Placement office sheets work too: `Test Date`, `Test Timings` ("02 00 PM - 03 00 PM" starts at 2 pm), `Test Venue`, `Mode`, `Status` and `Remarks` (added to the details); a "Test …" sheet makes every row an online test, and "Accenture [Mock Assessment]" is company Accenture with "Mock Assessment" in the details. New companies are created; the same company, type and time again updates the entry |
+| GET | `/companies/{id}/seniors` | user | Seniors to contact: students from the placement sheets of the company's last two seasons, plus seniors moderators added. Guests get 401 |
+| POST | `/companies/{id}/seniors` | placement moderator, admin | Add one (e.g. an off-campus offer): `name`, `email`, `phone`, `role_title`, `placement_year`, `offer_type` (`on_campus`, `off_campus`, `ppo`, `internship`), `note` |
+| PATCH / DELETE | `/seniors/{id}` | placement moderator, admin | Edit or remove a senior a moderator added |
+| PUT | `/placement/records/{id}/contact-hidden` | placement moderator, admin | `{"hidden": true}` takes a placement-sheet student off the seniors list (`false` puts them back) |
 
 **Fields to design with:**
 
@@ -276,15 +282,17 @@ Company pages for placement prep (FR-15, FR-16, FR-17): what the company does, i
 | Company card (in lists) | `id`, `name`, `industry`, `description`, `role_count`, `interview_count`, `next_ppt_at`, `next_date_at`, `next_date_kind`, `latest_year`, `latest_year_selected`, `total_selected` |
 | Company page | Everything on the card, plus `website`, `job_descriptions`, `ppts`, `viewer_can_manage`, `created_at`, `updated_at` |
 | JD | `id`, `company_id`, `role_title`, `description`, `compensation`, `file_s3_key`, `file_url` (short-lived link, `null` without a file) |
-| Schedule date (PPT) | `id`, `company_id`, `company_name`, `kind`, `details`, `venue`, `scheduled_at`, `when` (`upcoming`, `past`, `unscheduled`) |
-| CSV import result | `rows_total`, `rows_created`, `rows_updated`, `rows_rejected`, `companies_created`, `rejected_rows`: [`line`, `reason`] |
+| Schedule date (PPT) | `id`, `company_id`, `company_name`, `kind`, `details`, `venue`, `scheduled_at`, `time_tbd` (only the day is known: show "Time TBA"), `when` (`upcoming`, `past`, `unscheduled`) |
+| CSV import result | `rows_total`, `rows_created`, `rows_updated`, `rows_rejected`, `companies_created`, `rejected_rows`: [`line`, `reason`], and for schedules `kinds` (rows per type) and `past_rows`. Formats accepted: [placement-csv-formats.md](placement-csv-formats.md) |
+| Senior | `id`, `source` (`placement_sheet` or `added`), `name`, `email`, `phone` (if they gave one), `user_id` (their CampusHub account, `null` if none: offer chat only when set), `role_title`, `placement_year`, `offer_type`, `slot`, `note`, `hidden` (only moderators see hidden ones) |
 | Hiring stats | `company_id`, `company_name`, `total_selected`, `years`: [`year`, `students_selected`, `roles`: [`role_title`, `students_selected`]] |
 | Interview experience | `id`, `company_id`, `company_name`, `role_title`, `placement_year`, `content`, `is_anonymous`, `is_mine`, `author` (`null` for guests, and for anonymous posts except to their author) |
 | Import result | `id`, `placement_year`, `rows_total`, `rows_created`, `rows_updated`, `rows_rejected`, `companies_created`, `rejected_rows`: [`line`, `reason`], `imported_at` |
 
 - **Empty states (FR-15):** a company with no JD or PPT returns empty lists, and one with no hiring data has `latest_year: null` and `years: []`. Show "No job description posted yet", never an error.
-- **Hiring statistics are totals only.** Placement records hold students' emails, but no endpoint returns them.
-- **Sheet import:** the moderator pastes the sheet as text: cells copied from a spreadsheet (tab-separated) or a CSV export. The first line is the header: `Company`, `Student email`, `Role`, and optionally `Slot`, in any order (a few common spellings like `Email` or `Designation` work). Each row is created, updated (the same student's email in the same season), or rejected with its line number and reason; good rows import even when others are rejected. Companies are matched by name ignoring case and spacing, and new ones are created. The pasted text is stored in S3 as the import's source. Up to 5,000 rows; a sheet with no usable header returns 422 and imports nothing.
+- **Hiring statistics are totals only.** Guests never see students. Signed-in users see the last two seasons' students as seniors to contact (`/companies/{id}/seniors`), unless a moderator hid them.
+- **Files from the placement office** often start with a title row ("CONGRATULATIONS!!") above the header. The header can be any of the first 10 non-blank lines, and line numbers in `rejected_rows` count from the top of the file.
+- **Sheet import:** the moderator pastes the sheet as text: cells copied from a spreadsheet (tab-separated) or a CSV export. The header (any of the first 10 lines) has `Company`, `Student email`, `Role`, and optionally `Slot`, in any order (a few common spellings like `Email` or `Designation` work). Any email address is accepted (personal ones count towards the hiring numbers; only IISc addresses are listed as seniors to contact). Each row is created, updated (the same student's email in the same season), or rejected with its line number and reason; good rows import even when others are rejected. Companies are matched by name ignoring case and spacing, and new ones are created. The pasted text is stored in S3 as the import's source. Up to 5,000 rows; a sheet with no usable header returns 422 and imports nothing.
 - **Reporting:** interview experiences and company forum posts can be reported (`interview_experience`, `thread`, `comment`); they go to the Placement Hub moderators' queue.
 
 ## Community Events
@@ -318,6 +326,30 @@ A campus events timeline (FR-18, FR-19, FR-20): sports, culture, talks, food and
 - **Guests' bookmarks** stay on the device (PRD §3.1). The app keeps them locally and calls `/me/bookmarks/import` once the person signs in.
 - **Alerts (FR-20, FR-22):** a new event alerts everyone following one of its tags (`followed_tag_event`); adding a followed tag to an existing event does too. Changing an event's time, place, title or details, or cancelling it, alerts everyone who bookmarked it (`bookmarked_event_update`, with `cancelled: true` for a cancellation). Nobody is alerted about their own changes, or about events that are already over.
 - **Limits:** title 1–150 characters, an event lasts at most 30 days and starts at most about a year ahead, up to 5 tags.
+
+### Mess menus
+
+Each mess posts its menu for a month or so: what breakfast, lunch, snacks and dinner have on each weekday, repeating every week, usually with the PDF or photo it was shared as. Followers get the day's dishes 30 minutes before each meal they chose.
+
+| Method | Path | Who | What it does |
+| --- | --- | --- | --- |
+| GET | `/messes` | guest | Every mess with `today` (today's meals in order) and `can_manage` |
+| POST | `/messes` | events moderator, admin | Add a mess: `name`, `meal_times` (`breakfast`, `lunch`, `snacks`, `dinner` as `"HH:MM"`, India time; defaults 07:30, 12:30, 16:45, 19:30) |
+| PATCH / DELETE | `/messes/{id}` | events moderator, admin | Rename or change meal times; delete with its menus and followers |
+| PUT | `/messes/{id}/follow` | user | `{"meals": ["lunch", "dinner"]}`: the meals to be alerted about; `[]` unfollows |
+| GET | `/messes/{id}/menus` | guest | Current and upcoming menus, then the last few past ones (`past`, default 3) |
+| POST | `/messes/{id}/menus` | events moderator, admin | Post a menu: `valid_from`, `valid_to` (at most about 3 months), `file_s3_key` (upload kind `mess_menu`: the PDF or photo) and/or `items` (`weekday` 1 = Monday … 7, `meal`, `items`), `notes`. The file alone is enough; typed-in meals put the dishes into the alerts. Menus of one mess can't overlap (409) |
+| POST | `/mess-menus/extract` | events moderator, admin | `{"file_s3_key"}` of an uploaded menu (kind `mess_menu`): reads the meals out of it (OCR) to prefill the form. Returns `mess_name`, `month`, `items`, `notes`, `warnings`. Saves nothing; takes a few seconds |
+| POST | `/mess-menus` | events moderator, admin | Post a menu by `mess_name` (same body as above): an unknown name adds the mess (optional `meal_times`) |
+| GET / PATCH / DELETE | `/mess-menus/{id}` | guest / events moderator, admin | One menu; edit (`items` replaces every cell, `file_s3_key: null` removes the file); remove |
+
+| Object | Fields |
+| --- | --- |
+| Mess | `id`, `name`, `meal_times`, `following_meals` (`null` if you don't follow it), `follower_count`, `current_menu_id`, `next_menu_from`, `today`: [`meal`, `starts_at`, `items`] |
+| Menu | `id`, `mess_id`, `mess_name`, `valid_from`, `valid_to`, `file_url`, `file_type` (`pdf` or `image`), `notes`, `items`, `created_by`, `updated_at` |
+
+- **Event cards:** every mess has a Food/Mess event ("C Mess: what's on the menu") with its meal times and the dishes each meal usually has, from its current and upcoming menus. It's created with the first menu, rewritten whenever menus or times change, and removed with the mess. The event has `mess_id` set and `can_edit: false`; link it to the mess page.
+- **Meal alerts** go out 30 minutes before each meal, once per meal per day. Every open app asks for its notifications once a minute, and that request also sends whatever is due, so no scheduler is needed while people use the app. A scheduled job (`app.jobs.meal_alerts_handler`) can cover quiet hours. A meal that started more than 30 minutes ago is skipped. A menu posted only as a file alerts with "Lunch at 12:30 pm today. Tap to see the menu."
 
 ## Academic Help
 
@@ -379,7 +411,7 @@ A one-page summary of a course's feedback, semester by semester, with sentiment 
 
 ## Forums
 
-Forums go forum → thread → comments, Reddit style. Each course, department, company (Placement Hub) and event has exactly one forum, created the first time someone opens it. Signed-in users vote threads and replies up or down (their own start upvoted), and a reply can answer another reply (`parent_id`), so the app shows a comment tree.
+Forums go forum → thread → comments, Reddit style. Each course, department, company (Placement Hub) and event has exactly one forum, created the first time someone opens it. Signed-in users vote threads and replies up or down (every post starts at 0; voting `0` takes a vote back), and a reply can answer another reply (`parent_id`), so the app shows a comment tree.
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
@@ -387,7 +419,7 @@ Forums go forum → thread → comments, Reddit style. Each course, department, 
 | GET | `/departments/{id}/forum` | guest | The department's forum |
 | GET | `/companies/{id}/forum` | guest | The company's forum (Placement Hub moderators remove posts there) |
 | GET | `/events/{id}/forum` | guest | The event's forum (Events moderators remove posts there); 404 once the event is cancelled |
-| GET | `/forums/{id}/threads` | guest | Threads. `sort`: `new` (default), `hot` (votes and replies, fading with age), `top`; `q` searches titles and opening posts |
+| GET | `/forums/{id}/threads` | guest | Threads. `sort`: `new` (default) or `top`; `q` searches titles and opening posts |
 | POST | `/forums/{id}/threads` | user | Start a thread: `title` plus `content` (the opening post) |
 | GET | `/threads/{id}` | guest | The thread with every comment in order, and `viewer_can_moderate` |
 | PATCH | `/threads/{id}` | owner, admin | Rename: `title` |
@@ -456,7 +488,11 @@ One chat per pair of people, like WhatsApp (since rev 10). What part of a chat i
 | POST | `/chat/conversations/{id}/messages` | participant | Send: `id` (a UUID the app makes), `kind` (`text` or `offer`), `topic_id` (optional; required for an offer, and must be one of this chat's listing topics), `sender_key_id`, `recipient_key_id`, `nonce`, `ciphertext` (base64). 409 if a key changed (reload and re-encrypt); resending the same message returns it (200); 429 after 30 messages a minute |
 | POST | `/chat/conversations/{id}/read` | participant | `{"seq": n}`: I've read up to `n` (read receipts and unread counts) |
 | POST | `/chat/messages/{id}/offer` | participant | `{"action": "accept" \| "decline" \| "withdraw"}`. Only the other person accepts or declines; only the maker withdraws. Accepting reserves the offer's listing. One open offer per listing: a new one supersedes it |
-| DELETE | `/chat/messages/{id}` | sender | Unsend: the ciphertext is erased for both people (a pending offer becomes withdrawn) |
+| DELETE | `/chat/messages/{id}` | sender | Delete for everyone (unsend): the ciphertext is erased for both people (a pending offer becomes withdrawn) |
+| POST | `/chat/messages/{id}/hide` | participant | Delete for me: I stop seeing this message (anyone's); the other person still does |
+| DELETE | `/chat/conversations/{id}` | participant | Delete the chat for me: it leaves my list and its messages so far stay hidden from me. Nothing is erased for the other person; when they write again the chat comes back for me with only the new messages |
+| GET | `/users/search?q=` | user | Find people to chat with by name or email (2+ characters): `id`, `name`, `email`, `programme`. Then start a general chat with `POST /chat/conversations {"user_id": ...}` |
+| GET | `/me/seller-strikes/summary` | user | My strikes against the limits: `strikes`, `severe`, `non_severe`, `limit` (non-severe strikes that block posting), `negative_at`, `severe_limit`, `tag`, `suspended`. Show "Strikes: 1/3" |
 | GET | `/chat/blocks` | user | People I've blocked |
 | PUT / DELETE | `/chat/blocks/{user_id}` | user | Block / unblock. A blocked person can't send to you or start chats with you, and isn't told why |
 
@@ -498,6 +534,7 @@ A notification has `id`, `type`, `payload`, `is_read` and `created_at`. Every `p
 | `chat_message` | A new message, offer or offer answer, or a buyer wants to chat before you've set up messaging | `conversation_id` | The conversation |
 | `followed_tag_event` | A new event carries a tag you follow | `event_id`, `tags` | The event |
 | `bookmarked_event_update` | An event you bookmarked changed or was cancelled | `event_id`, `cancelled` | The event (nothing when cancelled) |
+| `mess_menu` | A meal you follow starts in 30 minutes | `mess_id`, `mess`, `meal`, `day`, `menu_id` | The mess menu |
 
 - **Unread badge:** call with `unread_only=true` and check whether `items` is empty. There's no unread-count endpoint.
 - **Shared devices:** registering a token another account used moves it to the current user.

@@ -226,6 +226,17 @@ class EventDetailScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 20),
                       _EventDetails(event: event, onRemoved: () => context.go('/events')),
+                      if (event.messId != null) ...[
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: FilledButton.icon(
+                            onPressed: () => context.push('/mess?mess=${event.messId}'),
+                            icon: const Icon(Icons.restaurant_menu_rounded, size: 18),
+                            label: const Text('Full weekly menu and meal alerts'),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 28),
                       Row(
                         children: [

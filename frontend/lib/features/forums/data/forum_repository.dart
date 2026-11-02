@@ -127,7 +127,6 @@ class MockForumRepository implements IForumRepository {
     switch (query.sort) {
       case ForumSort.top:
         list.sort((a, b) => b.score.compareTo(a.score));
-      case ForumSort.hot:
       case ForumSort.newest:
         list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     }
@@ -147,7 +146,6 @@ class MockForumRepository implements IForumRepository {
           content: content, createdAt: now)],
     );
     _threads.add(thread);
-    _threadVotes[thread.id] = 1;
     return _withVotes(thread);
   }
 
@@ -160,7 +158,6 @@ class MockForumRepository implements IForumRepository {
         authorName: 'You', content: content, createdAt: now);
     _threads[i] = ForumThread(id: t.id, forumId: t.forumId, title: t.title, authorId: t.authorId,
         authorName: t.authorName, createdAt: t.createdAt, lastCommentAt: now, comments: [...t.comments, comment]);
-    _commentVotes[comment.id] = 1;
     return comment;
   }
 

@@ -11,11 +11,13 @@ its line number and a reason, never silently dropped (FR-17 acceptance criterion
 """
 import csv
 import io
+import re
 from dataclasses import dataclass
 
-from .auth import is_iisc_email
-
 MAX_ROWS = 5000
+# Any address: students with a personal email count towards the hiring numbers too (only IISc
+# addresses are offered as seniors to contact).
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 # Accepted header names (lower case, spaces squashed) for each column.
 HEADERS = {
@@ -56,20 +58,48 @@ def _delimiter(header_line: str) -> str:
     return ";" if header_line.count(";") > header_line.count(",") else ","
 
 
-def parse_sheet(text: str) -> tuple[list[SheetRow], list[RejectedRow]]:
-    """Accepted rows and rejected rows (with spreadsheet line numbers; the header is line 1)."""
-    lines = text.lstrip("﻿").splitlines()
-    first = next((i for i, line in enumerate(lines) if line.strip()), None)
-    if first is None:
-        raise SheetError("The sheet is empty. Paste the header row and at least one student.")
-    reader = csv.reader(io.StringIO("\n".join(lines[first:])), delimiter=_delimiter(lines[first]))
-    header = [_squash(h).lower() for h in next(reader)]
+HEADER_SEARCH_LINES = 10
+
+
+def match_columns(header: list[str], headers: dict[str, set[str]]) -> dict[str, int]:
     columns: dict[str, int] = {}
-    for name, aliases in HEADERS.items():
+    for name, aliases in headers.items():
         for i, h in enumerate(header):
             if h in aliases:
                 columns[name] = i
                 break
+    return columns
+
+
+def find_header(lines: list[str], headers: dict[str, set[str]], required: tuple[str, ...],
+                normalize=lambda h: h) -> tuple[int, dict[str, int], list[str]] | None:
+    """The header row: the first of the opening non-blank lines that has every required column.
+    Spreadsheet exports often start with a title row ("CONGRATULATIONS!!,,,") above it.
+    Returns (line index, column index by name, header cells), or None if none of them fits."""
+    candidates = [i for i, line in enumerate(lines) if line.strip()][:HEADER_SEARCH_LINES]
+    for i in candidates:
+        cells = next(csv.reader([lines[i]], delimiter=_delimiter(lines[i])), [])
+        header = [normalize(_squash(h).lower()) for h in cells]
+        columns = match_columns(header, headers)
+        if all(name in columns for name in required):
+            return i, columns, header
+    return None
+
+
+def parse_sheet(text: str) -> tuple[list[SheetRow], list[RejectedRow]]:
+    """Accepted rows and rejected rows (with spreadsheet line numbers; the first line is line 1)."""
+    lines = text.lstrip("﻿").splitlines()
+    first = next((i for i, line in enumerate(lines) if line.strip()), None)
+    if first is None:
+        raise SheetError("The sheet is empty. Paste the header row and at least one student.")
+    found = find_header(lines, HEADERS, REQUIRED)
+    if found:
+        first, columns, _ = found
+    else:
+        header = [_squash(h).lower() for h in next(csv.reader([lines[first]], delimiter=_delimiter(lines[first])))]
+        columns = match_columns(header, HEADERS)
+    reader = csv.reader(io.StringIO("\n".join(lines[first:])), delimiter=_delimiter(lines[first]))
+    next(reader)
     missing = [name for name in REQUIRED if name not in columns]
     if missing:
         raise SheetError("The header row needs these columns: Company, Student email and Role (Slot is optional). "
@@ -97,8 +127,8 @@ def parse_sheet(text: str) -> tuple[list[SheetRow], list[RejectedRow]]:
             reason = "Company name is longer than 120 characters."
         elif not email:
             reason = "Student email is empty."
-        elif not is_iisc_email(email):
-            reason = f"“{email}” isn't an IISc email address."
+        elif not _EMAIL.match(email):
+            reason = f"“{email}” isn't an email address."
         elif not role:
             reason = "Role is empty."
         elif len(role) > 200:

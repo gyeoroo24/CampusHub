@@ -103,6 +103,14 @@ class Settings(BaseSettings):
     # --- Automatic flagging (app/screening.py, future plan §1.6) ---
     auto_flag: bool = True
 
+    # --- Meal alerts (app/mess_alerts.py) ---
+    # In AWS an EventBridge schedule runs app.jobs.meal_alerts_handler every 5 minutes. Locally (or on
+    # EC2) set this to check from inside the API instead, e.g. 60. 0 = off; never used inside Lambda.
+    meal_alert_poll_seconds: int = 0
+    # Also check whenever an app fetches its notifications (every minute while it's open), so alerts
+    # go out without any scheduler while people are using CampusHub.
+    meal_alerts_on_requests: bool = True
+
     # --- HTTP ---
     api_prefix: str = "/api/v1"
     cors_allow_origins: list[str] = Field(default_factory=lambda: ["*"])

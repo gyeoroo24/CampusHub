@@ -132,6 +132,9 @@ class Ppt {
   final String? details;
   final String? venue;
   final DateTime? scheduledAt;
+
+  /// Only the day is known (imported without a time).
+  final bool timeTbd;
   final PptWhen when;
 
   const Ppt({
@@ -142,6 +145,7 @@ class Ppt {
     this.details,
     this.venue,
     this.scheduledAt,
+    this.timeTbd = false,
     this.when = PptWhen.unscheduled,
   });
 
@@ -153,6 +157,7 @@ class Ppt {
         details: _str(json['details']),
         venue: _str(json['venue']),
         scheduledAt: _date(json['scheduled_at']),
+        timeTbd: json['time_tbd'] == true,
         when: PptWhen.values.firstWhere((w) => w.name == json['when'], orElse: () => PptWhen.unscheduled),
       );
 }
@@ -334,7 +339,13 @@ class CsvImportResult {
   final List<String> companiesCreated;
   final List<RejectedSheetRow> rejectedRows;
 
+  /// Schedule imports: rows saved per type ("interview": 7), and how many of the dates have passed.
+  final Map<PptKind, int> kinds;
+  final int pastRows;
+
   const CsvImportResult({
+    this.kinds = const {},
+    this.pastRows = 0,
     required this.rowsTotal,
     required this.rowsCreated,
     required this.rowsUpdated,
@@ -345,6 +356,10 @@ class CsvImportResult {
 
   factory CsvImportResult.fromJson(Map<String, dynamic> json) => CsvImportResult(
         rowsTotal: _int(json['rows_total']),
+        kinds: {
+          for (final e in ((json['kinds'] as Map?) ?? const {}).entries) PptKind.parse(e.key): _int(e.value),
+        },
+        pastRows: _int(json['past_rows']),
         rowsCreated: _int(json['rows_created']),
         rowsUpdated: _int(json['rows_updated']),
         rowsRejected: _int(json['rows_rejected']),

@@ -125,9 +125,11 @@ Slot 3\tGoogle\tkiran@iisc.ac.in\t
 
 def test_parse_sheet_reports_every_bad_row():
     rows, rejected = parse_sheet(SHEET)
-    assert [r.email for r in rows] == ["chandu@iisc.ac.in", "asha@iisc.ac.in", "meera@iisc.ac.in"]
-    assert [(r.line, r.reason.split()[0]) for r in rejected] == [(6, "“someone@gmail.com”"), (7, "Company"),
-                                                                (8, "Same"), (9, "Role")]
+    # Any email address counts (rev 19), personal ones included.
+    assert [r.email for r in rows] == ["chandu@iisc.ac.in", "asha@iisc.ac.in", "meera@iisc.ac.in", "someone@gmail.com"]
+    assert [(r.line, r.reason.split()[0]) for r in rejected] == [(7, "Company"), (8, "Same"), (9, "Role")]
+    _, rejected = parse_sheet("Company,Email,Role\nIntel,not-an-email,SDE\n")
+    assert rejected[0].reason == "“not-an-email” isn't an email address."
     rows, _ = parse_sheet("email,company,role\nA@IISC.AC.IN , Intel ,  GPU   engineer\n")   # CSV, any order
     assert (rows[0].email, rows[0].company, rows[0].role, rows[0].slot) == ("a@iisc.ac.in", "Intel", "GPU engineer", None)
     with pytest.raises(SheetError, match="Missing: Role"):
@@ -143,9 +145,9 @@ def test_import_creates_updates_and_rejects(client, s3, placement):
     r = client.post(f"{API}/placement/imports", headers=RAVI, json={"placement_year": 2026, "sheet": SHEET})
     assert r.status_code == 201, r.text
     result = r.json()
-    assert (result["rows_total"], result["rows_created"], result["rows_updated"], result["rows_rejected"]) == (7, 3, 0, 4)
+    assert (result["rows_total"], result["rows_created"], result["rows_updated"], result["rows_rejected"]) == (7, 4, 0, 3)   # the Gmail student counts too
     assert result["companies_created"] == ["google"]
-    assert [row["line"] for row in result["rejected_rows"]] == [6, 7, 8, 9]
+    assert [row["line"] for row in result["rejected_rows"]] == [7, 8, 9]
     # The pasted sheet is kept in S3 as the import's source.
     key = sql("SELECT source_s3_key FROM placement_bulk_imports")[0]["source_s3_key"]
     assert b"Walmart" in s3.get_object(Bucket="campushub-test", Key=key)["Body"].read()
@@ -164,9 +166,9 @@ def test_import_creates_updates_and_rejects(client, s3, placement):
     assert "chandu" not in str(stats) and "asha" not in str(stats)       # totals only, never students
 
     overview = client.get(f"{API}/placement/stats").json()
-    assert [(s["year"], s["students_selected"], s["companies"]) for s in overview["seasons"]] == [(2026, 4, 2), (2025, 1, 1)]
+    assert [(s["year"], s["students_selected"], s["companies"]) for s in overview["seasons"]] == [(2026, 5, 2), (2025, 1, 1)]
     assert overview["year"] == 2026 and overview["top_companies"][0]["company_name"] == "google"
-    assert overview["top_companies"][0]["students_selected"] == 3
+    assert overview["top_companies"][0]["students_selected"] == 4
     page = client.get(f"{API}/companies/{walmart['id']}").json()
     assert (page["latest_year"], page["latest_year_selected"], page["total_selected"]) == (2026, 1, 2)
     history = client.get(f"{API}/placement/imports", headers=RAVI).json()["items"]

@@ -65,3 +65,37 @@ class SellerStrike {
     );
   }
 }
+
+/// How many strikes I have against the limits (GET /me/seller-strikes/summary).
+class StrikeSummary {
+  final int strikes;
+  final int severe;
+  final int nonSevere;
+  final int limit;
+  final int negativeAt;
+  final int severeLimit;
+  final String? tag;
+  final bool suspended;
+
+  const StrikeSummary({
+    this.strikes = 0,
+    this.severe = 0,
+    this.nonSevere = 0,
+    this.limit = 3,
+    this.negativeAt = 2,
+    this.severeLimit = 1,
+    this.tag,
+    this.suspended = false,
+  });
+
+  factory StrikeSummary.fromJson(Map<String, dynamic> j) => StrikeSummary(
+        strikes: (j['strikes'] as num?)?.toInt() ?? 0,
+        severe: (j['severe'] as num?)?.toInt() ?? 0,
+        nonSevere: (j['non_severe'] as num?)?.toInt() ?? 0,
+        limit: (j['limit'] as num?)?.toInt() ?? 3,
+        negativeAt: (j['negative_at'] as num?)?.toInt() ?? 2,
+        severeLimit: (j['severe_limit'] as num?)?.toInt() ?? 1,
+        tag: j['tag'] as String?,
+        suspended: j['suspended'] == true,
+      );
+}

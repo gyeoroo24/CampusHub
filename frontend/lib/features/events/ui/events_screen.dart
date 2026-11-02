@@ -94,6 +94,12 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: () => context.push('/mess'),
+                        icon: const Icon(Icons.restaurant_menu_rounded, size: 18),
+                        label: const Text('Mess menu'),
+                      ),
+                      const SizedBox(width: 8),
                       FilledButton.icon(
                         onPressed: () => _create(context, ref),
                         icon: const Icon(Icons.add_rounded, size: 18),
@@ -146,16 +152,39 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
+                          // One tag at a time, like a category tab. "All" clears it; tapping the
+                          // selected tag again goes back to All too.
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: ChoiceChip(
+                              visualDensity: VisualDensity.compact,
+                              showCheckmark: false,
+                              avatar: const Icon(Icons.apps_rounded, size: 16),
+                              label: const Text('All'),
+                              selected: filter.tagIds.isEmpty,
+                              onSelected: (_) => setFilter(filter.copyWith(tagIds: const {})),
+                            ),
+                          ),
                           for (final t in tags)
                             Padding(
                               padding: const EdgeInsets.only(right: 6),
-                              child: FilterChip(
+                              child: ChoiceChip(
                                 visualDensity: VisualDensity.compact,
-                                avatar: t.following ? const Icon(Icons.notifications_active_rounded, size: 14) : null,
-                                label: Text(t.upcomingCount > 0 ? '${t.name} (${t.upcomingCount})' : t.name),
-                                selected: filter.tagIds.contains(t.id),
-                                onSelected: (on) => setFilter(filter.copyWith(
-                                    tagIds: on ? {...filter.tagIds, t.id} : ({...filter.tagIds}..remove(t.id)))),
+                                showCheckmark: false,
+                                avatar: Icon(eventTagIcon(t.name), size: 16),
+                                label: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(t.upcomingCount > 0 ? '${t.name} · ${t.upcomingCount}' : t.name),
+                                    if (t.following) ...[
+                                      const SizedBox(width: 4),
+                                      const Icon(Icons.notifications_active_rounded, size: 13),
+                                    ],
+                                  ],
+                                ),
+                                selected: filter.tagIds.length == 1 && filter.tagIds.contains(t.id),
+                                onSelected: (_) => setFilter(filter.copyWith(
+                                    tagIds: filter.tagIds.length == 1 && filter.tagIds.contains(t.id) ? const {} : {t.id})),
                               ),
                             ),
                           TextButton.icon(

@@ -137,6 +137,7 @@ class Ppt(BaseModel):
     details: str | None
     venue: str | None
     scheduled_at: datetime | None
+    time_tbd: bool = Field(False, description="Only the day is known (imported without a time): show it without a time")
     when: Literal["upcoming", "past", "unscheduled"]
     created_at: datetime
     updated_at: datetime
@@ -240,6 +241,9 @@ class CsvImportResult(BaseModel):
     rows_rejected: int
     companies_created: list[str]
     rejected_rows: list[RejectedRowOut]
+    kinds: dict[str, int] = Field(default_factory=dict,
+                                  description="Schedule imports: rows saved per type, e.g. {\"interview\": 7}")
+    past_rows: int = Field(0, description="Schedule imports: saved dates that have already passed")
 
 
 class ImportSummary(BaseModel):
@@ -305,7 +309,7 @@ def _jd(r: asyncpg.Record) -> JobDescription:
 
 
 _PPT_SELECT = """
-SELECT p.id, p.company_id, c.name AS company_name, p.kind, p.details, p.venue, p.scheduled_at,
+SELECT p.id, p.company_id, c.name AS company_name, p.kind, p.details, p.venue, p.scheduled_at, p.time_tbd,
        p.created_at, p.updated_at
 FROM ppt_info p JOIN companies c ON c.id = p.company_id
 """
@@ -316,7 +320,7 @@ def _ppt(r: asyncpg.Record) -> Ppt:
     when = "unscheduled" if at is None else ("upcoming" if at >= datetime.now(timezone.utc) else "past")
     return Ppt(id=r["id"], company_id=r["company_id"], company_name=r["company_name"], kind=r["kind"],
                details=r["details"],
-               venue=r["venue"], scheduled_at=at, when=when, created_at=r["created_at"], updated_at=r["updated_at"])
+               venue=r["venue"], scheduled_at=at, time_tbd=r["time_tbd"], when=when, created_at=r["created_at"], updated_at=r["updated_at"])
 
 
 async def _company_detail(conn: asyncpg.Connection, company_id: UUID, viewer: CurrentUser | None) -> CompanyDetail:
@@ -537,6 +541,8 @@ async def update_ppt(ppt_id: UUID, body: PptUpdate, user: CurrentUser = Depends(
     changes = {k: (v or None) if isinstance(v, str) else v for k, v in body.model_dump(exclude_unset=True).items()}
     if "kind" in changes and changes["kind"] is None:
         raise HTTPException(422, "kind can't be empty.")
+    if "scheduled_at" in changes:
+        changes["time_tbd"] = False   # a moderator picking the time makes it exact
     sql, values = set_clause(changes, start=2)
     async with conn.transaction():
         await conn.execute(f"UPDATE ppt_info SET {sql} WHERE id = $1", ppt_id, *values)
@@ -855,7 +861,9 @@ async def import_schedule(body: CsvImportRequest, user: CurrentUser = Depends(cu
         raise HTTPException(422, str(exc)) from exc
     new_companies: list[str] = []
     company_ids: dict[str, UUID] = {}
-    created = updated = 0
+    created = updated = past = 0
+    kinds: dict[str, int] = {}
+    now = datetime.now(timezone.utc)
     async with conn.transaction():
         for row in rows:
             key = row.company.lower()
@@ -868,17 +876,193 @@ async def import_schedule(body: CsvImportRequest, user: CurrentUser = Depends(cu
                     company_ids[key], row.kind, row.scheduled_at)
             if existing:
                 await conn.execute(
-                    """UPDATE ppt_info SET venue = coalesce($2, venue), details = coalesce($3, details)
-                       WHERE id = $1""", existing, row.venue, row.details)
+                    """UPDATE ppt_info SET venue = coalesce($2, venue), details = coalesce($3, details), time_tbd = $4
+                       WHERE id = $1""", existing, row.venue, row.details, row.time_tbd)
                 updated += 1
             else:
                 await conn.execute(
-                    """INSERT INTO ppt_info (company_id, kind, details, venue, scheduled_at)
-                       VALUES ($1, $2, $3, $4, $5)""",
-                    company_ids[key], row.kind, row.details, row.venue, row.scheduled_at)
+                    """INSERT INTO ppt_info (company_id, kind, details, venue, scheduled_at, time_tbd)
+                       VALUES ($1, $2, $3, $4, $5, $6)""",
+                    company_ids[key], row.kind, row.details, row.venue, row.scheduled_at, row.time_tbd)
                 created += 1
+            kinds[row.kind] = kinds.get(row.kind, 0) + 1
+            if row.scheduled_at is not None and row.scheduled_at < now:
+                past += 1
         await log_moderation(conn, user.id, "import_schedule", "placement_csv", user.id,
                              f"{created} created, {updated} updated, {len(rejected)} rejected")
     return CsvImportResult(rows_total=len(rows) + len(rejected), rows_created=created, rows_updated=updated,
                            rows_rejected=len(rejected), companies_created=new_companies,
-                           rejected_rows=[RejectedRowOut(line=r.line, reason=r.reason) for r in rejected])
+                           rejected_rows=[RejectedRowOut(line=r.line, reason=r.reason) for r in rejected],
+                           kinds=kinds, past_rows=past)
+
+
+# ---------------------------------------------------------------- seniors to contact (rev 18)
+SENIOR_SEASONS = 2
+OfferType = Literal["on_campus", "off_campus", "ppo", "internship"]
+
+
+class SeniorIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    email: str = Field(min_length=3, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    phone: str | None = Field(None, pattern=r"^\+?[0-9]{10,15}$")
+    role_title: str | None = Field(None, max_length=200)
+    placement_year: int = Field(ge=2000, le=2100)
+    offer_type: OfferType = "off_campus"
+    note: str | None = Field(None, max_length=500)
+
+    @field_validator("name", "role_title", "note", mode="before")
+    @classmethod
+    def _strip(cls, v):
+        return v.strip() or None if isinstance(v, str) else v
+
+
+class SeniorUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=120)
+    email: str | None = Field(None, min_length=3, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    phone: str | None = Field(None, pattern=r"^\+?[0-9]{10,15}$")
+    role_title: str | None = Field(None, max_length=200)
+    placement_year: int | None = Field(None, ge=2000, le=2100)
+    offer_type: OfferType | None = None
+    note: str | None = Field(None, max_length=500)
+
+
+class Senior(BaseModel):
+    id: UUID
+    source: Literal["placement_sheet", "added"] = Field(
+        description="placement_sheet: a student from an imported placement sheet; added: added by a moderator")
+    name: str
+    email: str
+    phone: str | None = Field(None, description="Their phone, if they gave one")
+    user_id: UUID | None = Field(None, description="Their CampusHub account, if they have one (needed to chat)")
+    role_title: str | None
+    placement_year: int
+    offer_type: OfferType
+    slot: str | None = None
+    note: str | None = None
+    hidden: bool = Field(False, description="Taken off the list by a moderator (only moderators see these)")
+
+
+class HiddenIn(BaseModel):
+    hidden: bool
+
+
+def _name_from_email(email: str) -> str:
+    return email.split("@", 1)[0]
+
+
+@router.get("/companies/{company_id}/seniors", response_model=list[Senior],
+            summary="Seniors who got an offer here in the last two seasons, to contact (signed-in users)")
+async def list_seniors(company_id: UUID, user: CurrentUser = Depends(current_user),
+                       conn: asyncpg.Connection = Depends(get_conn)):
+    """Students (IISc addresses) from the imported placement sheets of the last two seasons, plus seniors Placement Hub moderators
+    added (off-campus offers, PPOs, alumni). Their CampusHub name and phone are used when they have an account.
+    Guests can't see anyone; moderators also see rows they hid."""
+    await _company_exists(conn, company_id)
+    moderator = await is_module_moderator(conn, user, MODULE)
+    rows = await conn.fetch(
+        """SELECT * FROM (
+             SELECT r.id, 'placement_sheet' AS source, u.name AS account_name, NULL::text AS given_name,
+                    r.student_email::text AS email, u.phone, u.id AS user_id, r.role_title, r.placement_year,
+                    CASE WHEN r.slot ILIKE 'ppo%' THEN 'ppo' ELSE 'on_campus' END AS offer_type, r.slot,
+                    NULL::text AS note, r.contact_hidden AS hidden
+             FROM placement_records r LEFT JOIN users u ON lower(u.email::text) = lower(r.student_email::text)
+             WHERE r.company_id = $1 AND r.student_email ~* '@([a-z0-9-]+\\.)*iisc\\.ac\\.in$'   -- IISc people only
+             UNION ALL
+             SELECT s.id, 'added', u.name, s.name, s.email, coalesce(s.phone, u.phone), u.id, s.role_title,
+                    s.placement_year, s.offer_type, NULL, s.note, false
+             FROM company_seniors s LEFT JOIN users u ON lower(u.email::text) = lower(s.email)
+             WHERE s.company_id = $1) x
+           WHERE x.placement_year >= (SELECT max(placement_year) FROM (
+                     SELECT placement_year FROM placement_records WHERE company_id = $1
+                     UNION ALL SELECT placement_year FROM company_seniors WHERE company_id = $1
+                     UNION ALL SELECT extract(year FROM now() AT TIME ZONE 'Asia/Kolkata')::int - 1) y) - $2 + 1
+             AND ($3 OR NOT x.hidden)
+           ORDER BY x.placement_year DESC, x.hidden, (x.user_id IS NULL), coalesce(x.given_name, x.account_name, x.email)""",
+        company_id, SENIOR_SEASONS, moderator)
+    return [Senior(id=r["id"], source=r["source"], name=r["given_name"] or r["account_name"] or _name_from_email(r["email"]),
+                   email=r["email"], phone=r["phone"], user_id=r["user_id"], role_title=r["role_title"],
+                   placement_year=r["placement_year"], offer_type=r["offer_type"], slot=r["slot"], note=r["note"],
+                   hidden=r["hidden"]) for r in rows]
+
+
+@router.post("/companies/{company_id}/seniors", response_model=Senior, status_code=201,
+             summary="Add a senior to contact, e.g. an off-campus offer (Placement Hub moderator or admin)")
+async def add_senior(company_id: UUID, body: SeniorIn, user: CurrentUser = Depends(current_user),
+                     conn: asyncpg.Connection = Depends(get_conn)):
+    await _require_moderator(conn, user)
+    await _company_exists(conn, company_id)
+    async with conn.transaction():
+        try:
+            senior_id = await conn.fetchval(
+                """INSERT INTO company_seniors (company_id, name, email, phone, role_title, placement_year, offer_type,
+                                                note, added_by)
+                   VALUES ($1, $2, lower($3), $4, $5, $6, $7, $8, $9) RETURNING id""",
+                company_id, body.name, body.email, body.phone, body.role_title, body.placement_year, body.offer_type,
+                body.note, user.id)
+        except asyncpg.UniqueViolationError as exc:
+            raise HTTPException(409, "This senior is already listed for that season.") from exc
+        await log_moderation(conn, user.id, "add_company_senior", "company", company_id, body.email)
+    return await _senior(conn, senior_id)
+
+
+async def _senior(conn: asyncpg.Connection, senior_id: UUID) -> Senior:
+    r = await conn.fetchrow(
+        """SELECT s.*, coalesce(s.phone, u.phone) AS any_phone, u.id AS user_id
+           FROM company_seniors s LEFT JOIN users u ON lower(u.email::text) = s.email WHERE s.id = $1""", senior_id)
+    if r is None:
+        raise not_found("Senior")
+    return Senior(id=r["id"], source="added", name=r["name"], email=r["email"], phone=r["any_phone"],
+                  user_id=r["user_id"], role_title=r["role_title"], placement_year=r["placement_year"],
+                  offer_type=r["offer_type"], note=r["note"])
+
+
+@router.patch("/seniors/{senior_id}", response_model=Senior,
+              summary="Edit a senior a moderator added (Placement Hub moderator or admin)")
+async def update_senior(senior_id: UUID, body: SeniorUpdate, user: CurrentUser = Depends(current_user),
+                        conn: asyncpg.Connection = Depends(get_conn)):
+    await _require_moderator(conn, user)
+    changes = body.model_dump(exclude_unset=True)
+    for required in ("name", "email", "placement_year", "offer_type"):
+        if required in changes and changes[required] is None:
+            raise HTTPException(422, f"{required} can't be empty.")
+    if "email" in changes:
+        changes["email"] = changes["email"].lower()
+    if changes:
+        assignments = ", ".join(f"{k} = ${i}" for i, k in enumerate(changes, start=2))
+        async with conn.transaction():
+            try:
+                found = await conn.fetchval(
+                    f"UPDATE company_seniors SET {assignments}, updated_at = now() WHERE id = $1 RETURNING true",
+                    senior_id, *changes.values())
+            except asyncpg.UniqueViolationError as exc:
+                raise HTTPException(409, "This senior is already listed for that season.") from exc
+            if not found:
+                raise not_found("Senior")
+            await log_moderation(conn, user.id, "edit_company_senior", "company_senior", senior_id)
+    return await _senior(conn, senior_id)
+
+
+@router.delete("/seniors/{senior_id}", status_code=204,
+               summary="Remove a senior a moderator added (Placement Hub moderator or admin)")
+async def delete_senior(senior_id: UUID, user: CurrentUser = Depends(current_user),
+                        conn: asyncpg.Connection = Depends(get_conn)):
+    await _require_moderator(conn, user)
+    async with conn.transaction():
+        if not await conn.fetchval("DELETE FROM company_seniors WHERE id = $1 RETURNING true", senior_id):
+            raise not_found("Senior")
+        await log_moderation(conn, user.id, "delete_company_senior", "company_senior", senior_id)
+    return Response(status_code=204)
+
+
+@router.put("/placement/records/{record_id}/contact-hidden", status_code=204,
+            summary="Hide or show a placement sheet student in a company's seniors list (Placement Hub moderator)")
+async def hide_sheet_senior(record_id: UUID, body: HiddenIn, user: CurrentUser = Depends(current_user),
+                            conn: asyncpg.Connection = Depends(get_conn)):
+    await _require_moderator(conn, user)
+    async with conn.transaction():
+        if not await conn.fetchval("UPDATE placement_records SET contact_hidden = $2 WHERE id = $1 RETURNING true",
+                                   record_id, body.hidden):
+            raise not_found("Placement record")
+        await log_moderation(conn, user.id, "hide_company_senior" if body.hidden else "show_company_senior",
+                             "placement_record", record_id)
+    return Response(status_code=204)

@@ -66,6 +66,8 @@ class NotificationsDialog extends ConsumerStatefulWidget {
         return Icons.event_available_rounded;
       case 'bookmarked_event_update':
         return Icons.event_note_rounded;
+      case 'mess_menu':
+        return Icons.restaurant_menu_rounded;
       default:
         return Icons.notifications_none_rounded;
     }
@@ -91,6 +93,13 @@ class NotificationsDialog extends ConsumerStatefulWidget {
       Navigator.pop(context);
       await WebHistoryManager.instance.settled;
       router.go('/events/$eventId');
+      return;
+    }
+    if (n.type == 'mess_menu') {
+      final router = GoRouter.of(context);
+      Navigator.pop(context);
+      await WebHistoryManager.instance.settled;
+      router.push('/mess?mess=${n.payload['mess_id']}');
       return;
     }
     final threadId = n.payload['thread_id']?.toString();
@@ -252,6 +261,7 @@ class _NotificationsDialogState extends ConsumerState<NotificationsDialog> {
                   final opens = n.listingId != null ||
                       n.foundReportId != null ||
                       n.type == 'chat_message' ||
+                      n.type == 'mess_menu' ||
                       (n.type == 'forum_reply' && n.payload['thread_id'] != null) ||
                       (n.payload['event_id'] != null && n.payload['cancelled'] != true);
                   final picked = selected?.contains(n.id) ?? false;

@@ -4,6 +4,8 @@
 FROM python:3.12-slim
 
 WORKDIR /srv
+# Tesseract OCR reads mess menus from PDFs and photos (app/mess_extract.py). English only, ~30 MB.
+RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt "uvicorn[standard]==0.34.0"
 

@@ -132,6 +132,10 @@ def test_wanted_post_shows_matches_and_alerts_on_new_listing(client):
     alerts = _alerts(client, RAVI, "wanted_post_match")
     assert [(a["listing_id"], a["wanted_post_id"]) for a in alerts] == [(new["id"], post["id"])]
     assert [m["id"] for m in client.get(f"{API}/wanted/{post['id']}/matches").json()] == [new["id"], old["id"]]
+    # Listings held back by automatic flagging or hidden by a moderator's strike never show as matches.
+    sql("UPDATE listings SET held_for_review_at = now() WHERE id = $1::uuid", new["id"])
+    assert [m["id"] for m in client.get(f"{API}/wanted/{post['id']}/matches").json()] == [old["id"]]
+    sql("UPDATE listings SET held_for_review_at = NULL WHERE id = $1::uuid", new["id"])
 
     # Once fulfilled, no more alerts, and it leaves the default (open) feed.
     client.patch(f"{API}/wanted/{post['id']}/status", headers=RAVI, json={"status": "fulfilled"})

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/api/api_endpoints.dart';
 import '../../../core/config/server_config.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../data/seller_trust_repository.dart';
@@ -15,6 +16,13 @@ final sellerTrustRepositoryProvider = Provider<ISellerTrustRepository>((ref) {
 final mySellerStrikesProvider = FutureProvider<List<SellerStrike>>((ref) async {
   if (ref.watch(isGuestUserProvider)) return [];
   return ref.watch(sellerTrustRepositoryProvider).fetchMyStrikes();
+});
+
+/// My strike count against the limits. The defaults (no strikes, 3 to be blocked) in mock mode and for guests.
+final myStrikeSummaryProvider = FutureProvider<StrikeSummary>((ref) async {
+  if (ref.watch(isGuestUserProvider) || ref.watch(serverConfigProvider).useMockData) return const StrikeSummary();
+  final r = await ref.watch(apiClientProvider).get(ApiEndpoints.mySellerStrikeSummary);
+  return StrikeSummary.fromJson(r.data as Map<String, dynamic>);
 });
 
 /// The moderator Seller Strikes tab's appeal-status filter; 'pending' is the actionable queue.

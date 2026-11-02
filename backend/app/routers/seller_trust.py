@@ -16,10 +16,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from ..auth import CurrentUser, current_user
+from ..config import get_settings
 from ..common import UserRef, forbidden, not_found, text
 from ..db import get_conn
 from ..permissions import is_module_moderator, log_moderation
-from ..seller_trust import AppealStatus, Severity, appeal_status, file_appeal, lift_suspension, overturn_strike
+from ..seller_trust import (AppealStatus, Severity, Tag, appeal_status, file_appeal, is_listing_suspended, lift_suspension,
+                            overturn_strike, seller_trust_tags)
 from ..seller_trust import reject_appeal as _reject_appeal
 
 router = APIRouter(tags=["Seller trust score"])
@@ -77,6 +79,32 @@ async def _require_buy_sell_moderator(conn: asyncpg.Connection, user: CurrentUse
 async def my_strikes(user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
     rows = await conn.fetch(_SELECT + " WHERE s.seller_id = $1 ORDER BY s.created_at DESC", user.id)
     return [_strike(r) for r in rows]
+
+
+class StrikeSummary(BaseModel):
+    strikes: int = Field(description="Strikes that count (not overturned), both tiers")
+    severe: int
+    non_severe: int
+    limit: int = Field(description="Non-severe strikes that block posting (one severe strike does it at once)")
+    negative_at: int = Field(description="Non-severe strikes that show the Negative Seller tag")
+    severe_limit: int
+    tag: Tag | None
+    suspended: bool = Field(description="Whether I can't post listings right now")
+
+
+@router.get("/me/seller-strikes/summary", response_model=StrikeSummary,
+            summary="How many strikes I have, and how many it takes to be blocked")
+async def my_strike_summary(user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
+    counts = {r["severity"]: r["n"] for r in await conn.fetch(
+        """SELECT severity::text AS severity, count(*)::int AS n FROM seller_strikes
+           WHERE seller_id = $1 AND excluded = false GROUP BY severity""", user.id)}
+    settings = get_settings()
+    tags = await seller_trust_tags(conn, {user.id})
+    return StrikeSummary(strikes=sum(counts.values()), severe=counts.get("severe", 0),
+                         non_severe=counts.get("non_severe", 0), limit=settings.seller_strike_blocked_threshold,
+                         negative_at=settings.seller_strike_negative_threshold,
+                         severe_limit=settings.seller_strike_severe_threshold, tag=tags.get(user.id),
+                         suspended=await is_listing_suspended(conn, user.id))
 
 
 @router.post("/me/seller-strikes/{strike_id}/appeal", status_code=204,

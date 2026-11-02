@@ -59,7 +59,8 @@ async def listing_alerts(conn: asyncpg.Connection, listing_id: UUID) -> list[Pus
     rows = await conn.fetch(
         f"""SELECT DISTINCT ON (s.user_id) s.user_id, s.id AS search_id, s.name, l.title, l.price
             FROM listings l JOIN saved_searches s ON s.module = 'buy_sell' AND s.alerts_enabled
-            WHERE l.id = $1 AND l.deleted_at IS NULL AND l.status = 'available' AND s.user_id <> l.seller_id
+            WHERE l.id = $1 AND l.deleted_at IS NULL AND l.status = 'available' AND l.hidden_by_strike_id IS NULL
+              AND l.held_for_review_at IS NULL AND s.user_id <> l.seller_id
               AND {LISTING_MATCHES_SEARCH}
               AND NOT EXISTS (SELECT 1 FROM notifications n
                               WHERE n.user_id = s.user_id AND n.type = 'saved_search_match'
@@ -74,7 +75,8 @@ async def listing_alerts(conn: asyncpg.Connection, listing_id: UUID) -> list[Pus
         f"""SELECT DISTINCT ON (w.author_id) w.author_id, w.id AS wanted_id, w.title AS wanted_title,
                    l.title, l.price
             FROM listings l JOIN wanted_posts w ON w.status = 'open' AND w.deleted_at IS NULL
-            WHERE l.id = $1 AND l.deleted_at IS NULL AND l.status = 'available' AND w.author_id <> l.seller_id
+            WHERE l.id = $1 AND l.deleted_at IS NULL AND l.status = 'available' AND l.hidden_by_strike_id IS NULL
+              AND l.held_for_review_at IS NULL AND w.author_id <> l.seller_id
               AND {LISTING_MATCHES_WANTED}
               AND NOT EXISTS (SELECT 1 FROM notifications n
                               WHERE n.user_id = w.author_id AND n.type = 'wanted_post_match'

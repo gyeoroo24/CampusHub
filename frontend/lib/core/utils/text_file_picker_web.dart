@@ -8,8 +8,13 @@ const _maxBytes = 3 * 1024 * 1024;
 
 Future<PickedTextFile?> pickTextFile(String accept) {
   final completer = Completer<PickedTextFile?>();
-  final input = html.FileUploadInputElement()..accept = accept;
+  // Safari only fires change for an input that is in the page, so add a hidden one for the pick.
+  final input = html.FileUploadInputElement()
+    ..accept = accept
+    ..style.display = 'none';
+  html.document.body?.append(input);
   input.onChange.first.then((_) {
+    input.remove();
     final file = input.files?.isNotEmpty == true ? input.files!.first : null;
     if (file == null) {
       completer.complete(null);

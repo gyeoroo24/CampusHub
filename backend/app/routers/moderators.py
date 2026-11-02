@@ -119,7 +119,7 @@ async def grant(body: GrantCreate, background: BackgroundTasks, user: CurrentUse
             await log_moderation(conn, user.id, "grant_moderator", "moderator_assignment", grant_id)
             label = await role_label(conn, body.module, body.scope_type, body.department_id, body.course_id)
             await notify_role_change(conn, background, target,
-                                     f"You are now a {label}. Your moderator tools are in the account menu.")
+                                     f"You are now a {label}. Open Moderator Panel from the menu next to your profile.")
     except asyncpg.UniqueViolationError as exc:
         raise HTTPException(409, "This person already has this moderator role.") from exc
     return Grant(**dict(await conn.fetchrow(_GRANT_SELECT + " WHERE m.id = $1", grant_id)))

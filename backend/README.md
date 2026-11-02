@@ -99,17 +99,24 @@ docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub 
 python -m app.matching --backfill
 ```
 
-A database created before revision 17 (1–2 Nov 2026: seller trust strikes, automatic flagging,
+A database created before revision 20 (1–2 Nov 2026: seller trust strikes, automatic flagging,
 price watch and the Negotiable badge, Placement Hub and Events, then Events moderators, Reddit-style
-forums, the placement schedule and event posters) needs these, in order, then
+forums, the placement schedule and event posters, then senior contacts and mess menus, then hiding chats and any email in placement sheets, then mess event cards) needs these, in order, then
 `db/reference-data.sql` once more for the default event tags:
 
 ```bash
 for m in 013_seller_trust 014_reversible_listing_hide 015_auto_flags_and_price_watch 016_placement_and_events \
-         017_forums_events_moderation; do
+         017_forums_events_moderation 018_seniors_and_mess_menus 019_chat_hiding_and_any_email \
+         020_mess_event_cards_and_tba_times; do
   docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub < db/migrations/$m.sql
 done
 ```
+
+Reading mess menus from PDFs and photos needs Tesseract (`brew install tesseract`, or
+`apt-get install tesseract-ocr`); without it moderators type or paste the meals.
+
+Meal alerts (mess menus) go out when an open app fetches its notifications (every minute), so they
+work locally with nothing extra. `python -m app.jobs meals` sends whatever is due by hand.
 
 Automatic flagging (future plan §1.6, `app/screening.py`) is on by default: its text checks use the
 category-suggestion model, and the obscene-photo check needs the full model download below

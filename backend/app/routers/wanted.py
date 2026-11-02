@@ -95,11 +95,14 @@ async def _detail(conn: asyncpg.Connection, post_id: UUID, viewer: CurrentUser |
 
 
 async def _matches(conn: asyncpg.Connection, post_id: UUID) -> list[ListingSummary]:
-    """Available listings by other people that match the post, best match first."""
+    """Available listings by other people that match the post, best match first. Removed, hidden and
+    held-for-review listings never show."""
     rows = await conn.fetch(
         LISTING_SELECT + f"""
         JOIN wanted_posts w ON w.id = $1
         WHERE l.deleted_at IS NULL AND l.status = 'available' AND l.seller_id <> w.author_id
+          -- never surface what moderators hid or automatic flagging is holding back
+          AND l.hidden_by_strike_id IS NULL AND l.held_for_review_at IS NULL
           AND {LISTING_MATCHES_WANTED}
         ORDER BY ts_rank(l.search_vector,
                          replace(plainto_tsquery('english', w.title)::text, ' & ', ' | ')::tsquery) DESC,

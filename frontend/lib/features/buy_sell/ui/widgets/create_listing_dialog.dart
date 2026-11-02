@@ -2,7 +2,7 @@ import 'dart:async';
 import '../../../../core/widgets/category_picker.dart';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import '../../../../core/utils/numbers_only_formatter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/models/category_ref.dart';
 import '../../../../core/utils/error_text.dart';
@@ -32,6 +32,18 @@ class CreateListingDialog extends ConsumerStatefulWidget {
 }
 
 class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
+  bool _numbersOnly = false;
+  Timer? _numbersOnlyTimer;
+
+  /// Shows "only numbers" under the price for a few seconds after a letter is typed or pasted.
+  void _flashNumbersOnly() {
+    _numbersOnlyTimer?.cancel();
+    if (!_numbersOnly) setState(() => _numbersOnly = true);
+    _numbersOnlyTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _numbersOnly = false);
+    });
+  }
+
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _priceController = TextEditingController();
@@ -62,6 +74,7 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
 
   @override
   void dispose() {
+    _numbersOnlyTimer?.cancel();
     _suggestDebounce?.cancel();
     _titleController.removeListener(_onTitleChanged);
     super.dispose();
@@ -153,12 +166,12 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
         child: SingleChildScrollView(
           child: Form(
             key: _formKey,
-            autovalidateMode: AutovalidateMode.onUserInteraction,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TextFormField(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   controller: _titleController,
                   maxLength: 120,
                   decoration: const InputDecoration(
@@ -174,11 +187,14 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
                 ),
                 const SizedBox(height: 8),
                 TextFormField(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   controller: _priceController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                  decoration: const InputDecoration(
+                  inputFormatters: [NumbersOnlyFormatter(onRejected: _flashNumbersOnly)],
+                  decoration: InputDecoration(
                     labelText: 'Price (₹) *',
+                    helperText: _numbersOnly ? 'Only numbers can go here, e.g. 1500 or 99.50' : null,
+                    helperStyle: const TextStyle(color: Colors.orange),
                     hintText: 'e.g. 1500',
                     prefixText: '₹ ',
                   ),
@@ -201,7 +217,6 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
                   dense: true,
                   controlAffinity: ListTileControlAffinity.leading,
                   title: const Text('Price is negotiable'),
-                  subtitle: const Text('Shows a "Negotiable" badge'),
                 ),
                 const SizedBox(height: 8),
                 if (_isLoadingCategories)
@@ -243,6 +258,7 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
                   if (_isCustomCategory) ...[
                     const SizedBox(height: 8),
                     TextFormField(
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       controller: _customCategoryController,
                       decoration: const InputDecoration(
                         labelText: 'New Category Name',
@@ -259,6 +275,7 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
                 ],
                 const SizedBox(height: 8),
                 TextFormField(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   controller: _locationController,
                   maxLength: 200,
                   decoration: const InputDecoration(
@@ -274,6 +291,7 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
                 ),
                 const SizedBox(height: 8),
                 TextFormField(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   controller: _descController,
                   maxLines: 3,
                   maxLength: 5000,

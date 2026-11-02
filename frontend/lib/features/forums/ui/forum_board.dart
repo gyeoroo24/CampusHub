@@ -39,7 +39,7 @@ class ForumBoard extends ConsumerStatefulWidget {
 }
 
 class _ForumBoardState extends ConsumerState<ForumBoard> {
-  ForumSort _sort = ForumSort.hot;
+  ForumSort _sort = ForumSort.newest;
   String _search = '';
   final _searchController = TextEditingController();
 
@@ -100,7 +100,6 @@ class _ForumBoardState extends ConsumerState<ForumBoard> {
                   visualDensity: VisualDensity.compact,
                   avatar: Icon(
                     switch (s) {
-                      ForumSort.hot => Icons.local_fire_department_rounded,
                       ForumSort.newest => Icons.new_releases_outlined,
                       ForumSort.top => Icons.leaderboard_rounded,
                     },

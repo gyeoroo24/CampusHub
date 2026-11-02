@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/utils/date_time_formatter.dart';
 import '../../../core/utils/error_text.dart';
@@ -31,6 +32,9 @@ void _snack(BuildContext context, Object message) {
 /// The chat with one person: everything discussed with them, like a WhatsApp chat. Item cards in
 /// the thread show where talk about a listing or a Lost & Found report starts; the chips under the
 /// header filter to one of them, and the composer says what the next message is about.
+/// `?topic=general`: open the chat on no item (a general chat).
+const generalTopic = 'general';
+
 class ConversationView extends ConsumerStatefulWidget {
   final String conversationId;
 
@@ -61,7 +65,7 @@ class _ConversationViewState extends ConsumerState<ConversationView> {
   @override
   void initState() {
     super.initState();
-    _aboutTopicId = widget.initialTopicId;
+    _aboutTopicId = widget.initialTopicId == generalTopic ? null : widget.initialTopicId;
     _aboutChosen = widget.initialTopicId != null;
     _scroll.addListener(() {
       // The list is reversed: the top (older messages) is the max scroll extent.
@@ -78,7 +82,7 @@ class _ConversationViewState extends ConsumerState<ConversationView> {
     super.didUpdateWidget(old);
     if (widget.initialTopicId != old.initialTopicId && widget.initialTopicId != null) {
       setState(() {
-        _aboutTopicId = widget.initialTopicId;
+        _aboutTopicId = widget.initialTopicId == generalTopic ? null : widget.initialTopicId;
         _aboutChosen = true;
         _filterTopicId = null;
       });
@@ -185,26 +189,34 @@ class _ConversationViewState extends ConsumerState<ConversationView> {
     }
   }
 
+  /// Copy, delete for me (any message) and delete for everyone (my own), like WhatsApp.
   Future<void> _messageActions(ChatMessage m) async {
-    if (!m.mine || m.isDeleted) return;
+    final red = Colors.red.shade700;
     final action = await showModalBottomSheet<String>(
       context: context,
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (m.text != null)
+            if (m.text != null && !m.isDeleted)
               ListTile(
                 leading: const Icon(Icons.copy_rounded),
                 title: const Text('Copy'),
                 onTap: () => Navigator.pop(context, 'copy'),
               ),
             ListTile(
-              leading: Icon(Icons.delete_outline_rounded, color: Colors.red.shade700),
-              title: Text('Unsend for everyone', style: TextStyle(color: Colors.red.shade700)),
-              subtitle: const Text('Erases it from the server; it disappears for both of you'),
-              onTap: () => Navigator.pop(context, 'unsend'),
+              leading: const Icon(Icons.delete_outline_rounded),
+              title: const Text('Delete for me'),
+              subtitle: const Text('Only you stop seeing it'),
+              onTap: () => Navigator.pop(context, 'hide'),
             ),
+            if (m.mine && !m.isDeleted)
+              ListTile(
+                leading: Icon(Icons.delete_forever_outlined, color: red),
+                title: Text('Delete for everyone', style: TextStyle(color: red)),
+                subtitle: const Text('Erases it for both of you'),
+                onTap: () => Navigator.pop(context, 'unsend'),
+              ),
           ],
         ),
       ),
@@ -212,10 +224,44 @@ class _ConversationViewState extends ConsumerState<ConversationView> {
     if (!mounted) return;
     try {
       if (action == 'copy') await Clipboard.setData(ClipboardData(text: m.text!));
+      if (action == 'hide') {
+        await _controller.hideForMe(m.id);
+        ref.invalidate(conversationsProvider);
+      }
       if (action == 'unsend') {
         await _controller.unsend(m.id);
         ref.invalidate(conversationsProvider);
       }
+    } catch (e) {
+      if (mounted) _snack(context, e);
+    }
+  }
+
+  Future<void> _deleteChat(Conversation c) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete your chat with ${c.peerName}?'),
+        content: Text(
+          'It disappears from your messages. ${c.peerName} keeps their copy. If they write again, '
+          'you’ll see only the new messages.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete chat'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      final router = GoRouter.of(context);
+      await _controller.deleteChat();
+      ref.invalidate(conversationsProvider);
+      router.replace('/messages');
     } catch (e) {
       if (mounted) _snack(context, e);
     }
@@ -255,7 +301,7 @@ class _ConversationViewState extends ConsumerState<ConversationView> {
 
     return Column(
       children: [
-        _Header(conversation: c, onBack: widget.onBack, onBlock: () => _toggleBlock(c)),
+        _Header(conversation: c, onBack: widget.onBack, onBlock: () => _toggleBlock(c), onDelete: () => _deleteChat(c)),
         if (c.topics.isNotEmpty)
           _TopicBar(
             topics: c.topics,
@@ -338,8 +384,9 @@ class _Header extends StatelessWidget {
   final Conversation conversation;
   final VoidCallback? onBack;
   final VoidCallback onBlock;
+  final VoidCallback onDelete;
 
-  const _Header({required this.conversation, required this.onBack, required this.onBlock});
+  const _Header({required this.conversation, required this.onBack, required this.onBlock, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -380,8 +427,12 @@ class _Header extends StatelessWidget {
           ),
           PopupMenuButton<String>(
             tooltip: 'More',
-            onSelected: (_) => onBlock(),
+            onSelected: (v) => v == 'delete' ? onDelete() : onBlock(),
             itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'delete',
+                child: Text('Delete chat', style: TextStyle(color: Colors.red.shade700)),
+              ),
               PopupMenuItem(
                 value: 'block',
                 child: Text(
@@ -598,7 +649,7 @@ class _KeyChangedNotice extends StatelessWidget {
   }
 }
 
-class _Bubble extends StatelessWidget {
+class _Bubble extends StatefulWidget {
   final ChatMessage message;
   final String peerName;
   final bool seen;
@@ -614,8 +665,21 @@ class _Bubble extends StatelessWidget {
   });
 
   @override
+  State<_Bubble> createState() => _BubbleState();
+}
+
+/// A message. Long-press or right-click opens its actions; with a mouse, a small arrow also appears
+/// on hover (as on WhatsApp Web).
+class _BubbleState extends State<_Bubble> {
+  bool _hover = false;
+
+  @override
   Widget build(BuildContext context) {
-    final m = message;
+    final m = widget.message;
+    final peerName = widget.peerName;
+    final seen = widget.seen;
+    final onLongPress = widget.onLongPress;
+    final onAnswer = widget.onAnswer;
     final theme = Theme.of(context);
     final mine = m.mine;
     final background = mine ? theme.colorScheme.primary : theme.colorScheme.surfaceContainerHighest;
@@ -657,23 +721,36 @@ class _Bubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            GestureDetector(
-              onLongPress: onLongPress,
-              onSecondaryTap: onLongPress,
-              child: Container(
-                key: ValueKey('message_${m.id}'),
-                margin: const EdgeInsets.symmetric(vertical: 3),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: m.isDeleted ? background.withValues(alpha: 0.5) : background,
-                  borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(14),
-                    topRight: const Radius.circular(14),
-                    bottomLeft: Radius.circular(mine ? 14 : 4),
-                    bottomRight: Radius.circular(mine ? 4 : 14),
+            MouseRegion(
+              onEnter: (_) => setState(() => _hover = true),
+              onExit: (_) => setState(() => _hover = false),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (mine) _menuArrow(theme),
+                  Flexible(
+                    child: GestureDetector(
+                      onLongPress: onLongPress,
+                      onSecondaryTap: onLongPress,
+                      child: Container(
+                        key: ValueKey('message_${m.id}'),
+                        margin: const EdgeInsets.symmetric(vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: m.isDeleted ? background.withValues(alpha: 0.5) : background,
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(14),
+                            topRight: const Radius.circular(14),
+                            bottomLeft: Radius.circular(mine ? 14 : 4),
+                            bottomRight: Radius.circular(mine ? 4 : 14),
+                          ),
+                        ),
+                        child: content,
+                      ),
+                    ),
                   ),
-                ),
-                child: content,
+                  if (!mine) _menuArrow(theme),
+                ],
               ),
             ),
             Padding(
@@ -699,6 +776,18 @@ class _Bubble extends StatelessWidget {
       ),
     );
   }
+
+  Widget _menuArrow(ThemeData theme) => AnimatedOpacity(
+    opacity: _hover ? 1 : 0,
+    duration: const Duration(milliseconds: 120),
+    child: IconButton(
+      tooltip: 'Message options',
+      visualDensity: VisualDensity.compact,
+      iconSize: 18,
+      onPressed: _hover ? widget.onLongPress : null,
+      icon: Icon(Icons.expand_more_rounded, color: theme.hintColor),
+    ),
+  );
 }
 
 class _OfferCard extends StatelessWidget {

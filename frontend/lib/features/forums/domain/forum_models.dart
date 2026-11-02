@@ -8,9 +8,8 @@ DateTime? _date(dynamic v) => v == null ? null : DateTime.tryParse('$v')?.toLoca
 /// What a forum belongs to. Each has exactly one forum, created on first visit.
 enum ForumScope { company, event }
 
-/// Thread order: hot (votes and replies, decaying with age), newest, or most upvoted.
+/// Thread order: newest first, or most upvoted.
 enum ForumSort {
-  hot('Hot'),
   newest('New'),
   top('Top');
 
@@ -141,7 +140,7 @@ class ThreadQuery {
   final ForumSort sort;
   final String search;
 
-  const ThreadQuery(this.forumId, {this.sort = ForumSort.hot, this.search = ''});
+  const ThreadQuery(this.forumId, {this.sort = ForumSort.newest, this.search = ''});
 
   @override
   bool operator ==(Object other) =>

@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .. import otp
 from ..auth import CurrentUser, current_user, optional_user
-from ..common import Contact, forbidden, not_found, set_clause, text
+from ..common import Contact, forbidden, like_pattern, not_found, search_text, set_clause, text
 from ..db import get_conn
 from ..permissions import log_moderation
 from .moderators import notify_role_change
@@ -137,6 +137,30 @@ async def verify_phone_code(body: PhoneVerify, user: CurrentUser = Depends(curre
     otp.verify_phone_otp(str(user.id), _check_phone(body.phone), body.code)
     await conn.execute("UPDATE users SET phone = $2 WHERE id = $1", user.id, body.phone)
     return await _my_profile(conn, user.id)
+
+
+class UserMatch(BaseModel):
+    id: UUID
+    name: str
+    email: str
+    programme: str | None
+
+
+@router.get("/users/search", response_model=list[UserMatch],
+            summary="Find people by name or email, to start a chat (signed-in users)")
+async def search_users(q: str = Query(..., min_length=2, max_length=100), limit: int = Query(20, ge=1, le=50),
+                       user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
+    """Active accounts other than mine whose name or email contains q. Names that start with q come first."""
+    q = search_text(q) or ""
+    if len(q) < 2:
+        return []
+    rows = await conn.fetch(
+        """SELECT id, name, email::text AS email, programme FROM users
+            WHERE is_active AND id <> $1
+              AND (name ILIKE '%' || $2 || '%' ESCAPE '\' OR email::text ILIKE '%' || $2 || '%' ESCAPE '\')
+            ORDER BY (name ILIKE $2 || '%' ESCAPE '\') DESC, (email::text ILIKE $2 || '%' ESCAPE '\') DESC, name
+            LIMIT $3""", user.id, like_pattern(q), limit)
+    return [UserMatch(**dict(r)) for r in rows]
 
 
 @router.get("/users/lookup", response_model=AccountStatus, summary="Find an account by email (admin)")

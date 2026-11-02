@@ -37,7 +37,6 @@ class AccountMenuButton extends ConsumerWidget {
     }
 
     final role = user.isAdmin ? 'Admin' : user.isModerator ? 'Moderator' : 'Student';
-    final panelLabel = user.isAdmin ? 'Admin panel' : user.isModerator ? 'Moderation tools' : null;
     final messagingAvailable = ref.watch(messagesRepositoryProvider) != null;
     final unreadMessages = messagingAvailable ? ref.watch(chatUnreadCountProvider).valueOrNull ?? 0 : 0;
 
@@ -56,8 +55,6 @@ class AccountMenuButton extends ConsumerWidget {
             showDialog(context: context, builder: (_) => const MySellerStrikesDialog());
           case 'watched':
             showDialog(context: context, builder: (_) => const WatchedListingsDialog());
-          case 'panel':
-            context.push(user.controlsPath);
           case 'signout':
             ref.read(showTrustedExchangeBannerProvider.notifier).state = false;
             await ref.read(authRepositoryProvider).signOut();
@@ -128,15 +125,6 @@ class AccountMenuButton extends ConsumerWidget {
             contentPadding: EdgeInsets.zero,
           ),
         ),
-        if (panelLabel != null)
-          PopupMenuItem(
-            value: 'panel',
-            child: ListTile(
-              leading: Icon(user.isAdmin ? Icons.admin_panel_settings_outlined : Icons.shield_outlined),
-              title: Text(panelLabel),
-              contentPadding: EdgeInsets.zero,
-            ),
-          ),
         const PopupMenuItem(
           value: 'signout',
           child: ListTile(

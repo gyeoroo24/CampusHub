@@ -514,3 +514,52 @@ def test_deactivated_peer_and_rate_limit(client, chat, monkeypatch):
     sql("DELETE FROM chat_messages")
     r = _send(client, RAVI, ravi, conv)
     assert r.status_code == 403 and "deactivated" in r.json()["detail"]
+
+
+def test_deleting_a_chat_hides_it_for_me_only(client, chat):
+    asha, ravi, conv = chat["asha"], chat["ravi"], chat["conv"]
+    assert _send(client, RAVI, ravi, conv, {"text": "Hi"}).status_code == 201
+    assert _send(client, ASHA, asha, conv, {"text": "Hello"}).status_code == 201
+    assert client.delete(f"{API}/chat/conversations/{conv['id']}", headers=KIRAN).status_code == 404
+    assert client.delete(f"{API}/chat/conversations/{conv['id']}", headers=RAVI).status_code == 204
+    assert client.get(f"{API}/chat/conversations", headers=RAVI).json() == []
+    assert _messages(client, RAVI, conv["id"])["items"] == []
+    assert _messages(client, RAVI, conv["id"], after=0)["items"] == []
+    assert len(_messages(client, ASHA, conv["id"])["items"]) == 2           # Asha keeps the whole chat
+    assert client.get(f"{API}/chat/unread", headers=RAVI).json()["unread_messages"] == 0
+    # Asha writes again: the chat comes back for Ravi with only the new message.
+    assert _send(client, ASHA, asha, conv, {"text": "Still want it?"}).status_code == 201
+    listed = client.get(f"{API}/chat/conversations", headers=RAVI).json()
+    assert [c["id"] for c in listed] == [conv["id"]] and listed[0]["unread_count"] == 1
+    page = _messages(client, RAVI, conv["id"])
+    assert [_open(ravi, page, m)["text"] for m in page["items"]] == ["Still want it?"]
+
+
+def test_delete_a_message_for_me_or_for_everyone(client, chat):
+    asha, ravi, conv = chat["asha"], chat["ravi"], chat["conv"]
+    mine = _send(client, RAVI, ravi, conv, {"text": "typo"}).json()
+    theirs = _send(client, ASHA, asha, conv, {"text": "ok"}).json()
+    # For me: only I stop seeing it, and I can hide anyone's message.
+    assert client.post(f"{API}/chat/messages/{theirs['id']}/hide", headers=RAVI).status_code == 204
+    assert [m["id"] for m in _messages(client, RAVI, conv["id"])["items"]] == [mine["id"]]
+    assert len(_messages(client, ASHA, conv["id"])["items"]) == 2
+    assert client.post(f"{API}/chat/messages/{theirs['id']}/hide", headers=KIRAN).status_code == 404
+    # For everyone: only my own message, and it's erased for both.
+    assert client.delete(f"{API}/chat/messages/{theirs['id']}", headers=RAVI).status_code == 403
+    assert client.delete(f"{API}/chat/messages/{mine['id']}", headers=RAVI).status_code == 204
+    gone = [m for m in _messages(client, ASHA, conv["id"])["items"] if m["id"] == mine["id"]][0]
+    assert gone["deleted_at"] is not None and gone["ciphertext"] is None
+
+
+def test_find_people_to_chat_with(client, chat):
+    sign_in(client, KIRAN)
+    assert client.get(f"{API}/users/search", params={"q": "ki"}).status_code == 401
+    found = client.get(f"{API}/users/search", params={"q": "ki"}, headers=RAVI).json()
+    assert [u["email"] for u in found] == ["kiran@iisc.ac.in"]
+    assert [u["name"] for u in client.get(f"{API}/users/search", params={"q": "ASHA@iisc"}, headers=RAVI).json()] == ["Asha"]
+    assert client.get(f"{API}/users/search", params={"q": "ravi"}, headers=RAVI).json() == []   # not myself
+    assert client.get(f"{API}/users/search", params={"q": "%_"}, headers=RAVI).json() == []
+    # A general chat with whoever was picked.
+    kiran = found[0]["id"]
+    r = client.post(f"{API}/chat/conversations", headers=RAVI, json={"user_id": kiran})
+    assert r.status_code in (200, 201) and r.json()["topic_id"] is None

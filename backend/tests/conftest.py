@@ -26,6 +26,7 @@ os.environ.update({
     "CAMPUSHUB_ALLOW_DEV_AUTH": "true",
     "CAMPUSHUB_S3_BUCKET": BUCKET,
     "CAMPUSHUB_MATCH_MODE": "off",
+    "CAMPUSHUB_MEAL_ALERTS_ON_REQUESTS": "false",
     "CAMPUSHUB_AUTO_FLAG": "false",  # test_auto_flagging.py turns it on   # tests that need the matcher switch it on with a fake embedder
     "CAMPUSHUB_S3_REGION": "ap-south-1",
     "AWS_ACCESS_KEY_ID": "testing",

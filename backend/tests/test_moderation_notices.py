@@ -89,7 +89,7 @@ def test_role_changes_are_announced_to_the_person(client):
     make_admin(client, ADMIN)
     sign_in(client, MEERA)
     g = grant(client, ADMIN, "meera@iisc.ac.in", "lost_found").json()
-    assert _notices(client, MEERA) == ["You are now a Lost & Found moderator. Your moderator tools are in the account menu."]
+    assert _notices(client, MEERA) == ["You are now a Lost & Found moderator. Open Moderator Panel from the menu next to your profile."]
     assert client.delete(f"{API}/moderators/{g['id']}", headers=ADMIN).status_code == 204
     assert _notices(client, MEERA)[0] == "You are no longer a Lost & Found moderator."
     meera_id = sign_in(client, MEERA)

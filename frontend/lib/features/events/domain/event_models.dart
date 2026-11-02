@@ -54,6 +54,9 @@ class CampusEvent {
   /// From the server for signed-in users; from the device for guests (see GuestBookmarks).
   final bool isBookmarked;
   final bool canEdit;
+
+  /// A mess's card: kept in step with its menu (open the mess page for the full menu).
+  final int? messId;
   final DateTime updatedAt;
 
   const CampusEvent({
@@ -71,6 +74,7 @@ class CampusEvent {
     this.bookmarkCount = 0,
     this.isBookmarked = false,
     this.canEdit = false,
+    this.messId,
     required this.updatedAt,
   });
 
@@ -91,6 +95,7 @@ class CampusEvent {
         bookmarkCount: json['bookmark_count'] is int ? json['bookmark_count'] as int : 0,
         isBookmarked: json['is_bookmarked'] == true,
         canEdit: json['can_edit'] == true,
+        messId: (json['mess_id'] as num?)?.toInt(),
         updatedAt: DateTime.tryParse('${json['updated_at']}')?.toLocal() ?? DateTime.now(),
       );
 
@@ -108,6 +113,7 @@ class CampusEvent {
         organizerName: organizerName,
         bookmarkCount: bookmarkCount ?? this.bookmarkCount,
         isBookmarked: isBookmarked ?? this.isBookmarked,
+        messId: messId,
         canEdit: canEdit,
         updatedAt: updatedAt,
       );

@@ -107,13 +107,17 @@ def test_votes_sorting_and_nested_replies(client, people):
     post = lambda h, title: client.post(f"{API}/forums/{forum['id']}/threads", headers=h,  # noqa: E731
                                         json={"title": title, "content": f"{title} body"}).json()
     old, new = post(ASHA, "Resume tips"), post(KIRAN, "OA pattern")
-    assert old["score"] == 1 and old["viewer_vote"] == 1                  # your own post starts upvoted
+    assert old["score"] == 0 and old["viewer_vote"] == 0                  # every post starts at 0, even for its author
     sql("UPDATE threads SET created_at = now() - interval '3 days' WHERE id = $1::uuid", old["id"])
+    assert client.put(f"{API}/threads/{old['id']}/vote", headers=ASHA, json={"value": 1}).json() == \
+        {"score": 1, "viewer_vote": 1}
     for h in (RAVI, MEERA):
-        assert client.put(f"{API}/threads/{old['id']}/vote", headers=h, json={"value": 1}).json()["score"] in (2, 3)
+        client.put(f"{API}/threads/{old['id']}/vote", headers=h, json={"value": 1})
+    assert client.put(f"{API}/threads/{old['id']}/vote", headers=RAVI, json={"value": 1}).json()["score"] == 3  # same vote twice counts once
     r = client.put(f"{API}/threads/{new['id']}/vote", headers=RAVI, json={"value": -1}).json()
-    assert r == {"score": 0, "viewer_vote": -1}
-    assert client.put(f"{API}/threads/{new['id']}/vote", headers=RAVI, json={"value": 0}).json()["score"] == 1
+    assert r == {"score": -1, "viewer_vote": -1}
+    assert client.put(f"{API}/threads/{new['id']}/vote", headers=RAVI, json={"value": 0}).json()["score"] == 0
+    assert client.get(f"{API}/forums/{forum['id']}/threads", params={"sort": "hot"}).status_code == 422
     assert client.put(f"{API}/threads/{new['id']}/vote", json={"value": 1}).status_code == 401   # guests can't vote
 
     order = lambda sort: [t["title"] for t in client.get(  # noqa: E731
@@ -125,11 +129,11 @@ def test_votes_sorting_and_nested_replies(client, people):
     assert listed[0]["viewer_vote"] == 1 and listed[0]["preview"] == "Resume tips body"
 
     top = client.post(f"{API}/threads/{old['id']}/comments", headers=KIRAN, json={"content": "Keep it 1 page"}).json()
-    assert top["parent_id"] is None and top["score"] == 1
+    assert top["parent_id"] is None and top["score"] == 0
     child = client.post(f"{API}/threads/{old['id']}/comments", headers=ASHA,
                         json={"content": "Even for PhDs?", "parent_id": top["id"]}).json()
     assert child["parent_id"] == top["id"]
-    assert client.put(f"{API}/comments/{top['id']}/vote", headers=RAVI, json={"value": 1}).json()["score"] == 2
+    assert client.put(f"{API}/comments/{top['id']}/vote", headers=RAVI, json={"value": 1}).json()["score"] == 1
     detail = client.get(f"{API}/threads/{old['id']}", headers=RAVI).json()
     assert [c["parent_id"] for c in detail["comments"]] == [None, None, top["id"]]
     assert detail["comments"][1]["viewer_vote"] == 1 and detail["reply_count"] == 2
@@ -163,9 +167,9 @@ def test_csv_imports(client, people):
     assert client.post(f"{API}/placement/companies/import", headers=ASHA, json={"csv": companies}).status_code == 403
     r = client.post(f"{API}/placement/companies/import", headers=RAVI, json={"csv": companies})
     assert r.status_code == 201, r.text
-    assert r.json() | {"rejected_rows": None} == {
+    assert r.json() | {"rejected_rows": None, "kinds": None, "past_rows": None} == {
         "rows_total": 3, "rows_created": 2, "rows_updated": 0, "rows_rejected": 1,
-        "companies_created": ["IBM", "Nvidia"], "rejected_rows": None}
+        "companies_created": ["IBM", "Nvidia"], "rejected_rows": None, "kinds": None, "past_rows": None}
     r = client.post(f"{API}/placement/companies/import", headers=RAVI, json={"csv": "Name,Industry\nibm,Consulting\n"})
     assert r.json()["rows_updated"] == 1
     ibm = sql("SELECT industry, website FROM companies WHERE name = 'IBM'")[0]

@@ -14,16 +14,18 @@ class MySellerStrikesDialog extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final strikesAsync = ref.watch(mySellerStrikesProvider);
+    final summary = ref.watch(myStrikeSummaryProvider).valueOrNull;
     final theme = Theme.of(context);
 
     return ModalHistoryWrapper(
       child: AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.shield_outlined),
-            SizedBox(width: 10),
-            Text('Seller strikes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Icon(Icons.shield_outlined),
+            const SizedBox(width: 10),
+            const Expanded(child: Text('Seller strikes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+            if (summary != null) _StrikeCount(summary: summary),
           ],
         ),
         contentPadding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
@@ -56,6 +58,56 @@ class MySellerStrikesDialog extends ConsumerWidget {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
         ],
       ),
+    );
+  }
+}
+
+String _ordinal(int n) => switch (n) { 1 => '1st', 2 => '2nd', 3 => '3rd', _ => '${n}th' };
+
+/// "Strikes: 1/3" with a (?) that explains the rules on hover (or tap, on a phone).
+class _StrikeCount extends StatelessWidget {
+  final StrikeSummary summary;
+
+  const _StrikeCount({required this.summary});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final s = summary;
+    final color = s.suspended
+        ? theme.colorScheme.error
+        : s.nonSevere >= s.negativeAt
+            ? Colors.orange.shade800
+            : theme.colorScheme.onSurface;
+    final rules = 'How strikes work\n'
+        '• A strike is added only when a moderator removes your listing after a report.\n'
+        '• ${_ordinal(s.negativeAt)} strike: buyers see a "Negative Seller" tag on your listings.\n'
+        '• ${_ordinal(s.limit)} strike: "Blocked Seller", and you can\'t post new listings until a moderator '
+        'lets you.\n'
+        '• Illegal items (drugs, weapons and the like): one strike blocks you at once.\n'
+        '• You can appeal each strike once. If a moderator overturns it, it stops counting.';
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          s.severe > 0 ? 'Strikes: ${s.strikes} (blocked)' : 'Strikes: ${s.nonSevere}/${s.limit}',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color),
+        ),
+        Tooltip(
+          message: rules,
+          triggerMode: TooltipTriggerMode.tap,
+          showDuration: const Duration(seconds: 12),
+          preferBelow: true,
+          textStyle: const TextStyle(fontSize: 12, color: Colors.white, height: 1.4),
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.help,
+              child: Icon(Icons.help_outline_rounded, size: 18, color: theme.hintColor),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -19,6 +19,7 @@ import '../../features/campus_services/ui/campus_services_dialog.dart';
 import '../../features/events/providers/events_providers.dart';
 import '../../features/events/ui/event_dialogs.dart';
 import '../../features/events/ui/events_screen.dart';
+import '../../features/mess/ui/mess_screen.dart';
 import '../../features/placement/ui/company_screen.dart';
 import '../../features/placement/ui/placement_screen.dart';
 
@@ -106,6 +107,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/events/:id',
       builder: (context, state) => EventDetailScreen(eventId: state.pathParameters['id']!),
+    ),
+    GoRoute(
+      path: '/mess',
+      builder: (context, state) => MessScreen(initialMessId: int.tryParse(state.uri.queryParameters['mess'] ?? '')),
     ),
     GoRoute(
       path: '/profile',

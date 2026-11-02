@@ -18,7 +18,7 @@ router = APIRouter(prefix="/uploads", tags=["Uploads"])
 
 class UploadRequest(BaseModel):
     kind: Literal["listing_photo", "lost_report_photo", "found_report_photo", "course_material", "job_description",
-                  "event_poster"]
+                  "event_poster", "mess_menu"]
     content_type: str = Field(examples=["image/jpeg"])
     size_bytes: int = Field(gt=0)
     checksum_sha256: str = Field(description="Base64 of the file's SHA-256 digest (NFR-8)")
@@ -51,6 +51,8 @@ async def create_upload(body: UploadRequest, user: CurrentUser = Depends(current
             raise forbidden("Only moderators of this course or its department can upload materials.")
     if body.kind == "job_description" and not await is_module_moderator(conn, user, "placement_hub"):
         raise forbidden("Only Placement Hub moderators can upload job descriptions.")
+    if body.kind == "mess_menu" and not await is_module_moderator(conn, user, "events"):
+        raise forbidden("Only Events moderators can upload mess menus.")
     key = new_object_key(body.kind, user.id, body.content_type, body.course_id)
     return UploadTicket(
         s3_key=key,

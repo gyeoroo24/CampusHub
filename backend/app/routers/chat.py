@@ -236,6 +236,11 @@ def _message_columns(alias: str = "") -> str:
 _MESSAGE_COLUMNS = _message_columns()
 
 _MY_READ = "CASE WHEN c.user_a = $1 THEN c.user_a_last_read_seq ELSE c.user_b_last_read_seq END"
+# rev 19: deleting a chat hides it from that person only: messages up to this seq stay hidden for them.
+_MY_CLEARED = "CASE WHEN c.user_a = $1 THEN c.user_a_cleared_seq ELSE c.user_b_cleared_seq END"
+# ... and "delete for me" hides single messages from that person only.
+_VISIBLE_TO_ME = f"""m.seq > {_MY_CLEARED}
+    AND NOT EXISTS (SELECT 1 FROM chat_message_hides h WHERE h.message_id = m.id AND h.user_id = $1)"""
 
 # $1 is the caller. Callers add "AND ..." conditions on c and an ORDER BY.
 _CONVERSATIONS = f"""
@@ -250,13 +255,14 @@ SELECT c.id, c.last_seq, c.last_message_at, c.created_at,
        EXISTS (SELECT 1 FROM chat_blocks b WHERE b.blocker_id = p.id AND b.blocked_id = $1) AS blocked_me,
        (SELECT count(*) FROM chat_messages m
         WHERE m.conversation_id = c.id AND m.sender_id <> $1 AND m.deleted_at IS NULL AND m.seq > {_MY_READ}
+          AND {_VISIBLE_TO_ME}
        ) AS unread_count,
        lm.id AS lm_id
 FROM chat_conversations c
 JOIN users p ON p.id = CASE WHEN c.user_a = $1 THEN c.user_b ELSE c.user_a END
 LEFT JOIN chat_keys pk ON pk.user_id = p.id AND pk.retired_at IS NULL
 LEFT JOIN chat_keys mk ON mk.user_id = $1 AND mk.retired_at IS NULL
-LEFT JOIN LATERAL (SELECT m.id FROM chat_messages m WHERE m.conversation_id = c.id
+LEFT JOIN LATERAL (SELECT m.id FROM chat_messages m WHERE m.conversation_id = c.id AND {_VISIBLE_TO_ME}
                    ORDER BY m.seq DESC LIMIT 1) lm ON true
 WHERE (c.user_a = $1 OR c.user_b = $1)
 """
@@ -467,10 +473,11 @@ async def get_user_chat_key(user_id: UUID, _: CurrentUser = Depends(current_user
             summary="My conversations, most recent first")
 async def list_conversations(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0, le=10_000),
                              user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
-    # Whoever opened a chat sees it straight away; the other person from the first message.
+    # Whoever opened a chat sees it straight away; the other person from the first message. A chat
+    # someone deleted comes back only with a newer message.
     return await _conversations(
         conn, user,
-        """ AND (c.last_message_at IS NOT NULL OR c.created_by = $1)
+        f""" AND (lm.id IS NOT NULL OR (c.last_message_at IS NULL AND c.created_by = $1 AND {_MY_CLEARED} = 0))
             ORDER BY coalesce(c.last_message_at, c.created_at) DESC, c.id DESC LIMIT $2 OFFSET $3""",
         limit, offset)
 
@@ -481,7 +488,7 @@ async def unread_count(user: CurrentUser = Depends(current_user), conn: asyncpg.
         f"""SELECT count(*) AS unread_messages, count(DISTINCT m.conversation_id) AS conversations
            FROM chat_conversations c
            JOIN chat_messages m ON m.conversation_id = c.id AND m.sender_id <> $1 AND m.deleted_at IS NULL
-           WHERE (c.user_a = $1 OR c.user_b = $1) AND m.seq > {_MY_READ}""", user.id)
+           WHERE (c.user_a = $1 OR c.user_b = $1) AND m.seq > {_MY_READ} AND {_VISIBLE_TO_ME}""", user.id)
     return UnreadCount(**dict(row))
 
 
@@ -570,17 +577,20 @@ async def list_messages(conversation_id: UUID,
     if after is not None and before is not None:
         raise HTTPException(422, "Send either after or before, not both.")
     conversation = await _conversation(conn, conversation_id, user)
+    # Messages the caller deleted (a whole chat up to a point, or one by one) never come back to them.
+    visible = f"""AND m.seq > (SELECT {_MY_CLEARED.replace('$1', '$4')} FROM chat_conversations c WHERE c.id = $1)
+                  AND NOT EXISTS (SELECT 1 FROM chat_message_hides h WHERE h.message_id = m.id AND h.user_id = $4)"""
     if after is not None:
         rows = await conn.fetch(
-            f"""SELECT {_MESSAGE_COLUMNS} FROM chat_messages WHERE conversation_id = $1 AND changed_seq > $2
-                ORDER BY changed_seq, seq LIMIT $3""", conversation_id, after, limit + 1)
+            f"""SELECT {_MESSAGE_COLUMNS} FROM chat_messages m WHERE conversation_id = $1 AND changed_seq > $2 {visible}
+                ORDER BY changed_seq, seq LIMIT $3""", conversation_id, after, limit + 1, user.id)
         has_more = len(rows) > limit
         rows = rows[:limit]
     else:
         rows = await conn.fetch(
-            f"""SELECT {_MESSAGE_COLUMNS} FROM chat_messages
-                WHERE conversation_id = $1 AND ($2::bigint IS NULL OR seq < $2)
-                ORDER BY seq DESC LIMIT $3""", conversation_id, before, limit + 1)
+            f"""SELECT {_MESSAGE_COLUMNS} FROM chat_messages m
+                WHERE conversation_id = $1 AND ($2::bigint IS NULL OR seq < $2) {visible}
+                ORDER BY seq DESC LIMIT $3""", conversation_id, before, limit + 1, user.id)
         has_more = len(rows) > limit
         rows = list(reversed(rows[:limit]))
     key_ids = list({r["sender_key_id"] for r in rows} | {r["recipient_key_id"] for r in rows})
@@ -731,6 +741,34 @@ async def unsend_message(message_id: UUID, user: CurrentUser = Depends(current_u
                           offer_status = CASE WHEN offer_status = 'pending' THEN 'withdrawn' ELSE offer_status END,
                           offer_answered_at = CASE WHEN offer_status = 'pending' THEN now() ELSE offer_answered_at END
                    WHERE id = $1 AND deleted_at IS NULL""", message_id, seq)
+    return Response(status_code=204)
+
+
+@router.post("/chat/messages/{message_id}/hide", status_code=204,
+             summary="Delete a message for me only; the other person still sees it")
+async def hide_message(message_id: UUID, user: CurrentUser = Depends(current_user),
+                       conn: asyncpg.Connection = Depends(get_conn)):
+    await _message_in_my_conversation(conn, message_id, user)
+    await conn.execute("INSERT INTO chat_message_hides (user_id, message_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                       user.id, message_id)
+    return Response(status_code=204)
+
+
+@router.delete("/chat/conversations/{conversation_id}", status_code=204,
+               summary="Delete a chat for me only: it leaves my list and its messages so far stay hidden from me")
+async def delete_conversation(conversation_id: UUID, user: CurrentUser = Depends(current_user),
+                              conn: asyncpg.Connection = Depends(get_conn)):
+    """Nothing is erased: the other person keeps the whole chat. If they write again, the chat comes back for
+    me with only the new messages."""
+    done = await conn.fetchval(
+        """UPDATE chat_conversations SET
+               user_a_cleared_seq = CASE WHEN user_a = $2 THEN last_seq ELSE user_a_cleared_seq END,
+               user_a_last_read_seq = CASE WHEN user_a = $2 THEN last_seq ELSE user_a_last_read_seq END,
+               user_b_cleared_seq = CASE WHEN user_b = $2 THEN last_seq ELSE user_b_cleared_seq END,
+               user_b_last_read_seq = CASE WHEN user_b = $2 THEN last_seq ELSE user_b_last_read_seq END
+           WHERE id = $1 AND (user_a = $2 OR user_b = $2) RETURNING true""", conversation_id, user.id)
+    if not done:
+        raise not_found("Conversation")
     return Response(status_code=204)
 
 
