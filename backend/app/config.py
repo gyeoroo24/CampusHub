@@ -84,6 +84,38 @@ class Settings(BaseSettings):
     match_possible: float = 0.4           # listed under "Possible matches"
     match_strong: float = 0.75            # "Strong match": the lost report's owner is alerted
 
+    # --- Category auto-suggestion (app/categories_suggest.py, future plan §2.4) ---
+    # bge-small-en-v1.5 score of the title against each category (its phrase and recent listings).
+    # Suggest only at or above the threshold AND with this lead over the runner-up. Calibrated with
+    # scripts/calibrate_category_suggest.py: 55/79 right, 2 wrong, silent on titles that fit nothing.
+    category_suggest_threshold: float = 0.52
+    category_suggest_margin: float = 0.03
+
+    # --- Seller trust score (app/seller_trust.py, future plan §1.5) ---
+    # A strike is one listing a moderator removed while resolving a report against its seller —
+    # never a raw report count. Two severity tiers, no decay by default (§1.5.2): a single severe
+    # strike (illegal items) blocks immediately; non-severe strikes build up a short ladder.
+    # Thresholds are a starting proposal from the plan doc, not a final policy decision.
+    seller_strike_severe_threshold: int = 1     # severe strikes -> "Blocked Seller" + posting suspended
+    seller_strike_negative_threshold: int = 2   # non-severe strikes -> "Negative Seller" tag shown
+    seller_strike_blocked_threshold: int = 3    # non-severe strikes -> "Blocked Seller" + posting suspended
+
+    # --- Automatic flagging (app/screening.py, future plan §1.6) ---
+    auto_flag: bool = True
+
+    # --- Meal alerts (app/mess_alerts.py) ---
+    # In AWS an EventBridge schedule runs app.jobs.meal_alerts_handler every 5 minutes. Locally (or on
+    # EC2) set this to check from inside the API instead, e.g. 60. 0 = off; never used inside Lambda.
+    meal_alert_poll_seconds: int = 0
+    # Also check whenever an app fetches its notifications (every minute while it's open), so alerts
+    # go out without any scheduler while people are using CampusHub.
+    meal_alerts_on_requests: bool = True
+
+    # --- Course feedback sentiment (app/sentiment_backends.py) ---
+    # auto: the local model if its files are there, else the word list. comprehend: Amazon Comprehend.
+    sentiment_backend: Literal["auto", "local", "comprehend", "lexicon"] = "auto"
+    comprehend_region: str = "ap-south-1"
+
     # --- HTTP ---
     api_prefix: str = "/api/v1"
     cors_allow_origins: list[str] = Field(default_factory=lambda: ["*"])

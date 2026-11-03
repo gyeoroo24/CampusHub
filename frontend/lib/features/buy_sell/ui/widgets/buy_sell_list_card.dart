@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../../core/utils/date_time_formatter.dart';
 import '../../../../core/widgets/no_photo_placeholder.dart';
+import '../../../../core/widgets/seller_trust_badge.dart';
 import '../../domain/buy_sell_item.dart';
 import 'buy_sell_detail_dialog.dart';
+import 'price_watch.dart';
 
 class BuySellListCard extends StatefulWidget {
   final ListingItem item;
@@ -193,6 +195,10 @@ class _BuySellListCardState extends State<BuySellListCard> {
                                   fontSize: 16,
                                 ),
                               ),
+                              if (item.negotiable) ...[
+                                const SizedBox(width: 4),
+                                const NegotiableBadge(fontSize: 9),
+                              ],
                               const SizedBox(width: 6),
                               Flexible(
                                 child: Container(
@@ -292,6 +298,10 @@ class _BuySellListCardState extends State<BuySellListCard> {
                     ),
                   ],
                 ),
+                if (item.sellerTrustTag != null) ...[
+                  const SizedBox(height: 6),
+                  SellerTrustBadge(tag: item.sellerTrustTag, fontSize: 9),
+                ],
               ],
             ),
           ),

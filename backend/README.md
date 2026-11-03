@@ -99,6 +99,31 @@ docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub 
 python -m app.matching --backfill
 ```
 
+A database created before revision 22 (1–2 Nov 2026: seller trust strikes, automatic flagging,
+price watch and the Negotiable badge, Placement Hub and Events, then Events moderators, Reddit-style
+forums, the placement schedule and event posters, then senior contacts and mess menus, then hiding chats and any email in placement sheets, then mess event cards, then role compensation, then the course repository) needs these, in order, then
+`db/reference-data.sql` once more for the default event tags:
+
+```bash
+for m in 013_seller_trust 014_reversible_listing_hide 015_auto_flags_and_price_watch 016_placement_and_events \
+         017_forums_events_moderation 018_seniors_and_mess_menus 019_chat_hiding_and_any_email \
+         020_mess_event_cards_and_tba_times 021_role_compensation 022_course_repository_and_follows \
+         023_permanent_buy_sell_deletes; do
+  docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub < db/migrations/$m.sql
+done
+```
+
+Reading mess menus from PDFs and photos needs Tesseract (`brew install tesseract`, or
+`apt-get install tesseract-ocr`); without it moderators type or paste the meals.
+
+Meal alerts (mess menus) go out when an open app fetches its notifications (every minute), so they
+work locally with nothing extra. `python -m app.jobs meals` sends whatever is due by hand.
+
+Automatic flagging (future plan §1.6, `app/screening.py`) is on by default: its text checks use the
+category-suggestion model, and the obscene-photo check needs the full model download below
+(`scripts/fetch_match_models.py`). Without those models only the keyword, gibberish and spam
+checks run. Set `CAMPUSHUB_AUTO_FLAG=false` to turn it off.
+
 ### Lost & Found matching (optional locally)
 
 Reports are matched by description and photo with three small ONNX models (future plan §1.2;
@@ -109,6 +134,11 @@ optional. To turn it on locally:
 uv pip install -r requirements-matching.txt          # or pip install
 python scripts/fetch_match_models.py                  # ~305 MB into backend/models (gitignored)
 ```
+
+The same download includes the 34 MB model behind category suggestion
+(`GET /buy-sell/categories/suggest`, `app/categories_suggest.py`). It runs in the API itself, and
+`--suggest-only` fetches just that one; both Dockerfiles do so.
+`python scripts/calibrate_category_suggest.py` measures it on labelled titles.
 
 Restart the API: with `CAMPUSHUB_MATCH_MODE=auto` (the default) it finds the models and matches
 in a background task. `python scripts/calibrate_matching.py <photo dir>` prints the similarity

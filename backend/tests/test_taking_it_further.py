@@ -71,6 +71,8 @@ def test_saved_search_validation(client):
         {"module": "buy_sell", "name": "x", "min_price": "10", "max_price": "5"},
         {"module": "buy_sell", "name": " ", "category_id": cycles},
         {"module": "events", "name": "x"},
+        {"module": "buy_sell", "name": "hero cycle"},          # no keyword or filter: would match everything
+        {"module": "buy_sell", "name": "hero cycle", "q": "  "},
     ]
     for body in bad:
         assert client.post(f"{API}/me/saved-searches", headers=RAVI, json=body).status_code == 422, body
@@ -80,9 +82,13 @@ def test_saved_search_validation(client):
     assert client.post(f"{API}/me/saved-searches", json={"module": "buy_sell", "name": "x"}).status_code == 401
     for i in range(20):
         assert client.post(f"{API}/me/saved-searches", headers=KIRAN,
-                           json={"module": "buy_sell", "name": f"s{i}"}).status_code == 201
+                           json={"module": "buy_sell", "name": f"s{i}", "q": f"word{i}"}).status_code == 201
     assert client.post(f"{API}/me/saved-searches", headers=KIRAN,
-                       json={"module": "buy_sell", "name": "one too many"}).status_code == 409
+                       json={"module": "buy_sell", "name": "one too many", "q": "x"}).status_code == 409
+    mine = client.get(f"{API}/me/saved-searches", headers=KIRAN).json()
+    mine = mine["items"] if isinstance(mine, dict) else mine
+    r = client.patch(f"{API}/me/saved-searches/{mine[0]['id']}", headers=KIRAN, json={"q": None})
+    assert r.status_code == 422   # clearing the only filter
 
 
 def test_lost_found_saved_search_alerts_on_found_reports(client):
@@ -126,6 +132,10 @@ def test_wanted_post_shows_matches_and_alerts_on_new_listing(client):
     alerts = _alerts(client, RAVI, "wanted_post_match")
     assert [(a["listing_id"], a["wanted_post_id"]) for a in alerts] == [(new["id"], post["id"])]
     assert [m["id"] for m in client.get(f"{API}/wanted/{post['id']}/matches").json()] == [new["id"], old["id"]]
+    # Listings held back by automatic flagging or hidden by a moderator's strike never show as matches.
+    sql("UPDATE listings SET held_for_review_at = now() WHERE id = $1::uuid", new["id"])
+    assert [m["id"] for m in client.get(f"{API}/wanted/{post['id']}/matches").json()] == [old["id"]]
+    sql("UPDATE listings SET held_for_review_at = NULL WHERE id = $1::uuid", new["id"])
 
     # Once fulfilled, no more alerts, and it leaves the default (open) feed.
     client.patch(f"{API}/wanted/{post['id']}/status", headers=RAVI, json={"status": "fulfilled"})

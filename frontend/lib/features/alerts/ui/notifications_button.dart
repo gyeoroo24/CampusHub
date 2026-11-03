@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../forums/ui/thread_view.dart';
 import '../../../core/utils/web_history_support.dart';
 import '../../../core/utils/date_time_formatter.dart';
 import '../../../core/utils/error_text.dart';
@@ -57,6 +58,18 @@ class NotificationsDialog extends ConsumerStatefulWidget {
         return Icons.forum_outlined;
       case 'chat_message':
         return Icons.chat_bubble_outline_rounded;
+      case 'listing_watch':
+        return Icons.trending_down_rounded;
+      case 'moderation_action':
+        return Icons.shield_outlined;
+      case 'followed_tag_event':
+        return Icons.event_available_rounded;
+      case 'bookmarked_event_update':
+        return Icons.event_note_rounded;
+      case 'mess_menu':
+        return Icons.restaurant_menu_rounded;
+      case 'course_update':
+        return Icons.school_outlined;
       default:
         return Icons.notifications_none_rounded;
     }
@@ -74,6 +87,40 @@ class NotificationsDialog extends ConsumerStatefulWidget {
       Navigator.pop(context);
       await WebHistoryManager.instance.settled;
       router.go('/messages/$conversationId');
+      return;
+    }
+    final eventId = n.payload['event_id']?.toString();
+    if (eventId != null && n.payload['cancelled'] != true) {
+      final router = GoRouter.of(context);
+      Navigator.pop(context);
+      await WebHistoryManager.instance.settled;
+      router.go('/events/$eventId');
+      return;
+    }
+    final courseId = n.payload['course_id']?.toString();
+    if (n.type == 'course_update' && courseId != null) {
+      // A forum post or reply opens the thread; anything else opens the course.
+      final thread = n.payload['thread_id']?.toString();
+      if (thread != null) {
+        await showDialog(context: context, builder: (_) => ThreadDialog(threadId: thread));
+        return;
+      }
+      final router = GoRouter.of(context);
+      Navigator.pop(context);
+      await WebHistoryManager.instance.settled;
+      router.push('/courses/$courseId');
+      return;
+    }
+    if (n.type == 'mess_menu') {
+      final router = GoRouter.of(context);
+      Navigator.pop(context);
+      await WebHistoryManager.instance.settled;
+      router.push('/mess?mess=${n.payload['mess_id']}');
+      return;
+    }
+    final threadId = n.payload['thread_id']?.toString();
+    if (n.type == 'forum_reply' && threadId != null) {
+      await showDialog(context: context, builder: (_) => ThreadDialog(threadId: threadId));
       return;
     }
     try {
@@ -227,7 +274,13 @@ class _NotificationsDialogState extends ConsumerState<NotificationsDialog> {
                 separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (context, i) {
                   final n = items[i];
-                  final opens = n.listingId != null || n.foundReportId != null || n.type == 'chat_message';
+                  final opens = n.listingId != null ||
+                      n.foundReportId != null ||
+                      n.type == 'chat_message' ||
+                      n.type == 'mess_menu' ||
+                      n.type == 'course_update' ||
+                      (n.type == 'forum_reply' && n.payload['thread_id'] != null) ||
+                      (n.payload['event_id'] != null && n.payload['cancelled'] != true);
                   final picked = selected?.contains(n.id) ?? false;
                   void toggle() => setState(() => picked ? selected!.remove(n.id) : selected!.add(n.id));
                   return ListTile(

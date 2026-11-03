@@ -2,24 +2,49 @@
 
 Admins can grant any role. A department moderator (Academic Help) can grant and revoke
 course moderators for courses in their own department. Any moderator can step down by
-revoking their own role.
+revoking their own role. The person is notified when a role is given to them or taken away.
 """
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, model_validator
 
 from ..auth import CurrentUser, current_user, is_iisc_email
 from ..common import forbidden, not_found
 from ..db import get_conn
+from ..notify import create_notifications, deliver_push
 from ..permissions import can_manage_department, log_moderation
 
 router = APIRouter(prefix="/moderators", tags=["Moderators"])
 
-Module = Literal["buy_sell", "lost_found", "academic_help", "placement_hub"]
+Module = Literal["buy_sell", "lost_found", "academic_help", "placement_hub", "events"]
+
+
+MODULE_NAMES = {"buy_sell": "Buy & Sell", "lost_found": "Lost & Found", "academic_help": "Academic Help",
+                "placement_hub": "Placement Hub", "events": "Events"}
+
+
+async def role_label(conn: asyncpg.Connection, module: str, scope_type: str, department_id: UUID | None,
+                     course_id: UUID | None) -> str:
+    """e.g. "Buy & Sell moderator", "Academic Help moderator for CDS", "... for DS252 (Cloud Computing)"."""
+    label = f"{MODULE_NAMES.get(module, module)} moderator"
+    if scope_type == "department" and department_id:
+        name = await conn.fetchval("SELECT name FROM departments WHERE id = $1", department_id)
+        return f"{label} for {name}" if name else label
+    if scope_type == "course" and course_id:
+        course = await conn.fetchrow("SELECT code, name FROM courses WHERE id = $1", course_id)
+        return f"{label} for {course['code']} ({course['name']})" if course else label
+    return label
+
+
+async def notify_role_change(conn: asyncpg.Connection, background: BackgroundTasks, user_id: UUID,
+                             message: str) -> None:
+    payload = {"message": message, "kind": "role_change"}
+    await create_notifications(conn, [user_id], "moderation_action", payload)
+    background.add_task(deliver_push, [user_id], "moderation_action", payload)
 
 
 class GrantCreate(BaseModel):
@@ -78,7 +103,7 @@ async def _may_manage_grant(conn: asyncpg.Connection, user: CurrentUser, module:
 
 
 @router.post("", response_model=Grant, status_code=201, summary="Make someone a moderator")
-async def grant(body: GrantCreate, user: CurrentUser = Depends(current_user),
+async def grant(body: GrantCreate, background: BackgroundTasks, user: CurrentUser = Depends(current_user),
                 conn: asyncpg.Connection = Depends(get_conn)):
     if not await _may_manage_grant(conn, user, body.module, body.scope_type, body.course_id):
         raise forbidden("Only admins, or department moderators for courses in their department, can grant this.")
@@ -92,6 +117,9 @@ async def grant(body: GrantCreate, user: CurrentUser = Depends(current_user),
                    VALUES ($1, $2, $3, $4, $5, $6) RETURNING id""",
                 target, body.module, body.scope_type, body.department_id, body.course_id, user.id)
             await log_moderation(conn, user.id, "grant_moderator", "moderator_assignment", grant_id)
+            label = await role_label(conn, body.module, body.scope_type, body.department_id, body.course_id)
+            await notify_role_change(conn, background, target,
+                                     f"You are now a {label}. Open Moderator Panel from the menu next to your profile.")
     except asyncpg.UniqueViolationError as exc:
         raise HTTPException(409, "This person already has this moderator role.") from exc
     return Grant(**dict(await conn.fetchrow(_GRANT_SELECT + " WHERE m.id = $1", grant_id)))
@@ -99,10 +127,10 @@ async def grant(body: GrantCreate, user: CurrentUser = Depends(current_user),
 
 @router.delete("/{grant_id}", status_code=204,
                summary="Revoke a moderator role (admin; department moderator for course roles; or step down from your own)")
-async def revoke(grant_id: UUID, user: CurrentUser = Depends(current_user),
+async def revoke(grant_id: UUID, background: BackgroundTasks, user: CurrentUser = Depends(current_user),
                  conn: asyncpg.Connection = Depends(get_conn)):
     row = await conn.fetchrow(
-        "SELECT user_id, module::text AS module, scope_type::text AS scope_type, course_id, revoked_at "
+        "SELECT user_id, module::text AS module, scope_type::text AS scope_type, department_id, course_id, revoked_at "
         "FROM moderator_assignments WHERE id = $1", grant_id)
     if row is None or row["revoked_at"] is not None:
         raise not_found("Active moderator role")
@@ -118,6 +146,9 @@ async def revoke(grant_id: UUID, user: CurrentUser = Depends(current_user),
             raise not_found("Active moderator role")
         await log_moderation(conn, user.id, "step_down_moderator" if stepping_down else "revoke_moderator",
                              "moderator_assignment", grant_id)
+        if not stepping_down:
+            label = await role_label(conn, row["module"], row["scope_type"], row["department_id"], row["course_id"])
+            await notify_role_change(conn, background, row["user_id"], f"You are no longer a {label}.")
     return Response(status_code=204)
 
 

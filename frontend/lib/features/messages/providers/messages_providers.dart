@@ -399,6 +399,12 @@ class ConversationController extends AutoDisposeFamilyNotifier<ConversationState
     await _poll();
   }
 
+  Future<void> hideForMe(String messageId) async {
+    await _repo.hideMessage(messageId);
+    state = state.copyWith(messages: Map.of(state.messages)..remove(messageId));
+  }
+
+
   Future<void> setBlocked(bool blocked) async {
     final c = state.conversation!;
     blocked ? await _repo.block(c.peerId) : await _repo.unblock(c.peerId);

@@ -10,6 +10,20 @@ import '../../features/buy_sell/ui/widgets/buy_sell_detail_dialog.dart';
 import '../../features/lost_found/domain/lost_found_item.dart';
 import '../../features/lost_found/providers/lost_found_providers.dart';
 import '../../features/lost_found/ui/widgets/lost_found_detail_dialog.dart';
+import '../../features/events/domain/event_models.dart';
+import '../../features/events/providers/events_providers.dart';
+import '../../features/mess/mess_models.dart';
+import '../../features/placement/domain/placement_models.dart';
+import '../../features/placement/providers/placement_providers.dart';
+
+/// Companies whose name or industry matches (Placement Hub), searched on the server.
+final _companySearchProvider = FutureProvider.autoDispose.family<List<Company>, String>((ref, q) =>
+    ref.watch(placementRepositoryProvider).fetchCompanies(query: q, limit: 6));
+
+/// Events (now, upcoming and past) whose title, description or place matches, searched on the server.
+final _eventSearchProvider = FutureProvider.autoDispose.family<List<CampusEvent>, String>((ref, q) =>
+    ref.watch(eventsRepositoryProvider).fetchEvents(
+        when: const {EventWhen.present, EventWhen.upcoming, EventWhen.past}, query: q, limit: 6));
 
 class SuperSearchBar extends ConsumerStatefulWidget {
   const SuperSearchBar({super.key});
@@ -80,7 +94,7 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
                     return const Padding(
                       padding: EdgeInsets.all(16.0),
                       child: Text(
-                        'Type to search listings, lost & found reports and courses (e.g. DS252)…',
+                        'Type to search listings, lost & found, courses (e.g. DS252), companies, events and messes…',
                         style: TextStyle(fontSize: 13, color: Colors.grey),
                       ),
                     );
@@ -118,6 +132,12 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
                     data: (all) => all.where((c) => courseMatches(c, query)).take(8).toList(),
                     orElse: () => const <CourseWithDepartment>[],
                   );
+                  final companiesAsync = ref.watch(_companySearchProvider(query));
+                  final eventsAsync = ref.watch(_eventSearchProvider(query));
+                  final messMatches = ref.watch(messListProvider).maybeWhen(
+                    data: (list) => list.messes.where((m) => m.name.toLowerCase().contains(query)).toList(),
+                    orElse: () => const <Mess>[],
+                  );
 
                   // One section per tab, the current tab's first.
                   String header(int tab, String name) =>
@@ -142,8 +162,80 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
                       _buildSectionHeader(header(2, 'COURSES')),
                       ..._buildCourseItems(context, courseMatchList),
                     ],
+                    3: [
+                      _buildSectionHeader(header(3, 'PLACEMENT HUB')),
+                      ...companiesAsync.when(
+                        loading: _loading,
+                        error: (_, __) => _none('Couldn\'t search companies'),
+                        data: (companies) => companies.isEmpty
+                            ? _none('No matching companies')
+                            : [
+                                for (final c in companies)
+                                  ListTile(
+                                    dense: true,
+                                    leading: const Icon(Icons.business_center_outlined, size: 20),
+                                    title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                    subtitle: Text(
+                                      [
+                                        if (c.industry != null) c.industry!,
+                                        if (c.ctcMin != null) formatCtc(c.ctcMin, c.ctcMax),
+                                        if (c.latestYear != null) '${c.latestYearSelected} selected in ${c.latestYear}',
+                                      ].join(' · '),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    onTap: () {
+                                      _removeOverlay();
+                                      context.push('/placements/${c.id}');
+                                    },
+                                  ),
+                              ],
+                      ),
+                    ],
+                    4: [
+                      _buildSectionHeader(header(4, 'EVENTS & MESS MENUS')),
+                      for (final m in messMatches)
+                        ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.restaurant_menu_rounded, size: 20),
+                          title: Text(m.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          subtitle: Text(m.today.isEmpty ? 'Mess menu' : 'Today: ${m.today.first.items}',
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          onTap: () {
+                            _removeOverlay();
+                            context.push('/mess?mess=${m.id}');
+                          },
+                        ),
+                      ...eventsAsync.when(
+                        loading: _loading,
+                        error: (_, __) => _none('Couldn\'t search events'),
+                        data: (events) => events.isEmpty && messMatches.isEmpty
+                            ? _none('No matching events')
+                            : [
+                                for (final e in events)
+                                  ListTile(
+                                    dense: true,
+                                    leading: const Icon(Icons.event_outlined, size: 20),
+                                    title: Text(e.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                    subtitle: Text(
+                                      [
+                                        '${e.startTime.day}/${e.startTime.month}/${e.startTime.year}',
+                                        if (e.location != null) e.location!,
+                                        if (e.when == EventWhen.past) 'past',
+                                      ].join(' • '),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    onTap: () {
+                                      _removeOverlay();
+                                      context.push('/events/${e.id}');
+                                    },
+                                  ),
+                              ],
+                      ),
+                    ],
                   };
-                  final order = [activeTab, ...[0, 1, 2].where((t) => t != activeTab)];
+                  final order = [activeTab, ...[0, 1, 2, 3, 4].where((t) => t != activeTab)];
 
                   return SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -167,6 +259,20 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
 
     Overlay.of(context).insert(_overlayEntry!);
   }
+
+  List<Widget> _loading() => const [
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: SizedBox(height: 2, child: LinearProgressIndicator()),
+        ),
+      ];
+
+  List<Widget> _none(String text) => [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+          child: Text(text, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        ),
+      ];
 
   Widget _buildSectionHeader(String title) {
     return Padding(
@@ -287,7 +393,7 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
           child: TextField(
             controller: _searchController,
             decoration: InputDecoration(
-              hintText: 'Search listings, lost & found, courses…',
+              hintText: 'Search everything: listings, lost & found, courses, companies, events…',
               hintStyle: const TextStyle(fontSize: 13),
               prefixIcon: const Icon(Icons.search_rounded, size: 20),
               suffixIcon: _isDebouncing

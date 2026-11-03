@@ -32,6 +32,9 @@ abstract class IAdminRepository {
     required String action, // 'actioned' or 'dismissed'
     String? note,
     bool removeContent = false,
+    /// Required when removing a listing: 'severe' (illegal item) blocks the seller immediately;
+    /// 'non_severe' counts toward the strike ladder. Seller trust score, future plan §1.5.
+    String? severity,
   });
   Future<Map<String, dynamic>> getSystemHealth();
   Future<List<User>> listRegisteredUsers();
@@ -402,7 +405,8 @@ class MockAdminRepository implements IAdminRepository {
       if (status != null && status != 'all' && r.status != status) return false;
       if (module != null && module != 'all' && r.module != module) return false;
       return true;
-    }).toList();
+    }).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt)); // newest first, as the API does
   }
 
   static const _fixedModule = {
@@ -443,6 +447,7 @@ class MockAdminRepository implements IAdminRepository {
     required String action,
     String? note,
     bool removeContent = false,
+    String? severity,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 150));
     final idx = _mockReports.indexWhere((r) => r.id == reportId);
@@ -602,6 +607,7 @@ class ApiAdminRepository implements IAdminRepository {
     required String action,
     String? note,
     bool removeContent = false,
+    String? severity,
   }) async {
     await apiClient.post(
       ApiEndpoints.resolveReport(reportId),
@@ -609,6 +615,7 @@ class ApiAdminRepository implements IAdminRepository {
         'action': action,
         if (note != null && note.isNotEmpty) 'note': note,
         'remove_content': removeContent,
+        if (severity != null) 'severity': severity,
       },
     );
   }

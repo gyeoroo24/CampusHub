@@ -25,12 +25,25 @@ class ApiEndpoints {
   // --- Categories ---
   static const String buySellCategories = '$version/buy-sell/categories';
   static const String lostFoundCategories = '$version/lost-found/categories';
+  static const String buySellCategorySuggest = '$version/buy-sell/categories/suggest';
+  static const String lostFoundCategorySuggest = '$version/lost-found/categories/suggest';
 
   // --- Buy & Sell (FR-4, FR-5, FR-6, FR-10) ---
   static const String listings = '$version/listings';
   static String listing(String id) => '$version/listings/$id';
   static String listingStatus(String id) => '$version/listings/$id/status';
+  static String listingWatch(String id) => '$version/listings/$id/watch';
+  static const String myWatchedListings = '$version/me/watched-listings';
   static String listingPhotos(String id) => '$version/listings/$id/photos';
+
+  // --- Seller trust score (future plan §1.5) ---
+  static const String mySellerStrikes = '$version/me/seller-strikes';
+  static const String mySellerStrikeSummary = '$version/me/seller-strikes/summary';
+  static String appealSellerStrike(String id) => '$version/me/seller-strikes/$id/appeal';
+  static const String sellerStrikes = '$version/seller-strikes';
+  static String overturnSellerStrike(String id) => '$version/seller-strikes/$id/overturn';
+  static String rejectSellerStrikeAppeal(String id) => '$version/seller-strikes/$id/reject-appeal';
+  static String liftListingSuspension(String sellerId) => '$version/users/$sellerId/lift-listing-suspension';
 
   // --- Lost & Found (FR-7, FR-8, FR-9, FR-10) ---
   // Lost Reports
@@ -70,6 +83,9 @@ class ApiEndpoints {
   static String departmentCourses(String deptId) => '$version/departments/$deptId/courses';
   static String course(String id) => '$version/courses/$id';
   static String courseMaterials(String courseId) => '$version/courses/$courseId/materials';
+  static String courseForum(String courseId) => '$version/courses/$courseId/forum';
+  static String courseFollow(String courseId) => '$version/courses/$courseId/follow';
+  static String material(String id) => '$version/materials/$id';
   static String courseFeedback(String courseId) => '$version/courses/$courseId/feedback';
   static String courseSurvivalGuide(String courseId) => '$version/courses/$courseId/survival-guide';
   static String myCourseFeedback(String courseId) => '$version/courses/$courseId/feedback/mine';
@@ -100,8 +116,58 @@ class ApiEndpoints {
   static String chatRead(String conversationId) => '$version/chat/conversations/$conversationId/read';
   static String chatMessage(String messageId) => '$version/chat/messages/$messageId';
   static String chatOffer(String messageId) => '$version/chat/messages/$messageId/offer';
+  static String chatMessageHide(String messageId) => '$version/chat/messages/$messageId/hide';
+  static const String userSearch = '$version/users/search';
   static const String chatBlocks = '$version/chat/blocks';
   static String chatBlock(String userId) => '$version/chat/blocks/$userId';
+
+  // --- Placement Hub ---
+  static const String companies = '$version/companies';
+  static String company(String id) => '$version/companies/$id';
+  static String companyHiringStats(String id) => '$version/companies/$id/hiring-stats';
+  static String companyJds(String id) => '$version/companies/$id/jds';
+  static String companyPpts(String id) => '$version/companies/$id/ppts';
+  static String companyInterviews(String id) => '$version/companies/$id/interviews';
+  static String companyForum(String id) => '$version/companies/$id/forum';
+  static String companySeniors(String id) => '$version/companies/$id/seniors';
+  static String senior(String id) => '$version/seniors/$id';
+  static String placementRecordContactHidden(String id) => '$version/placement/records/$id/contact-hidden';
+  static const String messes = '$version/messes';
+  static String mess(int id) => '$version/messes/$id';
+  static String messFollow(int id) => '$version/messes/$id/follow';
+  static String messMenus(int id) => '$version/messes/$id/menus';
+  static String messMenu(String id) => '$version/mess-menus/$id';
+  static const String messMenusByName = '$version/mess-menus';
+  static const String messMenuExtract = '$version/mess-menus/extract';
+  static String jd(String id) => '$version/jds/$id';
+  static String ppt(String id) => '$version/ppts/$id';
+  static const String interviews = '$version/interviews';
+  static String interview(String id) => '$version/interviews/$id';
+  static const String placementStats = '$version/placement/stats';
+  static const String placementPpts = '$version/placement/ppts';
+  static const String placementImports = '$version/placement/imports';
+  static const String placementCompaniesImport = '$version/placement/companies/import';
+  static const String placementScheduleImport = '$version/placement/schedule/import';
+  static const String placementRolesImport = '$version/placement/roles/import';
+
+  // --- Forums ---
+  static String forumThreads(String forumId) => '$version/forums/$forumId/threads';
+  static String thread(String id) => '$version/threads/$id';
+  static String threadComments(String threadId) => '$version/threads/$threadId/comments';
+  static String comment(String id) => '$version/comments/$id';
+  static String threadVote(String id) => '$version/threads/$id/vote';
+  static String commentVote(String id) => '$version/comments/$id/vote';
+  static String eventForum(String eventId) => '$version/events/$eventId/forum';
+
+  // --- Community Events and bookmarks ---
+  static const String events = '$version/events';
+  static String event(String id) => '$version/events/$id';
+  static const String eventTags = '$version/event-tags';
+  static String eventUpdates(String eventId) => '$version/events/$eventId/updates';
+  static String eventUpdate(String id) => '$version/event-updates/$id';
+  static String followedTag(int tagId) => '$version/me/followed-tags/$tagId';
+  static String bookmark(String targetType, String targetId) => '$version/me/bookmarks/$targetType/$targetId';
+  static const String bookmarksImport = '$version/me/bookmarks/import';
 
   // --- Backwards-compatible aliases ---
   static const String authMe = me;

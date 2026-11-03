@@ -37,14 +37,6 @@ void main() {
 
     expect(find.text('CampusHub'), findsWidgets);
     expect(find.text('Sell Item'), findsOneWidget);
-
-    // Verify refresh button exists on the left of theme toggle
-    final refreshBtn = find.byTooltip('Refresh all data from server');
-    expect(refreshBtn, findsOneWidget);
-    await tester.tap(refreshBtn);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 800));
-    expect(find.text('All feeds and user permissions refreshed from server.'), findsOneWidget);
   });
 
   testWidgets('CampusHub mobile responsiveness test (iPhone SE 375x667)', (WidgetTester tester) async {
@@ -71,7 +63,7 @@ void main() {
     expect(find.byType(FloatingActionButton), findsNWidgets(2));
   });
 
-  testWidgets('Account menu shows profile, admin panel and sign out for a signed-in admin', (WidgetTester tester) async {
+  testWidgets('Account menu shows profile and sign out; the admin panel is in the top bar', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
@@ -101,6 +93,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // The admin panel has its own button in the top bar, next to the account control.
+    expect(find.text('Admin Panel'), findsOneWidget);
+
     // The account control in the app bar shows the user's name
     final accountButton = find.text('Adithya C');
     expect(accountButton, findsOneWidget);
@@ -108,11 +103,11 @@ void main() {
     await tester.tap(accountButton);
     await tester.pumpAndSettle();
 
-    // Menu: name, email and role, then the actions (account tools live in the admin panel now)
+    // Menu: name, email and role, then the actions. No panel link here: it's the top-bar button.
     expect(find.text('admin@iisc.ac.in'), findsOneWidget);
     expect(find.text('Admin'), findsOneWidget);
     expect(find.text('My profile'), findsOneWidget);
-    expect(find.text('Admin panel'), findsOneWidget);
+    expect(find.text('Admin panel'), findsNothing);
     expect(find.text('Sign out'), findsOneWidget);
 
     // Close the menu
@@ -159,6 +154,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Trusted Campus Exchange'), findsNothing);
+
+    // The container outlives the widgets here: leaving the feed resets its filters, which reloads the
+    // mock listings (simulated delay), so let that finish before the test ends.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 1));
   });
 
   testWidgets('Lost & Found tab supports date presets and view mode toggle', (WidgetTester tester) async {
@@ -175,13 +175,21 @@ void main() {
     await tester.tap(lnfNav);
     await tester.pumpAndSettle();
 
-    // Check date preset filter chips are visible
-    expect(find.widgetWithText(FilterChip, 'All'), findsWidgets);
+    // The date presets are in the Filters sheet, under "When"
+    await tester.tap(find.text('Filters'));
+    await tester.pumpAndSettle();
+    expect(find.text('When'), findsOneWidget);
+    expect(find.widgetWithText(FilterChip, 'Any time'), findsOneWidget);
     expect(find.widgetWithText(FilterChip, 'Today'), findsOneWidget);
     expect(find.widgetWithText(FilterChip, 'Yesterday'), findsOneWidget);
     expect(find.widgetWithText(FilterChip, 'Last 3 Days'), findsOneWidget);
     expect(find.widgetWithText(FilterChip, 'This Week'), findsOneWidget);
     expect(find.widgetWithText(FilterChip, 'This Month'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilterChip, 'This Week'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Show results'));
+    await tester.pumpAndSettle();
+    expect(find.text('This Week'), findsWidgets);   // shown as an active-filter chip under the bar
 
     // Toggle view mode to Compact View
     final viewModeToggle = find.byTooltip('Compact view');
@@ -234,8 +242,10 @@ void main() {
     await tester.pumpWidget(createTestApp());
     await tester.pumpAndSettle();
 
-    // Verify custom price range button exists
-    final priceRangeBtn = find.byTooltip('Pick Custom Price Range');
+    // The custom price range is in the Filters sheet, beside the Price presets
+    await tester.tap(find.text('Filters'));
+    await tester.pumpAndSettle();
+    final priceRangeBtn = find.text('Custom range…');
     expect(priceRangeBtn, findsOneWidget);
 
     // Tap it to open dialog
@@ -255,10 +265,13 @@ void main() {
     await tester.tap(find.text('Apply'));
     await tester.pumpAndSettle();
 
-    // Dialog closed
+    // Dialog closed; apply the filters
     expect(find.text('Custom Price Range'), findsNothing);
-    // Button now shows active filter tooltip
-    expect(find.byTooltip('Custom: ₹0 - ₹500'), findsOneWidget);
+    await tester.tap(find.text('Show results'));
+    await tester.pumpAndSettle();
+    // The feed shows the price filter as an active-filter chip
+    expect(find.textContaining('₹500'), findsWidgets);
+    expect(find.text('Filters'), findsNothing);   // the button now counts active filters
   });
 
   testWidgets('Lost & Found category row includes Report Lost and Report Found buttons', (WidgetTester tester) async {

@@ -23,10 +23,11 @@ from pydantic import AfterValidator, BaseModel, Field
 from ..alerts import found_report_alerts, push_alerts
 from ..auth import CurrentUser, current_user, optional_user
 from ..common import (MAX_INT_ID, CategoryId, CategoryRef, Contact, Page, PageParams, Photo, UserRef, forbidden,
-                      make_page, not_found, page_params, search_text, set_clause, text)
+                      like_pattern, make_page, not_found, page_params, search_text, set_clause, text)
 from ..db import get_conn
 from ..lf_kinds import FOUND, LOST, Kind, other_kind
-from ..matching.trigger import match_mode, request_match, strength
+from ..matching.trigger import match_mode, request_match, request_photo_screen, strength
+from ..screening import screen_text
 from ..notify import create_notifications, deliver_push
 from ..permissions import close_reports, is_module_moderator, log_moderation
 from ..storage import delete_objects, file_url, mark_attached, verify_own_uploads
@@ -121,11 +122,6 @@ def select_for(k: Kind, extra_columns: str = "") -> str:
     JOIN lf_categories c ON c.id = r.category_id
     JOIN users u ON u.id = r.reporter_id
     """
-
-
-def _like_pattern(q: str) -> str:
-    """Escape LIKE wildcards so a search for "50%" or "u_b" matches those characters literally."""
-    return q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 async def notify_lost_reporters(conn: asyncpg.Connection, found_report_id: UUID, category_id: int,
@@ -254,7 +250,7 @@ def build_router(kind: Kind) -> APIRouter:
               AND ($8::timestamptz IS NULL OR r.{kind.when} <= $8)
             ORDER BY {order}
             LIMIT $5 OFFSET $6""",
-            category_id, status, _like_pattern(q) if (q := search_text(q)) else None, reporter_id,
+            category_id, status, like_pattern(q) if (q := search_text(q)) else None, reporter_id,
             page.limit + 1, page.offset, from_date, to_date)
         return make_page(rows, page, summary)
 
@@ -277,6 +273,7 @@ def build_router(kind: Kind) -> APIRouter:
                     VALUES ($1, $2, $3, $4, $5) RETURNING id""",
                 user.id, body.description, body.category_id, body.occurred_at, body.location)
             await insert_photos(conn, report_id, body.photo_keys)
+            await screen_text(conn, background, f"{kind.name}_report", report_id)   # automatic flagging, §1.6
             if kind is FOUND:
                 if match_mode() == "off":
                     # FR-9 without the matcher: tell everyone who lost this kind of item.
@@ -289,6 +286,8 @@ def build_router(kind: Kind) -> APIRouter:
                                 {"found_report_id": str(report_id), "message": message})
         push_alerts(background, pushes)
         request_match(background, kind.name, report_id)
+        if body.photo_keys:
+            request_photo_screen(background, f"{kind.name}_report", report_id)
         result = await detail(conn, report_id, user)
         result.possible_matches = await possible_matches(conn, body.category_id, body.occurred_at, user.id)
         return result
@@ -314,6 +313,8 @@ def build_router(kind: Kind) -> APIRouter:
             await conn.execute(f"UPDATE {kind.table} SET {sql} WHERE id = $1", report_id, *values)
             if before["by_admin"]:
                 await log_moderation(conn, user.id, f"edit_{kind.name}_report", f"{kind.name}_report", report_id)
+            if "description" in changes:
+                await screen_text(conn, background, f"{kind.name}_report", report_id)
             if content_changed:
                 await needs_rematch(conn, report_id)
             if rematch_needed:
@@ -362,6 +363,8 @@ def build_router(kind: Kind) -> APIRouter:
         await mark_attached(new_keys)
         background.add_task(delete_objects, sorted(old_keys - set(body.photo_keys)))
         request_match(background, kind.name, report_id)
+        if new_keys:
+            request_photo_screen(background, f"{kind.name}_report", report_id)
         return await detail(conn, report_id, user)
 
     @router.get("/{report_id}/matches", response_model=MatchList,
@@ -392,11 +395,13 @@ def build_router(kind: Kind) -> APIRouter:
 
     @router.delete("/{report_id}", status_code=204,
                    summary="Remove a report (reporter, Lost & Found moderator or admin; FR-10)")
-    async def delete_report(report_id: UUID, reason: str | None = Query(None, max_length=500),
+    async def delete_report(report_id: UUID, background: BackgroundTasks,
+                            reason: str | None = Query(None, max_length=500),
                             user: CurrentUser = Depends(current_user),
                             conn: asyncpg.Connection = Depends(get_conn)):
-        reporter = await conn.fetchval(
-            f"SELECT reporter_id FROM {kind.table} WHERE id = $1 AND deleted_at IS NULL", report_id)
+        found = await conn.fetchrow(
+            f"SELECT reporter_id, description FROM {kind.table} WHERE id = $1 AND deleted_at IS NULL", report_id)
+        reporter = found["reporter_id"] if found else None
         if reporter is None:
             raise not_found(f"{kind.name.capitalize()} report")
         is_owner = reporter == user.id
@@ -409,6 +414,13 @@ def build_router(kind: Kind) -> APIRouter:
             if not is_owner:
                 await log_moderation(conn, user.id, f"remove_{kind.name}_report", f"{kind.name}_report",
                                      report_id, reason)
+                title = " ".join(found["description"].split())
+                title = title if len(title) <= 60 else title[:59].rstrip() + "…"
+                payload = {"message": f'A moderator removed your {kind.name} item report "{title}".'
+                                      + (f" Reason: {reason}" if reason else ""),
+                           "target_type": f"{kind.name}_report", "target_id": str(report_id)}
+                await create_notifications(conn, [reporter], "moderation_action", payload)
+                background.add_task(deliver_push, [reporter], "moderation_action", payload)
         return Response(status_code=204)
 
     return router

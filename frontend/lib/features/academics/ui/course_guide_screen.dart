@@ -1,102 +1,206 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../core/utils/date_time_formatter.dart';
 import '../../../core/utils/error_text.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../auth/ui/auth_dialog.dart';
 import '../domain/academics_models.dart';
 import '../providers/academics_providers.dart';
+import '../../forums/domain/forum_models.dart';
+import '../../forums/ui/forum_board.dart';
+import 'course_materials.dart';
 import 'sentiment_trend_chart.dart';
 
 /// Polarity colors for labels; always shown next to the word, never alone.
 Color sentimentColor(SentimentLabel label) => switch (label) {
-      SentimentLabel.positive => Colors.teal.shade700,
-      SentimentLabel.negative => Colors.deepOrange.shade700,
-      SentimentLabel.mixed => Colors.blueGrey.shade600,
-    };
+  SentimentLabel.positive => Colors.teal.shade700,
+  SentimentLabel.negative => Colors.deepOrange.shade700,
+  SentimentLabel.mixed => Colors.blueGrey.shade600,
+};
 
 IconData sentimentIcon(SentimentLabel label) => switch (label) {
-      SentimentLabel.positive => Icons.sentiment_satisfied_alt_rounded,
-      SentimentLabel.negative => Icons.sentiment_dissatisfied_rounded,
-      SentimentLabel.mixed => Icons.sentiment_neutral_rounded,
-    };
+  SentimentLabel.positive => Icons.sentiment_satisfied_alt_rounded,
+  SentimentLabel.negative => Icons.sentiment_dissatisfied_rounded,
+  SentimentLabel.mixed => Icons.sentiment_neutral_rounded,
+};
 
-/// A course's page: the survival guide (summary, sentiment over time, themes, advice, semester
-/// by semester) and its recent feedback.
+/// A course's page in three tabs: the survival guide (summary, sentiment over time, themes, advice, semester
+/// by semester, feedback), the shared materials repository, and the course forum. Follow it for updates.
 class CourseGuideScreen extends ConsumerWidget {
   final String courseId;
 
   const CourseGuideScreen({super.key, required this.courseId});
 
+  Future<void> _toggleFollow(BuildContext context, WidgetRef ref, bool following) async {
+    final ok = await AuthDialog.ensureSignedIn(
+      context,
+      ref,
+      title: 'Sign in to follow courses',
+      message: 'Follow a course to hear about new materials, feedback and forum posts.',
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(academicsRepositoryProvider).setFollowing(courseId, !following);
+      ref.invalidate(courseProvider(courseId));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            content: Text(
+              following
+                  ? 'You stopped following this course.'
+                  : 'Following. New materials, feedback and forum posts will notify you.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(errorText(e)), behavior: SnackBarBehavior.floating));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final guideAsync = ref.watch(survivalGuideProvider(courseId));
+    final course = ref.watch(courseProvider(courseId)).valueOrNull;
+    final code = course?.code ?? guideAsync.valueOrNull?.courseCode ?? 'this course';
+    final following = course?.following ?? false;
     final theme = Theme.of(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          tooltip: 'Back to courses',
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.canPop() ? context.pop() : context.go('/courses'),
-        ),
-        title: guideAsync.maybeWhen(
-          data: (g) => Text('${g.courseCode} · ${g.courseName}', overflow: TextOverflow.ellipsis),
-          orElse: () => const Text('Course survival guide'),
-        ),
-      ),
-      body: guideAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(errorText(e))),
-        data: (guide) => Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 860),
-            child: RefreshIndicator(
-              onRefresh: () async {
-                ref.invalidate(survivalGuideProvider(courseId));
-                ref.invalidate(courseFeedbackProvider(courseId));
-              },
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _SummaryCard(guide: guide),
-                  if (guide.semesters.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    _Section(
-                      title: 'Sentiment over time',
-                      subtitle: 'Average review score per semester. Hover a point for details.',
-                      child: SentimentTrendChart(semesters: guide.semesters),
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: 'Back to courses',
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: () => context.canPop() ? context.pop() : context.go('/courses'),
+          ),
+          title: guideAsync.maybeWhen(
+            data: (g) => Text('${g.courseCode} · ${g.courseName}', overflow: TextOverflow.ellipsis),
+            orElse: () => const Text('Course survival guide'),
+          ),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: following
+                  ? OutlinedButton.icon(
+                      onPressed: () => _toggleFollow(context, ref, true),
+                      icon: const Icon(Icons.notifications_active_rounded, size: 18),
+                      label: const Text('Following'),
+                    )
+                  : FilledButton.icon(
+                      onPressed: () => _toggleFollow(context, ref, false),
+                      icon: const Icon(Icons.notifications_none_rounded, size: 18),
+                      label: const Text('Follow'),
                     ),
-                  ],
-                  if (guide.themes.isNotEmpty || guide.advice.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    LayoutBuilder(builder: (context, c) {
-                      final themes = _Section(title: 'What students talk about', child: _ThemeList(themes: guide.themes));
-                      final advice = _Section(title: 'Advice students repeat', child: _AdviceList(advice: guide.advice));
-                      if (c.maxWidth < 640) {
-                        return Column(children: [themes, const SizedBox(height: 16), advice]);
-                      }
-                      return IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [Expanded(child: themes), const SizedBox(width: 16), Expanded(child: advice)],
-                        ),
-                      );
-                    }),
-                  ],
-                  if (guide.semesters.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Text('Semester by semester', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    for (final s in guide.semesters.reversed) _SemesterCard(semester: s),
-                  ],
-                  const SizedBox(height: 16),
-                  _FeedbackSection(courseId: courseId),
-                ],
+            ),
+          ],
+          bottom: const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [
+              Tab(icon: Icon(Icons.insights_rounded, size: 18), text: 'Survival guide', iconMargin: EdgeInsets.zero),
+              Tab(icon: Icon(Icons.folder_shared_outlined, size: 18), text: 'Materials', iconMargin: EdgeInsets.zero),
+              Tab(icon: Icon(Icons.forum_outlined, size: 18), text: 'Forum', iconMargin: EdgeInsets.zero),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            guideAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text(errorText(e))),
+              data: (guide) => Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 860),
+                  child: RefreshIndicator(
+                    onRefresh: () async {
+                      ref.invalidate(survivalGuideProvider(courseId));
+                      ref.invalidate(courseFeedbackProvider(courseId));
+                    },
+                    child: ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        _SummaryCard(guide: guide),
+                        if (guide.semesters.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          _Section(
+                            title: 'Sentiment over time',
+                            subtitle: 'Average review score per semester. Hover a point for details.',
+                            child: SentimentTrendChart(semesters: guide.semesters),
+                          ),
+                        ],
+                        if (guide.themes.isNotEmpty || guide.advice.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          LayoutBuilder(
+                            builder: (context, c) {
+                              final themes = _Section(
+                                title: 'What students talk about',
+                                child: _ThemeList(themes: guide.themes),
+                              );
+                              final advice = _Section(
+                                title: 'Advice students repeat',
+                                child: _AdviceList(advice: guide.advice),
+                              );
+                              if (c.maxWidth < 640) {
+                                return Column(children: [themes, const SizedBox(height: 16), advice]);
+                              }
+                              return IntrinsicHeight(
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    Expanded(child: themes),
+                                    const SizedBox(width: 16),
+                                    Expanded(child: advice),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                        if (guide.semesters.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          Text(
+                            'Semester by semester',
+                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          for (final s in guide.semesters.reversed) _SemesterCard(semester: s),
+                        ],
+                        const SizedBox(height: 16),
+                        _FeedbackSection(courseId: courseId),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
+            CourseMaterialsTab(courseId: courseId, courseCode: code),
+            SingleChildScrollView(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 860),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: ForumBoard(
+                      scope: ForumScope.course,
+                      scopeId: courseId,
+                      placeName: code,
+                      blurb: 'ask about $code: doubts, exams, projects, resources',
+                      embedded: true,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -153,7 +257,10 @@ class _LabelChip extends StatelessWidget {
         children: [
           Icon(sentimentIcon(label), size: 14, color: color),
           const SizedBox(width: 4),
-          Text(text ?? label.name, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color)),
+          Text(
+            text ?? label.name,
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color),
+          ),
         ],
       ),
     );
@@ -202,7 +309,7 @@ class _SummaryCard extends StatelessWidget {
           Text(guide.summary, style: const TextStyle(fontSize: 14, height: 1.45)),
           const SizedBox(height: 8),
           Text(
-            'Built from student feedback with a word-list sentiment score; read the reviews for the full picture.',
+            'Built from student feedback, scored sentence by sentence by a sentiment model; read the reviews for the full picture.',
             style: TextStyle(fontSize: 10, color: theme.hintColor),
           ),
         ],
@@ -246,11 +353,12 @@ class _ThemeList extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: Text('${t.theme[0].toUpperCase()}${t.theme.substring(1)}',
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  child: Text(
+                    '${t.theme[0].toUpperCase()}${t.theme.substring(1)}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
-                Text('${t.mentions} mentions  ',
-                    style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor)),
+                Text('${t.mentions} mentions  ', style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor)),
                 _LabelChip(label: t.label),
               ],
             ),
@@ -297,16 +405,18 @@ class _SemesterCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     Widget quote(String text, SentimentLabel label) => Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(sentimentIcon(label), size: 15, color: sentimentColor(label)),
-              const SizedBox(width: 6),
-              Expanded(child: Text('“$text”', style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic))),
-            ],
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(sentimentIcon(label), size: 15, color: sentimentColor(label)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text('“$text”', style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic)),
           ),
-        );
+        ],
+      ),
+    );
     final s = semester.sentiment;
     return Card(
       elevation: 0,
@@ -360,11 +470,13 @@ class _FeedbackSection extends ConsumerWidget {
   }
 
   void _toast(ScaffoldMessengerState messenger, String text, {bool error = false}) {
-    messenger.showSnackBar(SnackBar(
-      content: Text(text),
-      behavior: SnackBarBehavior.floating,
-      backgroundColor: error ? Colors.red.shade700 : null,
-    ));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(text),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: error ? Colors.red.shade700 : null,
+      ),
+    );
   }
 
   /// Write a new review, or edit [existing]. One review per person per course.
@@ -490,8 +602,10 @@ class _FeedbackSection extends ConsumerWidget {
             data: (items) {
               final others = items.where((f) => !f.isMine).toList();
               return others.isEmpty
-                  ? Text(mine == null ? 'No feedback yet.' : 'No other feedback yet.',
-                      style: TextStyle(color: theme.hintColor))
+                  ? Text(
+                      mine == null ? 'No feedback yet.' : 'No other feedback yet.',
+                      style: TextStyle(color: theme.hintColor),
+                    )
                   : Column(
                       children: [
                         for (final f in others)
@@ -542,29 +656,31 @@ class _FeedbackEditorState extends State<_FeedbackEditor> {
         width: 460,
         child: SingleChildScrollView(
           child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _controller,
-              maxLines: 6,
-              maxLength: 5000,
-              autofocus: true,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                hintText: 'Workload, exams, teaching, what you wish you had known...',
-                border: OutlineInputBorder(),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _controller,
+                maxLines: 6,
+                maxLength: 5000,
+                autofocus: true,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  hintText: 'Workload, exams, teaching, what you wish you had known...',
+                  border: OutlineInputBorder(),
+                ),
               ),
-            ),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _anonymous,
-              onChanged: (v) => setState(() => _anonymous = v ?? false),
-              title: const Text('Post anonymously', style: TextStyle(fontSize: 13)),
-              subtitle: const Text('Your name is hidden from everyone else. You can still edit or delete it.',
-                  style: TextStyle(fontSize: 11)),
-            ),
-          ],
-        ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _anonymous,
+                onChanged: (v) => setState(() => _anonymous = v ?? false),
+                title: const Text('Post anonymously', style: TextStyle(fontSize: 13)),
+                subtitle: const Text(
+                  'Your name is hidden from everyone else. You can still edit or delete it.',
+                  style: TextStyle(fontSize: 11),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
       actions: [

@@ -192,7 +192,12 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Wanted'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Furniture'));
+      // Categories are picked in the Filters sheet.
+      await tester.tap(find.text('Filters'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Furniture').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Show results'));
       await tester.pumpAndSettle();
       expect(find.text('No Wanted requests match “Furniture”.'), findsOneWidget);
 

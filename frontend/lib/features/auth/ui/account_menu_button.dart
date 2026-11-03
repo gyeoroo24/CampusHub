@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../alerts/ui/saved_searches_dialog.dart';
 import '../../messages/providers/messages_providers.dart';
+import '../../seller_trust/ui/my_seller_strikes_dialog.dart';
 import '../providers/auth_providers.dart';
 import 'auth_dialog.dart';
+import '../../buy_sell/ui/widgets/price_watch.dart';
 
 /// App-bar account control. Guests get a labelled "Sign in" button; signed-in users get a menu
 /// with their profile, messages, saved searches, their admin or moderation tools (if any) and "Sign out".
@@ -35,7 +37,6 @@ class AccountMenuButton extends ConsumerWidget {
     }
 
     final role = user.isAdmin ? 'Admin' : user.isModerator ? 'Moderator' : 'Student';
-    final panelLabel = user.isAdmin ? 'Admin panel' : user.isModerator ? 'Moderation tools' : null;
     final messagingAvailable = ref.watch(messagesRepositoryProvider) != null;
     final unreadMessages = messagingAvailable ? ref.watch(chatUnreadCountProvider).valueOrNull ?? 0 : 0;
 
@@ -50,8 +51,10 @@ class AccountMenuButton extends ConsumerWidget {
             context.go('/messages');
           case 'saved':
             showDialog(context: context, builder: (_) => const SavedSearchesDialog());
-          case 'panel':
-            context.push(user.controlsPath);
+          case 'strikes':
+            showDialog(context: context, builder: (_) => const MySellerStrikesDialog());
+          case 'watched':
+            showDialog(context: context, builder: (_) => const WatchedListingsDialog());
           case 'signout':
             ref.read(showTrustedExchangeBannerProvider.notifier).state = false;
             await ref.read(authRepositoryProvider).signOut();
@@ -106,15 +109,22 @@ class AccountMenuButton extends ConsumerWidget {
             contentPadding: EdgeInsets.zero,
           ),
         ),
-        if (panelLabel != null)
-          PopupMenuItem(
-            value: 'panel',
-            child: ListTile(
-              leading: Icon(user.isAdmin ? Icons.admin_panel_settings_outlined : Icons.shield_outlined),
-              title: Text(panelLabel),
-              contentPadding: EdgeInsets.zero,
-            ),
+        const PopupMenuItem(
+          value: 'watched',
+          child: ListTile(
+            leading: Icon(Icons.notifications_active_outlined),
+            title: Text('Watched listings'),
+            contentPadding: EdgeInsets.zero,
           ),
+        ),
+        const PopupMenuItem(
+          value: 'strikes',
+          child: ListTile(
+            leading: Icon(Icons.shield_outlined),
+            title: Text('Seller strikes'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
         const PopupMenuItem(
           value: 'signout',
           child: ListTile(

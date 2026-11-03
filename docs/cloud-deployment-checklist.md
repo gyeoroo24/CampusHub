@@ -1,6 +1,6 @@
 # Deploying CampusHub to the cloud: what still has to change
 
-*Last updated 1 Nov 2026 (database revision 12)*
+*Last updated 2 Nov 2026 (database revision 16)*
 
 Local development takes shortcuts that must not reach a real deployment. This page lists them,
 plus the cloud work each feature still needs. How to build and wire the Lambda, RDS Proxy, S3,
@@ -9,37 +9,58 @@ Update this page whenever a new shortcut or cloud dependency is added.
 
 ## Must do before going live
 
-1. **Run the database migrations** on RDS, in order, if the database is older than revision 12.
+1. **Run the database migrations** on RDS, in order, if the database is older than revision 16.
    A brand-new database only needs `backend/db/schema.sql`.
    - `008_encrypted_chat`
    - `009_server_held_chat_keys`
    - `010_chat_per_person`
    - `011_drop_matched_status`
    - `012_lf_matching` (then invoke the matcher once with `{"backfill": true}`)
+   - `013_seller_trust`, `014_reversible_listing_hide`
+   - `015_auto_flags_and_price_watch` (adds a notification type outside the transaction; run as is)
+   - `016_placement_and_events`, then `db/reference-data.sql` (default event tags)
+   - `017_forums_events_moderation` (adds enum values outside the transaction; run as is)
+   - `018_seniors_and_mess_menus` (adds a notification type outside the transaction; run as is)
+   - `019_chat_hiding_and_any_email`
+   - `020_mess_event_cards_and_tba_times`
+   - `021_role_compensation`
+   - `022_course_repository_and_follows` (adds a notification type outside the transaction; run as is)
+   - `023_permanent_buy_sell_deletes` (deletes listings and Wanted posts that were soft-deleted earlier; their photos stay in S3 until removed by hand or by a lifecycle rule)
 
    `010` merges older per-listing chats into one chat per person. Back up the `chat_*` tables
    first.
-2. **Sign-in must use Cognito:**
+2. **Meal alerts (optional backup schedule).** Mess menu followers get each meal's dishes 30
+   minutes before it (`app/mess_alerts.py`). The API sends due alerts whenever an open app fetches
+   its notifications (once a minute), so they work with no scheduler while people use CampusHub.
+   For alerts when nobody has the app open (early breakfast), add a Lambda function from the API
+   image with handler `app.jobs.meal_alerts_handler` and an EventBridge schedule `rate(5 minutes)`.
+3. **Course-feedback sentiment:** the API image ships the local RoBERTa model (fetched with the others).
+   To use Amazon Comprehend instead, set `CAMPUSHUB_SENTIMENT_BACKEND=comprehend` (and
+   `CAMPUSHUB_COMPREHEND_REGION` if not ap-south-1) and give the API role
+   `comprehend:BatchDetectSentiment`. No code change; see `docs/SLMs.md`.
+4. **Sign-in must use Cognito:**
    - Keep `CAMPUSHUB_AUTH_MODE=cognito` (the default). Dev sign-in (`X-Dev-User` with an emailed
      code) refuses to start inside Lambda, but on EC2 nothing stops it if the `.env` says `dev`.
-   - Do not deploy any build where `backend/app/otp.py` accepts a fixed code. During local
-     testing that file has a "TEMP HARDCODED OTP" block that accepts `123456`. It has never been
-     committed, and must not be.
+   - Do not deploy any build where `backend/app/otp.py` accepts a fixed code. That file has a
+     "TEMP HARDCODED OTP" block that accepts `123456` for local testing — **as of 2 Nov 2026 this
+     block is committed on `backend_v2`** (commit `7bce283`), not just a local-only edit as this
+     line used to claim. It makes `verify_otp()` accept the code for any email, unconditionally,
+     with no dev-mode gate. Remove it before merging into `main` or building any deploy image.
    - Set `CAMPUSHUB_SMTP_*` if dev sign-in is ever used on a shared server.
-3. **The web app must renew Cognito tokens.**
+5. **The web app must renew Cognito tokens.**
    - Cognito ID tokens expire after about an hour, and the Flutter app does not yet use the
      refresh token to get a new one.
    - Without that, people are signed out every hour.
    - Store the refresh token with the access token (`SharedPrefsTokenStorage` already has a slot
      for it) and refresh it on 401 before giving up.
-4. **Build the web app for the live API:**
+6. **Build the web app for the live API:**
    - `flutter build web --release --dart-define=USE_MOCK=false --dart-define=API_BASE_URL=https://<api>`.
    - The default build is mock mode.
    - The admin "server connection" tab can override the API URL per browser. Hide it, or limit it
      to the admin, in production.
-5. **Configure CORS:** set `CAMPUSHUB_CORS_ALLOW_ORIGINS` to the web app's origin (S3 + CloudFront,
+7. **Configure CORS:** set `CAMPUSHUB_CORS_ALLOW_ORIGINS` to the web app's origin (S3 + CloudFront,
    Amplify or Vercel).
-6. **Ship the new Python dependency:** `cryptography` is now a direct dependency (the server
+8. **Ship the new Python dependency:** `cryptography` is now a direct dependency (the server
    creates messaging keys). It is in `requirements.txt` and builds for `linux/arm64`. Rebuild the
    Lambda image.
 
@@ -90,6 +111,23 @@ Update this page whenever a new shortcut or cloud dependency is added.
   `backend/scripts/calibrate_matching.py` re-measures them.
 - **Licence:** the MobileCLIP-S0 weights are under Apple's ML research licence (fine for this
   course project; check it before any commercial use). all-MiniLM-L6-v2 is Apache-2.0.
+
+## Automatic flagging
+
+- Text checks (prohibited items, gibberish, spam) run in the API with the bge-small model it already
+  has. The obscene-photo check needs the 87 MB NSFW model, which only the matcher image includes
+  (`Dockerfile.matcher` fetches it). With `CAMPUSHUB_MATCH_FUNCTION` set, the API invokes the matcher
+  with `{"screen": "listing", "id": ...}` after posts with photos. Without a matcher, photos go
+  unchecked; everything else still works.
+- `CAMPUSHUB_AUTO_FLAG=false` turns all automatic flagging off.
+
+## Category suggestion
+
+- The API image now includes ONNX Runtime and the 34 MB bge-small-en-v1.5 model (fetched and
+  checksum-checked by `Dockerfile.lambda` / `Dockerfile`). Nothing else to deploy.
+- The first suggestion in a new container takes about 0.35 s (loading the model and embedding recent
+  listings); later ones about 6 ms. Give the API Lambda at least 512 MB.
+- Tune with `CAMPUSHUB_CATEGORY_SUGGEST_THRESHOLD` (0.52) and `..._MARGIN` (0.03).
 
 ## Phone verification
 

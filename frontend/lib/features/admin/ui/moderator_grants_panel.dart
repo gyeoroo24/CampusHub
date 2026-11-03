@@ -14,11 +14,15 @@ const moduleLabels = {
   'lost_found': 'Lost & Found',
   'academic_help': 'Academic Help',
   'placement_hub': 'Placement Hub',
+  'events': 'Events',
 };
 
+/// The modules an admin can appoint moderators for. Academic Help has no section in the app, so it
+/// isn't offered (older Academic Help grants still show in the list and can be removed).
+const _appointableModules = ['buy_sell', 'lost_found', 'placement_hub', 'events'];
+
 /// Grant and revoke moderator roles (FR-3), by the rules the API enforces:
-/// - the admin grants any role: module-wide for Buy & Sell, Lost & Found and Placement Hub;
-///   per department or per course for Academic Help;
+/// - the admin grants module-wide roles for Buy & Sell, Lost & Found, Placement Hub and Events;
 /// - a department moderator grants and revokes course moderators for courses in their department.
 /// The person must have signed in to CampusHub once, so their account exists.
 class ModeratorGrantsPanel extends ConsumerStatefulWidget {
@@ -182,9 +186,10 @@ class _ModeratorGrantsPanelState extends ConsumerState<ModeratorGrantsPanel> {
                         const SizedBox(height: 4),
                         Text(
                           me.isAdmin
-                              ? 'Buy & Sell, Lost & Found and Placement Hub moderators cover the whole module. '
-                                  'Academic Help moderators cover one department (its courses, materials and feedback) '
-                                  'or one course. The person must have signed in to CampusHub once.'
+                              ? 'Buy & Sell, Lost & Found, Placement Hub and Events moderators cover the whole module: '
+                                  'they handle its reports and can remove anyone\'s posts there. Placement Hub moderators '
+                                  'also add companies, dates and placement sheets; Events moderators manage event tags. '
+                                  'The person must have signed in to CampusHub once.'
                               : 'As a department moderator you can appoint moderators for courses in your department. '
                                   'The person must have signed in to CampusHub once.',
                           style: TextStyle(fontSize: 12, color: theme.hintColor),
@@ -210,8 +215,8 @@ class _ModeratorGrantsPanelState extends ConsumerState<ModeratorGrantsPanel> {
                                   initialValue: _module,
                                   decoration: box('Module'),
                                   items: [
-                                    for (final e in moduleLabels.entries)
-                                      DropdownMenuItem(value: e.key, child: Text(e.value)),
+                                    for (final m in _appointableModules)
+                                      DropdownMenuItem(value: m, child: Text(moduleLabels[m]!)),
                                   ],
                                   onChanged: (v) => setState(() => _module = v ?? _module),
                                 ),

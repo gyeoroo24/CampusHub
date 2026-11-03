@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../../core/utils/numbers_only_formatter.dart';
+import '../../../../core/widgets/category_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/models/category_ref.dart';
 import '../../domain/buy_sell_item.dart';
@@ -14,12 +17,25 @@ class EditListingDialog extends ConsumerStatefulWidget {
 }
 
 class _EditListingDialogState extends ConsumerState<EditListingDialog> {
+  bool _numbersOnly = false;
+  Timer? _numbersOnlyTimer;
+
+  /// Shows "only numbers" under the price for a few seconds after a letter is typed or pasted.
+  void _flashNumbersOnly() {
+    _numbersOnlyTimer?.cancel();
+    if (!_numbersOnly) setState(() => _numbersOnly = true);
+    _numbersOnlyTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _numbersOnly = false);
+    });
+  }
+
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _titleController;
   late final TextEditingController _priceController;
   late final TextEditingController _locationController;
   late final TextEditingController _descController;
   CategoryRef? _selectedCategory;
+  late bool _negotiable = widget.item.negotiable;
   bool _isSaving = false;
 
   @override
@@ -34,6 +50,7 @@ class _EditListingDialogState extends ConsumerState<EditListingDialog> {
 
   @override
   void dispose() {
+    _numbersOnlyTimer?.cancel();
     _titleController.dispose();
     _priceController.dispose();
     _locationController.dispose();
@@ -54,6 +71,7 @@ class _EditListingDialogState extends ConsumerState<EditListingDialog> {
             price: price,
             categoryId: _selectedCategory?.id,
             location: _locationController.text.trim(),
+            negotiable: _negotiable,
           );
 
       ref.invalidate(buySellListingsProvider);
@@ -102,6 +120,7 @@ class _EditListingDialogState extends ConsumerState<EditListingDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TextFormField(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   controller: _titleController,
                   maxLength: 120,
                   decoration: const InputDecoration(
@@ -117,10 +136,14 @@ class _EditListingDialogState extends ConsumerState<EditListingDialog> {
                 ),
                 const SizedBox(height: 8),
                 TextFormField(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   controller: _priceController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
+                  inputFormatters: [NumbersOnlyFormatter(onRejected: _flashNumbersOnly)],
+                  decoration: InputDecoration(
                     labelText: 'Price (₹) *',
+                    helperText: _numbersOnly ? 'Only numbers can go here, e.g. 1500 or 99.50' : null,
+                    helperStyle: const TextStyle(color: Colors.orange),
                     prefixText: '₹ ',
                   ),
                   validator: (val) {
@@ -134,6 +157,15 @@ class _EditListingDialogState extends ConsumerState<EditListingDialog> {
                     return null;
                   },
                 ),
+                const SizedBox(height: 4),
+                CheckboxListTile(
+                  value: _negotiable,
+                  onChanged: (v) => setState(() => _negotiable = v ?? false),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text('Price is negotiable'),
+                ),
                 const SizedBox(height: 8),
                 categoriesAsync.when(
                   data: (cats) {
@@ -142,10 +174,9 @@ class _EditListingDialogState extends ConsumerState<EditListingDialog> {
                         ? matchingCategory.first
                         : (cats.isNotEmpty ? cats.first : _selectedCategory);
 
-                    return DropdownButtonFormField<CategoryRef>(
-                      initialValue: currentValue,
-                      decoration: const InputDecoration(labelText: 'Category *'),
-                      items: cats.map((c) => DropdownMenuItem(value: c, child: Text(c.name))).toList(),
+                    return CategoryPicker(
+                      categories: cats,
+                      value: currentValue,
                       onChanged: (val) => setState(() => _selectedCategory = val),
                     );
                   },
@@ -153,18 +184,15 @@ class _EditListingDialogState extends ConsumerState<EditListingDialog> {
                     padding: EdgeInsets.symmetric(vertical: 8.0),
                     child: LinearProgressIndicator(),
                   ),
-                  error: (_, __) => DropdownButtonFormField<CategoryRef>(
-                    initialValue: _selectedCategory,
-                    decoration: const InputDecoration(labelText: 'Category *'),
-                    items: [
-                      if (_selectedCategory != null)
-                        DropdownMenuItem(value: _selectedCategory, child: Text(_selectedCategory!.name)),
-                    ],
+                  error: (_, __) => CategoryPicker(
+                    categories: [if (_selectedCategory != null) _selectedCategory!],
+                    value: _selectedCategory,
                     onChanged: (val) => setState(() => _selectedCategory = val),
                   ),
                 ),
                 const SizedBox(height: 8),
                 TextFormField(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   controller: _locationController,
                   maxLength: 200,
                   decoration: const InputDecoration(
@@ -174,6 +202,7 @@ class _EditListingDialogState extends ConsumerState<EditListingDialog> {
                 ),
                 const SizedBox(height: 8),
                 TextFormField(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   controller: _descController,
                   maxLines: 4,
                   maxLength: 5000,

@@ -8,8 +8,8 @@
 What it adds: ~50 students, departments and courses (CDS courses from
 https://cds.iisc.ac.in/courses/descriptions/ plus a few CSA / EE / ECE ones), three years of
 course feedback, materials (small placeholder PDFs uploaded to MinIO), forum threads, Buy & Sell
-listings, Wanted posts, saved searches, Lost & Found reports, companies with placement records
-and interview experiences, events, bookmarks, reports for the moderation queue and notifications.
+listings, Wanted posts, saved searches, Lost & Found reports (no Placement Hub data: that comes only
+from real imports), events, bookmarks, reports for the moderation queue and notifications.
 No chat messages: those are end-to-end encrypted, so only people's own apps can write them.
 
 Every dummy user has an email from SEED_USERS and signs in like any dev user, e.g.
@@ -264,30 +264,6 @@ LF_ITEMS = {
     "Jacket": ["Grey hoodie (L)", "Navy blue windcheater"],
     "Notebook": ["Blue notebook with DS 252 notes", "Spiral notebook full of numerical methods notes"],
 }
-
-COMPANIES = [
-    ("Google", "Search, cloud and AI products.", ["Software Engineer", "Research Engineer"]),
-    ("Microsoft", "Cloud, productivity and AI.", ["Software Engineer", "Data Scientist"]),
-    ("Amazon", "E-commerce and AWS.", ["SDE", "Applied Scientist"]),
-    ("NVIDIA", "GPUs and accelerated computing.", ["Deep Learning Engineer", "GPU Architect"]),
-    ("Qualcomm", "Wireless and mobile chipsets.", ["Systems Engineer", "ML Engineer"]),
-    ("Goldman Sachs", "Investment banking and securities.", ["Quant Strategist", "Analyst"]),
-    ("JP Morgan Chase", "Financial services.", ["Quantitative Researcher", "Software Engineer"]),
-    ("Texas Instruments", "Analog and embedded processing.", ["Digital Design Engineer", "Analog Design Engineer"]),
-    ("Intel", "Processors and platforms.", ["Graphics Software Engineer", "Performance Engineer"]),
-    ("Samsung R&D Bangalore", "Research for mobile and devices.", ["Engineer", "Lead Engineer"]),
-    ("Adobe", "Creative and document software.", ["Member of Technical Staff", "Research Engineer"]),
-    ("Walmart Global Tech", "Retail technology.", ["Data Scientist", "Software Engineer"]),
-    ("Arista Networks", "Cloud networking.", ["Software Engineer"]),
-    ("Tower Research Capital", "High-frequency trading.", ["Core Engineer", "Quant Researcher"]),
-    ("Flipkart", "E-commerce.", ["SDE", "Data Scientist"]),
-]
-DSA = ["two pointers on a sorted array", "LRU cache design", "top-k frequent elements", "binary search on the answer",
-       "shortest path with Dijkstra", "longest increasing subsequence", "merge intervals", "trie for autocomplete",
-       "detect a cycle in a directed graph", "sliding window maximum"]
-TECH = ["bias-variance trade-off", "how gradient descent converges", "virtual memory and TLBs", "cache coherence",
-        "designing a URL shortener", "probability puzzles", "CUDA thread blocks and warps", "SQL joins and indexes",
-        "transformer attention", "MapReduce vs Spark", "consistent hashing", "options pricing basics"]
 
 EVENT_TAGS = ["Sports", "Culture", "Food/Mess", "Nature", "Photography", "Tech Talks", "Music", "Workshops"]
 EVENTS = [
@@ -691,60 +667,8 @@ async def seed(conn: asyncpg.Connection, s3, bucket: str) -> dict:
             "message": f"Someone found an item in “{m['name']}”, which matches your lost report."},
             rng.random() < 0.4, m["created_at"]))
 
-    # placement hub: companies, JDs, PPTs, interview experiences, three years of placement sheets
-    company_ids = {}
-    for name, desc, roles in COMPANIES:
-        await conn.execute("INSERT INTO companies (name, description) VALUES ($1, $2) ON CONFLICT (name_key) DO NOTHING",
-                           name, desc)
-        cid = await conn.fetchval(
-            "SELECT id FROM companies WHERE name_key = lower(regexp_replace(btrim($1), '\\s+', ' ', 'g'))", name)
-        company_ids[name] = cid
-        for role in roles:
-            await conn.execute("INSERT INTO job_descriptions (company_id, role_title) VALUES ($1, $2)", cid, role)
-        if rng.random() < 0.6:
-            await conn.execute("INSERT INTO ppt_info (company_id, details, scheduled_at) VALUES ($1, $2, $3)", cid,
-                               f"Pre-placement talk by {name}: roles, process and Q&A. Venue: Faculty Hall.",
-                               NOW + timedelta(days=rng.randint(3, 40), hours=rng.randint(0, 8)))
-    n_exp = 0
-    for name, _, roles in COMPANIES:
-        for _ in range(rng.randint(1, 4)):
-            role = rng.choice(roles)
-            q1, q2 = rng.sample(DSA, 2)
-            t1, t2 = rng.sample(TECH, 2)
-            difficulty = rng.choice(["Easy", "Medium", "Medium", "Hard"])
-            content = (f"Role: {role}.\n"
-                       f"Round 1 (online assessment, 90 min): two coding questions, {q1} and {q2}.\n"
-                       f"Round 2 (technical): {t1}; then a deep dive into my M.Tech project.\n"
-                       f"Round 3 (technical/managerial): {t2} and a discussion of trade-offs.\n"
-                       f"Round 4 (HR): why {name}, relocation, and timelines.\n"
-                       f"Difficulty: {difficulty}. Tip: {rng.choice(ADVICE).format(topic=t1)}")
-            await conn.execute(
-                """INSERT INTO interview_experiences (company_id, author_id, role_title, content, created_at, updated_at)
-                   VALUES ($1, $2, $3, $4, $5, $5)""", company_ids[name], rng.choice(users), role, content,
-                days_ago(20, 700))
-            n_exp += 1
-    counts["interview experiences"] = n_exp
-    n_records = 0
-    for year in (2024, 2025, 2026):
-        rows, seen = [], set()
-        for name, _, roles in COMPANIES:
-            for _ in range(rng.randint(1, 9)):
-                while True:
-                    email = f"{rng.choice(FIRST).lower()}{rng.choice(LAST).lower()}{rng.randint(1, 99)}@iisc.ac.in"
-                    if email not in seen:
-                        seen.add(email)
-                        break
-                rows.append((year, f"Slot {rng.randint(1, 3)}", company_ids[name], rng.choice(roles), email))
-        import_id = await conn.fetchval(
-            """INSERT INTO placement_bulk_imports (moderator_id, placement_year, source_s3_key, rows_total, rows_created,
-                                                   rows_updated, rows_rejected, imported_at)
-               VALUES ($1, $2, $3, $4, $4, 0, 0, $5) RETURNING id""",
-            mods["placement_hub"], year, f"placement-imports/seed-{year}.csv", len(rows), at(year, 7, 15))
-        await conn.executemany(
-            """INSERT INTO placement_records (import_id, placement_year, slot, company_id, role_title, student_email)
-               VALUES ($6, $1, $2, $3, $4, $5)""", [r + (import_id,) for r in rows])
-        n_records += len(rows)
-    counts["placement records"] = n_records
+    # Placement Hub gets no dummy data: companies, roles, dates and hiring numbers come only from what
+    # moderators import or type in (the real placement office files).
 
     # events, tag follows, bookmarks
     tag_ids = {}

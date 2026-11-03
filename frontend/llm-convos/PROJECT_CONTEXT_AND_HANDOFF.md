@@ -183,8 +183,8 @@ CampusHub/frontend/lib/
       5. Deactivated Member Contact Privacy: Verified backend behavior masking contacts (`null`) for deactivated users; frontend models gracefully handle `null` contact info without crashes.
       6. Extended Admin Edit Permissions: Backend now authorizes admins to edit listings/reports and update listing status across modules.
   * Iteration 7.7 / Step 11 Live FastAPI Backend Integration & LAN Dev Auth:
-    * Verified live connectivity to teammate server at `http://10.217.103.203:8000`.
-    * Implemented team LAN authentication: injected `X-Dev-Key` (`kSH3AyYRCzXn8Czy8xXCZbC9`) and session `X-Dev-User` / `X-Dev-Name` in `ApiClient` interceptors.
+    * Verified live connectivity to teammate server at `http://<backend-ip>:8000`.
+    * Implemented team LAN authentication: injected `X-Dev-Key` (`<dev-key>`) and session `X-Dev-User` / `X-Dev-Name` in `ApiClient` interceptors.
     * Added comprehensive automated live integration test (`live_backend_integration_test.dart`) verifying categories, guest browsing, user auth, listing lifecycle (create, query, status update, delete), and lost/found feeds directly against the live backend server.
   * Iteration 7.8 / Step 12 Single-Admin Handover, Global Refresh & Full UI Synchronization (Commit `bc8e7e7`):
     * Switched `AppConfig.useMockData` default back to `true` (mock mode), with `apiBaseUrl` set to `http://localhost:8000`.

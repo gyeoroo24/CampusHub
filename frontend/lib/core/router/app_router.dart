@@ -16,6 +16,12 @@ import '../../features/academics/ui/courses_screen.dart';
 import '../../features/alerts/ui/notifications_button.dart';
 import '../../features/messages/ui/messages_screen.dart';
 import '../../features/campus_services/ui/campus_services_dialog.dart';
+import '../../features/events/providers/events_providers.dart';
+import '../../features/events/ui/event_dialogs.dart';
+import '../../features/events/ui/events_screen.dart';
+import '../../features/mess/ui/mess_screen.dart';
+import '../../features/placement/ui/company_screen.dart';
+import '../../features/placement/ui/placement_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Tab index provider — drives in-app tab switching WITHOUT browser history
@@ -25,7 +31,7 @@ final tabIndexProvider = StateProvider<int>((ref) => 0);
 // ---------------------------------------------------------------------------
 // GoRouter — direct routes for /buy and /lost-found with clean path strategy
 // ---------------------------------------------------------------------------
-// The three tabs share one page (same key), so switching tabs updates the shell in place instead
+// The tabs share one page (same key), so switching tabs updates the shell in place instead
 // of building a new page with a route transition.
 const _shellPageKey = ValueKey('app-shell');
 // Same idea for the inbox and an open conversation: opening a chat swaps the pane, no slide.
@@ -82,6 +88,31 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => CourseGuideScreen(courseId: state.pathParameters['id']!),
     ),
     GoRoute(
+      path: '/placements',
+      pageBuilder: (context, state) => const NoTransitionPage(key: _shellPageKey, child: AppShellLayout(initialTab: 3)),
+    ),
+    GoRoute(
+      path: '/placements/:id',
+      builder: (context, state) =>
+          CompanyScreen(companyId: state.pathParameters['id']!, initialTab: state.uri.queryParameters['tab']),
+    ),
+    GoRoute(
+      path: '/placement',
+      redirect: (_, __) => '/placements',
+    ),
+    GoRoute(
+      path: '/events',
+      pageBuilder: (context, state) => const NoTransitionPage(key: _shellPageKey, child: AppShellLayout(initialTab: 4)),
+    ),
+    GoRoute(
+      path: '/events/:id',
+      builder: (context, state) => EventDetailScreen(eventId: state.pathParameters['id']!),
+    ),
+    GoRoute(
+      path: '/mess',
+      builder: (context, state) => MessScreen(initialMessId: int.tryParse(state.uri.queryParameters['mess'] ?? '')),
+    ),
+    GoRoute(
       path: '/profile',
       builder: (context, state) => const UserProfileScreen(),
     ),
@@ -130,12 +161,26 @@ const _tabDestinations = [
     selectedIcon: Icons.school_rounded,
     label: 'Courses',
   ),
+  (
+    icon: Icons.work_outline_rounded,
+    selectedIcon: Icons.work_rounded,
+    label: 'Placement Hub',
+  ),
+  (
+    icon: Icons.event_outlined,
+    selectedIcon: Icons.event_rounded,
+    label: 'Events',
+  ),
 ];
+
+const _tabPaths = ['/buy', '/lost-found', '/courses', '/placements', '/events'];
 
 const _tabScreens = [
   BuySellFeedScreen(),
   LostFoundFeedScreen(),
   CoursesScreen(),
+  PlacementScreen(),
+  EventsScreen(),
 ];
 
 // ---------------------------------------------------------------------------
@@ -267,13 +312,14 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout> {
     ref.read(tabIndexProvider.notifier).state = newIndex;
 
     if (updateUrl) {
-      context.go(const ['/buy', '/lost-found', '/courses'][newIndex]);
+      context.go(_tabPaths[newIndex]);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final tabIndex = ref.watch(tabIndexProvider);
+    ref.watch(guestBookmarkSyncProvider); // moves a guest's saved events to their account at sign-in
     final isDesktop = MediaQuery.of(context).size.width > 750;
     final currentUser = ref.watch(currentUserProvider);
     final serverConfig = ref.watch(serverConfigProvider);
@@ -473,6 +519,9 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout> {
       bottomNavigationBar: isDesktop
           ? null
           : BottomNavigationBar(
+              type: BottomNavigationBarType.fixed, // five tabs: keep every label visible
+              selectedFontSize: 11,
+              unselectedFontSize: 11,
               currentIndex: tabIndex,
               onTap: _switchTab,
               selectedItemColor: theme.colorScheme.primary,

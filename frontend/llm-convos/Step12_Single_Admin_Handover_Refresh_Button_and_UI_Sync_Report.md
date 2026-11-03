@@ -48,8 +48,8 @@ When running or building Flutter, pass `--dart-define` flags:
   ```bash
   flutter run -d chrome \
     --dart-define=USE_MOCK=false \
-    --dart-define=API_BASE_URL=http://10.217.103.203:8000 \
-    --dart-define=DEV_KEY=kSH3AyYRCzXn8Czy8xXCZbC9
+    --dart-define=API_BASE_URL=http://<backend-ip>:8000 \
+    --dart-define=DEV_KEY=<dev-key>
   ```
 
 - **Connect to Local FastAPI on Your Machine (`127.0.0.1:8000`):**
@@ -67,8 +67,8 @@ static const bool useMockData = true;
 
 // To connect to a live backend:
 static const bool useMockData = false;
-static const String apiBaseUrl = 'http://10.217.103.203:8000'; // Or http://localhost:8000
-static const String devKey = 'kSH3AyYRCzXn8Czy8xXCZbC9';
+static const String apiBaseUrl = 'http://<backend-ip>:8000'; // Or http://localhost:8000
+static const String devKey = '<dev-key>';
 ```
 
 ---

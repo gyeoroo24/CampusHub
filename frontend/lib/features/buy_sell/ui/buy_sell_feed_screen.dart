@@ -209,8 +209,12 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
     _scrollController.dispose();
     // Filters are scoped to a visit of this tab, not the whole session — reset them
     // on the way out so switching tabs and back starts from a clean feed. Riverpod forbids
-    // writing a provider while the widget tree is being torn down, so this is deferred a tick.
-    Future(() => _filterNotifier.state = BuySellFilterState());
+    // writing a provider while the widget tree is being torn down, so this runs right after it (a
+    // microtask, not a timer). If the whole app went away meanwhile (sign-out, tests), there's
+    // nothing left to reset.
+    Future.microtask(() {
+      if (_filterNotifier.mounted) _filterNotifier.state = BuySellFilterState();
+    });
     super.dispose();
   }
 
@@ -373,14 +377,23 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                 children: [
                   Row(
                     children: [
-                      const BuySellSectionToggle(),
-                      const SizedBox(width: 10),
-                      FiltersButton(
-                        compact: isMobile,
-                        activeCount: activeFilters.length,
-                        onPressed: () => _openFilters(context, ref, filter, categoryPills, isWanted),
+                      // On a phone the section toggle and Filters scroll sideways rather than overflow.
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              const BuySellSectionToggle(),
+                              const SizedBox(width: 10),
+                              FiltersButton(
+                                compact: isMobile,
+                                activeCount: activeFilters.length,
+                                onPressed: () => _openFilters(context, ref, filter, categoryPills, isWanted),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                      const Spacer(),
                       if (!isWanted) ...[
                         IconButton(
                           iconSize: 20,

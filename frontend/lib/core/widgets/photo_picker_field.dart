@@ -58,12 +58,16 @@ class PhotoPickerField extends StatefulWidget {
   final int maxPhotos;
   final bool enabled;
 
+  /// Replaces the default "Photos (optional, …)" caption.
+  final String? label;
+
   const PhotoPickerField({
     super.key,
     required this.photos,
     required this.onChanged,
     this.maxPhotos = 10,
     this.enabled = true,
+    this.label,
   });
 
   @override
@@ -74,7 +78,13 @@ class _PhotoPickerFieldState extends State<PhotoPickerField> {
   String? _error;
 
   Future<void> _pick() async {
-    final files = await ImagePicker().pickMultiImage(imageQuality: 85, maxWidth: 2000);
+    final List<XFile> files;
+    if (widget.maxPhotos == 1) {
+      final one = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85, maxWidth: 2000);
+      files = one == null ? const [] : [one];
+    } else {
+      files = await ImagePicker().pickMultiImage(imageQuality: 85, maxWidth: 2000);
+    }
     if (files.isEmpty) return;
     final next = [...widget.photos];
     final skipped = <String>[];
@@ -101,7 +111,7 @@ class _PhotoPickerFieldState extends State<PhotoPickerField> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Photos (optional, up to ${widget.maxPhotos}; the first one is the cover)',
+        Text(widget.label ?? 'Photos (optional, up to ${widget.maxPhotos}; the first one is the cover)',
             style: TextStyle(fontSize: 12, color: theme.hintColor)),
         const SizedBox(height: 6),
         Wrap(

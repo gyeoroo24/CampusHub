@@ -1,9 +1,9 @@
 # CampusHub: Step 11 Live Backend Integration & Connectivity Report
 
 **Date:** 24 October 2026  
-**Backend Target URL:** `http://10.217.103.203:8000`  
-**S3/MinIO Storage URL:** `http://10.217.103.203:9000`  
-**Developer Security Key:** `kSH3AyYRCzXn8Czy8xXCZbC9`  
+**Backend Target URL:** `http://<backend-ip>:8000`  
+**S3/MinIO Storage URL:** `http://<backend-ip>:9000`  
+**Developer Security Key:** `<dev-key>`  
 **Mock Data Setting:** `useMockData = false` (Default active in `AppConfig`)  
 **Test Suite Status:** 30 / 30 Automated Tests Passing (100%)  
 **Static Code Analysis:** `flutter analyze` 0 issues (clean)
@@ -12,22 +12,22 @@
 
 ## 1. Executive Summary
 
-We established a live connection between the Flutter frontend and the backend FastAPI instance running on the teammate's laptop across the local network at `http://10.217.103.203:8000`.
+We established a live connection between the Flutter frontend and the backend FastAPI instance running on the teammate's laptop across the local network at `http://<backend-ip>:8000`.
 
 ### Key Connectivity Findings:
 1. **Network Authentication Protocol (`X-Dev-Key`)**:
-   - The remote backend enforces a custom developer security scheme for non-localhost callers: `X-Dev-Key: kSH3AyYRCzXn8Czy8xXCZbC9`.
+   - The remote backend enforces a custom developer security scheme for non-localhost callers: `X-Dev-Key: <dev-key>`.
    - When paired with `X-Dev-User: <iisc_email>`, the live FastAPI backend verifies network authorization and automatically provisions the user row in its PostgreSQL database.
 2. **Mock Backend Deactivation**:
    - Switched `AppConfig.useMockData` default from `true` to `false`.
-   - Updated `AppConfig.apiBaseUrl` default to `http://10.217.103.203:8000`.
-   - Added `AppConfig.devKey` default to `kSH3AyYRCzXn8Czy8xXCZbC9`.
+   - Updated `AppConfig.apiBaseUrl` default to `http://<backend-ip>:8000`.
+   - Added `AppConfig.devKey` default to `<dev-key>`.
 3. **End-to-End Live Validation**:
    - Categories loaded live from remote PostgreSQL: `books`, `bottle`, `cycles`, `hello`.
    - Direct HTTP operations verified end-to-end: Listing Creation (`POST`), Feed Listing (`GET`), Detail Retrieval (`GET /api/v1/listings/{id}`), Status Update (`PATCH /api/v1/listings/{id}/status`), and Soft Deletion (`DELETE /api/v1/listings/{id}`).
    - Privacy Gating: Confirmed live backend returns `seller_contact: null` to unauthenticated guests and reveals contact info once authenticated.
 4. **S3/MinIO Presigned Upload Verification**:
-   - Calling `POST /api/v1/uploads` generates presigned PUT tickets targeting the backend teammate's MinIO storage at `http://10.217.103.203:9000/campushub-uploads/...`.
+   - Calling `POST /api/v1/uploads` generates presigned PUT tickets targeting the backend teammate's MinIO storage at `http://<backend-ip>:9000/campushub-uploads/...`.
 
 ---
 
@@ -35,8 +35,8 @@ We established a live connection between the Flutter frontend and the backend Fa
 
 ### 2.1 Configuration Layer (`lib/core/constants/app_config.dart`)
 - Set `useMockData` to default to `false`.
-- Set `apiBaseUrl` to default to `http://10.217.103.203:8000`.
-- Added `devKey` set to `kSH3AyYRCzXn8Czy8xXCZbC9` with `--dart-define=DEV_KEY` override capability.
+- Set `apiBaseUrl` to default to `http://<backend-ip>:8000`.
+- Added `devKey` set to `<dev-key>` with `--dart-define=DEV_KEY` override capability.
 
 ### 2.2 Network Client Layer (`lib/core/api/api_client.dart`)
 - Updated `ApiClient` interceptor to attach `X-Dev-Key: AppConfig.devKey` to all requests targeting the backend base URL.
@@ -52,7 +52,7 @@ We established a live connection between the Flutter frontend and the backend Fa
 - Ensures unit and widget tests remain fast, offline, and independent of laptop network availability.
 
 ### 2.5 Live Integration Test Suite (`test/live_backend_integration_test.dart`)
-Created an automated end-to-end live integration test executing 5 scenarios directly against `http://10.217.103.203:8000`:
+Created an automated end-to-end live integration test executing 5 scenarios directly against `http://<backend-ip>:8000`:
 - **Scenario 1:** Backend connectivity & category fetching (`GET /api/v1/buy-sell/categories`).
 - **Scenario 2:** Unauthenticated guest feed browsing (`GET /api/v1/listings`).
 - **Scenario 3:** User dev sign-in & PostgreSQL user creation (`GET /api/v1/me`).

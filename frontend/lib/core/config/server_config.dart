@@ -51,7 +51,7 @@ class ServerConfigNotifier extends StateNotifier<ServerConfig> {
           apiBaseUrl: AppConfig.apiBaseUrl,
           devKey: AppConfig.devKey,
           devUserEmail: 'mukund@iisc.ac.in',
-          databaseUrl: 'postgresql://postgres:password@10.217.103.203:5432/campushub',
+          databaseUrl: null,
         )) {
     _loadFromPrefs();
   }
@@ -69,7 +69,7 @@ class ServerConfigNotifier extends StateNotifier<ServerConfig> {
       final nextBase = (savedBaseUrl != null && savedBaseUrl.isNotEmpty) ? savedBaseUrl : AppConfig.apiBaseUrl;
       final nextKey = (savedDevKey != null && savedDevKey.isNotEmpty) ? savedDevKey : AppConfig.devKey;
       final nextUser = (savedDevUser != null && savedDevUser.isNotEmpty) ? savedDevUser : 'mukund@iisc.ac.in';
-      final nextDb = savedDbUrl ?? 'postgresql://postgres:password@10.217.103.203:5432/campushub';
+      final nextDb = savedDbUrl;
 
       state = ServerConfig(
         useMockData: nextMock,
@@ -128,7 +128,7 @@ class ServerConfigNotifier extends StateNotifier<ServerConfig> {
       apiBaseUrl: AppConfig.defaultApiBaseUrl,
       devKey: AppConfig.defaultDevKey,
       devUserEmail: 'mukund@iisc.ac.in',
-      databaseUrl: 'postgresql://postgres:password@10.217.103.203:5432/campushub',
+      databaseUrl: null,
     );
 
     AppConfig.useMockData = AppConfig.defaultUseMockData;

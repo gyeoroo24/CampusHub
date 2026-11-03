@@ -6,6 +6,8 @@ class ContentReport {
   final String module; // 'buy_sell', 'lost_found', 'academic_help', 'placement_hub'
   final String targetType; // 'listing', 'lost_report', 'found_report', etc.
   final String targetId;
+  final String? targetTitle; // short title of the reported item, for the moderation queue
+  final String source; // 'user', or 'system' for an automatic flag (future plan §1.6)
   final String reason;
   final String status; // 'open', 'actioned', 'dismissed'
   final UserRef? reporter;
@@ -18,6 +20,8 @@ class ContentReport {
     required this.module,
     required this.targetType,
     required this.targetId,
+    this.targetTitle,
+    this.source = 'user',
     required this.reason,
     required this.status,
     this.reporter,
@@ -32,6 +36,8 @@ class ContentReport {
       module: json['module']?.toString() ?? '',
       targetType: json['target_type']?.toString() ?? '',
       targetId: json['target_id']?.toString() ?? '',
+      targetTitle: json['target_title']?.toString(),
+      source: json['source']?.toString() ?? 'user',
       reason: json['reason']?.toString() ?? '',
       status: json['status']?.toString() ?? 'open',
       reporter: json['reporter'] != null && json['reporter'] is Map<String, dynamic>
@@ -53,6 +59,8 @@ class ContentReport {
       'module': module,
       'target_type': targetType,
       'target_id': targetId,
+      if (targetTitle != null) 'target_title': targetTitle,
+      'source': source,
       'reason': reason,
       'status': status,
       if (reporter != null) 'reporter': reporter!.toJson(),

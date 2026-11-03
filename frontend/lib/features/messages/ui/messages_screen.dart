@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +10,7 @@ import '../../../core/utils/web_history_support.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../auth/ui/auth_dialog.dart';
 import '../data/messages_repository.dart';
+import '../domain/messages_models.dart';
 import '../providers/messages_providers.dart';
 import 'chat_setup_panel.dart';
 import 'conversation_view.dart';
@@ -56,16 +59,22 @@ Future<void> openChatAbout(BuildContext context, WidgetRef ref, Map<String, Stri
   }
   final router = GoRouter.of(context);
   final navigator = Navigator.of(context);
+  // Opened from a dialog (a listing, a search): close it. From a page (a company), leave the page be.
+  final inDialog = ModalRoute.of(context) is PopupRoute;
   final messenger = ScaffoldMessenger.of(context);
   try {
     final started = await repo.startConversation(target);
     ref.invalidate(conversationsProvider);
-    if (navigator.canPop()) {
+    if (inDialog && navigator.canPop()) {
       navigator.pop();   // close the listing dialog
       await WebHistoryManager.instance.settled;
     }
-    final topic = started.topicId == null ? '' : '?topic=${started.topicId}';
-    router.go('/messages/${started.conversation.id}$topic');
+    // A general chat (someone picked from search or a company's seniors) starts on no item at all.
+    final topic = started.topicId != null
+        ? '?topic=${started.topicId}'
+        : (target.containsKey('user_id') ? '?topic=$generalTopic' : '');
+    // Pushed, so Back returns to where the chat was opened from (a company page, a listing...).
+    router.push('/messages/${started.conversation.id}$topic');
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text(errorText(e)), behavior: SnackBarBehavior.floating));
   }
@@ -135,7 +144,7 @@ class MessagesScreen extends ConsumerWidget {
         key: ValueKey(conversationId),
         conversationId: conversationId!,
         initialTopicId: topicId,
-        onBack: () => context.go('/messages'),
+        onBack: () => context.replace('/messages'),
       );
     } else {
       body = const _Inbox();
@@ -148,9 +157,19 @@ class MessagesScreen extends ConsumerWidget {
               leading: IconButton(
                 tooltip: 'Back to CampusHub',
                 icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: () => context.go('/buy'),
+                onPressed: () => context.canPop() ? context.pop() : context.go('/buy'),
               ),
               title: const Text('Messages'),
+              // The people search sits in the middle of the bar (on phones, under the title row).
+              flexibleSpace: session?.isReady == true && MediaQuery.of(context).size.width >= 720
+                  ? const SafeArea(child: Center(child: _PeopleSearch()))
+                  : null,
+              bottom: session?.isReady == true && MediaQuery.of(context).size.width < 720
+                  ? const PreferredSize(
+                      preferredSize: Size.fromHeight(52),
+                      child: Padding(padding: EdgeInsets.fromLTRB(12, 0, 12, 6), child: _PeopleSearch()),
+                    )
+                  : null,
               actions: [if (session?.isReady == true) const _SecurityMenu()],
             ),
       body: SafeArea(child: body),
@@ -195,7 +214,8 @@ class _Inbox extends ConsumerWidget {
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Text(
-                'No conversations yet. Tap “Message” on a Buy & Sell listing or a Lost & Found post to start one.',
+                'No conversations yet. Tap “Message” on a Buy & Sell listing or a Lost & Found post, or search '
+                'for someone by name or email above.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: theme.hintColor),
               ),
@@ -268,14 +288,175 @@ class _Inbox extends ConsumerWidget {
                 ),
                 isThreeLine: true,
                 onTap: () {
-                  context.go('/messages/${c.id}');
+                  // Replace, not go: keeps whatever page opened Messages underneath for Back.
+                  context.replace('/messages/${c.id}');
                   ref.invalidate(conversationsProvider);
                 },
+                onLongPress: () => _confirmDelete(context, ref, c),
+                trailing: PopupMenuButton<String>(
+                  tooltip: 'Chat options',
+                  icon: Icon(Icons.more_vert_rounded, size: 18, color: theme.hintColor),
+                  onSelected: (v) => v == 'delete' ? _confirmDelete(context, ref, c) : _toggleBlock(context, ref, c),
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'block',
+                      child: Text(c.blockedByMe ? 'Unblock ${c.peerName}' : 'Block ${c.peerName}',
+                          style: TextStyle(color: c.blockedByMe ? null : Colors.red.shade700)),
+                    ),
+                    PopupMenuItem(value: 'delete', child: Text('Delete chat', style: TextStyle(color: Colors.red.shade700))),
+                  ],
+                ),
               );
             },
           ),
         );
       },
+    );
+  }
+}
+
+/// Blocks or unblocks the person in a chat (from its ⋮ menu in the list). Blocking asks first.
+Future<void> _toggleBlock(BuildContext context, WidgetRef ref, Conversation c) async {
+  final block = !c.blockedByMe;
+  if (block) {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Block ${c.peerName}?'),
+        content: const Text('They won’t be able to message you or start chats with you. They won’t be told. '
+            'You can unblock them any time.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Block'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+  }
+  try {
+    final repo = ref.read(messagesRepositoryProvider)!;
+    block ? await repo.block(c.peerId) : await repo.unblock(c.peerId);
+    ref.invalidate(conversationsProvider);
+    ref.invalidate(conversationControllerProvider(c.id));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(block ? 'Blocked ${c.peerName}.' : 'Unblocked ${c.peerName}.'),
+          behavior: SnackBarBehavior.floating));
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorText(e)), behavior: SnackBarBehavior.floating));
+    }
+  }
+}
+
+/// Deletes a chat for me only (the other person keeps it; new messages bring it back).
+Future<void> _confirmDelete(BuildContext context, WidgetRef ref, Conversation c) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('Delete your chat with ${c.peerName}?'),
+      content: Text('It disappears from your messages. ${c.peerName} keeps their copy. If they write again, '
+          'you’ll see only the new messages.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Delete chat'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+  try {
+    await ref.read(messagesRepositoryProvider)!.deleteConversation(c.id);
+    ref.invalidate(conversationsProvider);
+    if (context.mounted && GoRouterState.of(context).uri.path == '/messages/${c.id}') context.replace('/messages');
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorText(e)), behavior: SnackBarBehavior.floating));
+    }
+  }
+}
+
+/// The search bar in the Messages top bar: find anyone on CampusHub by name or email and open a
+/// general chat (about no item) with them.
+class _PeopleSearch extends ConsumerStatefulWidget {
+  const _PeopleSearch();
+
+  @override
+  ConsumerState<_PeopleSearch> createState() => _PeopleSearchState();
+}
+
+class _PeopleSearchState extends ConsumerState<_PeopleSearch> {
+  final _controller = SearchController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<Iterable<Widget>> _suggestions(BuildContext context, SearchController controller) async {
+    final q = controller.text.trim();
+    final theme = Theme.of(context);
+    if (q.length < 2) {
+      return [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text('Type a name or email to start a chat.', style: TextStyle(color: theme.hintColor)),
+        ),
+      ];
+    }
+    try {
+      final people = await ref.read(messagesRepositoryProvider)!.searchUsers(q);
+      if (people.isEmpty) {
+        return [Padding(padding: const EdgeInsets.all(16), child: Text('Nobody found for “$q”.'))];
+      }
+      return [
+        for (final u in people)
+          ListTile(
+            leading: CircleAvatar(
+              backgroundColor: theme.colorScheme.primary,
+              child: Text(u.name.isEmpty ? '?' : u.name[0].toUpperCase(),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+            title: Text(u.name),
+            subtitle: Text([u.email, if (u.programme != null) u.programme!].join(' · '), overflow: TextOverflow.ellipsis),
+            trailing: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+            onTap: () {
+              controller.closeView('');
+              openChatAbout(this.context, ref, {'user_id': u.id});
+            },
+          ),
+      ];
+    } catch (e) {
+      return [Padding(padding: const EdgeInsets.all(16), child: Text(errorText(e)))];
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: SizedBox(
+        width: width < 720 ? double.infinity : 380,
+        child: SearchAnchor.bar(
+          searchController: _controller,
+          barHintText: 'Search people to chat with',
+          barLeading: const Icon(Icons.search_rounded, size: 20),
+          barElevation: const WidgetStatePropertyAll(0),
+          constraints: const BoxConstraints(minHeight: 40),
+          viewHintText: 'Name or email',
+          suggestionsBuilder: _suggestions,
+        ),
+      ),
     );
   }
 }

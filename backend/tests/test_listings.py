@@ -95,8 +95,36 @@ def test_moderator_removes_listing_and_revoked_moderator_cannot(client):
     assert grant(client, ADMIN, "meera@iisc.ac.in", "buy_sell").status_code == 409
 
 
-def test_owner_delete_is_soft_and_attributed(client):
+def test_delete_is_permanent(client):
+    """Deleting a listing removes it, its reports and watches from the database (rev 23), even when a
+    report is still open; a chat about it stays, showing the listing as removed under its old title."""
     listing = _listing(client, ASHA, category(client, ASHA, "buy-sell", "Cycles"))
-    assert client.delete(f"{API}/listings/{listing['id']}", headers=ASHA).status_code == 204
-    row = sql("SELECT deleted_at IS NOT NULL AS deleted, deleted_by FROM listings WHERE id = $1::uuid", listing["id"])[0]
-    assert row["deleted"] and str(row["deleted_by"]) == sign_in(client, ASHA)
+    lid = listing["id"]
+    assert client.post(f"{API}/reports", headers=RAVI, json={
+        "target_type": "listing", "target_id": lid, "reason": "looks stolen"}).status_code == 201
+    assert client.put(f"{API}/listings/{lid}/watch", headers=RAVI).status_code == 204
+    chat = client.post(f"{API}/chat/conversations", headers=RAVI, json={"listing_id": lid})
+    assert chat.status_code == 201, chat.text
+
+    assert client.delete(f"{API}/listings/{lid}", headers=ASHA).status_code == 204
+    assert sql("SELECT count(*) AS n FROM listings WHERE id = $1::uuid", lid)[0]["n"] == 0
+    assert sql("SELECT count(*) AS n FROM reports WHERE target_id = $1::uuid", lid)[0]["n"] == 0
+    assert sql("SELECT count(*) AS n FROM listing_watches WHERE listing_id = $1::uuid", lid)[0]["n"] == 0
+    assert client.delete(f"{API}/listings/{lid}", headers=ASHA).status_code == 404
+    topic = next(t for t in client.get(f"{API}/chat/conversations/{chat.json()['conversation']['id']}",
+                                       headers=RAVI).json()["topics"] if t["ref_id"] == lid)
+    assert topic["is_removed"] and topic["title"] == listing["title"]
+    assert str(topic["owner_id"]) == sign_in(client, ASHA)
+
+
+def test_strike_outlives_deleted_listing(client):
+    """A seller deleting a listing a moderator removed doesn't erase the strike: it keeps the title."""
+    make_admin(client, ADMIN)
+    listing = _listing(client, ASHA, category(client, ASHA, "buy-sell", "Cycles"))
+    client.post(f"{API}/reports", headers=RAVI, json={
+        "target_type": "listing", "target_id": listing["id"], "reason": "counterfeit"})
+    assert client.delete(f"{API}/listings/{listing['id']}", headers=ADMIN).status_code == 204   # strike + hide
+    assert client.delete(f"{API}/listings/{listing['id']}", headers=ASHA).status_code == 204    # gone for good
+    assert sql("SELECT count(*) AS n FROM listings WHERE id = $1::uuid", listing["id"])[0]["n"] == 0
+    strikes = client.get(f"{API}/me/seller-strikes", headers=ASHA).json()
+    assert [(s["listing_id"], s["listing_title"]) for s in strikes] == [(None, listing["title"])]

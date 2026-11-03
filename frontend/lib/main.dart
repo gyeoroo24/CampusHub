@@ -18,7 +18,11 @@ class CampusHubApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(themeModeInitProvider); // applies the saved light/dark choice once, on start
     final themeMode = ref.watch(themeModeProvider);
+    ref.listen(themeModeProvider, (prev, next) {
+      if (prev != next) ThemeModeStorage.save(next);
+    });
 
     return MaterialApp.router(
       title: 'CampusHub | IISc',

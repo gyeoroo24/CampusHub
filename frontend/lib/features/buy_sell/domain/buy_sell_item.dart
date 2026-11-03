@@ -34,6 +34,16 @@ class ListingItem {
   final String location;
   final CategoryRef category;
   final UserRef seller;
+  /// 'negative' or 'blocked', from moderator-confirmed removals against this seller (future plan
+  /// §1.5). Null for everyone else - there is no positive badge, only this warning.
+  final String? sellerTrustTag;
+  /// Seller marked the price as open to offers (future plan §2.3).
+  final bool negotiable;
+  /// Flagged automatically as a possible prohibited item and hidden from others until a moderator
+  /// decides (future plan §1.6). Only the seller and moderators ever see it true.
+  final bool heldForReview;
+  /// The signed-in viewer is watching it for price changes (detail view only).
+  final bool watching;
   final String? coverPhotoUrl;
   final List<Photo> photos;
   final Contact? sellerContact;
@@ -49,6 +59,10 @@ class ListingItem {
     this.location = '',
     required this.category,
     required this.seller,
+    this.sellerTrustTag,
+    this.negotiable = false,
+    this.heldForReview = false,
+    this.watching = false,
     this.coverPhotoUrl,
     this.photos = const [],
     this.sellerContact,
@@ -76,6 +90,10 @@ class ListingItem {
     String? location,
     CategoryRef? category,
     UserRef? seller,
+    String? sellerTrustTag,
+    bool? negotiable,
+    bool? heldForReview,
+    bool? watching,
     String? coverPhotoUrl,
     List<Photo>? photos,
     Contact? sellerContact,
@@ -91,6 +109,10 @@ class ListingItem {
       location: location ?? this.location,
       category: category ?? this.category,
       seller: seller ?? this.seller,
+      sellerTrustTag: sellerTrustTag ?? this.sellerTrustTag,
+      negotiable: negotiable ?? this.negotiable,
+      heldForReview: heldForReview ?? this.heldForReview,
+      watching: watching ?? this.watching,
       coverPhotoUrl: coverPhotoUrl ?? this.coverPhotoUrl,
       photos: photos ?? this.photos,
       sellerContact: sellerContact ?? this.sellerContact,

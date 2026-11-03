@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:campus_hub/core/models/category_ref.dart';
 import 'package:campus_hub/core/models/contact.dart';
 import 'package:campus_hub/core/models/user_ref.dart';
+import 'package:campus_hub/features/auth/domain/user.dart';
+import 'package:campus_hub/features/auth/providers/auth_providers.dart';
 import 'package:campus_hub/features/buy_sell/data/mock_buy_sell_repository.dart';
 import 'package:campus_hub/features/buy_sell/domain/buy_sell_item.dart';
 import 'package:campus_hub/features/buy_sell/providers/buy_sell_providers.dart';
@@ -165,6 +167,8 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
+          // Contact buttons are for signed-in people other than the seller.
+          overrides: [currentUserProvider.overrideWith((ref) => _buyer)],
           child: MaterialApp(
             home: Scaffold(
               body: SizedBox(
@@ -177,8 +181,10 @@ void main() {
         ),
       );
 
-      expect(find.text('Email'), findsOneWidget);
-      expect(find.text('Call'), findsOneWidget);
+      // Message first; email and phone are small icon buttons (with tooltips).
+      expect(find.text('Message'), findsOneWidget);
+      expect(find.byTooltip('Email'), findsOneWidget);
+      expect(find.byTooltip('Call'), findsOneWidget);
       expect(find.text('rohanv@iisc.ac.in'), findsNothing);
       expect(find.text('+919876543210'), findsNothing);
       expect(find.byIcon(Icons.phone_outlined), findsOneWidget);
@@ -202,6 +208,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
+          overrides: [currentUserProvider.overrideWith((ref) => _buyer)],
           child: MaterialApp(
             home: Scaffold(
               body: SizedBox(
@@ -214,8 +221,9 @@ void main() {
         ),
       );
 
-      expect(find.text('Email'), findsOneWidget);
-      expect(find.text('Call'), findsOneWidget);
+      expect(find.text('Message'), findsOneWidget);
+      expect(find.byTooltip('Email'), findsOneWidget);
+      expect(find.byTooltip('Call'), findsOneWidget);
       expect(find.text('ananyas@iisc.ac.in'), findsNothing);
       expect(find.text('+919123456789'), findsNothing);
       expect(find.byIcon(Icons.phone_outlined), findsOneWidget);
@@ -223,3 +231,5 @@ void main() {
     });
   });
 }
+
+final _buyer = User(id: 'usr_buyer', email: 'buyer@iisc.ac.in', name: 'Buyer', createdAt: DateTime(2026));

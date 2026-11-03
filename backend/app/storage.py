@@ -40,12 +40,22 @@ log = logging.getLogger("campushub.storage")
 
 MB = 1024 * 1024
 IMAGE_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic"}
+# Course materials (rev 22: anyone shares them; every file is opened and checked in app/material_check.py).
 MATERIAL_TYPES = {
     **IMAGE_TYPES,
     "application/pdf": "pdf",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
     "application/zip": "zip",
+    "text/plain": "txt",
+    "text/csv": "csv",
+    "text/markdown": "md",
+}
+
+DOCUMENT_TYPES = {
+    "application/pdf": "pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
     "text/plain": "txt",
 }
 
@@ -61,7 +71,13 @@ UPLOAD_KINDS: dict[str, UploadKind] = {
     "listing_photo": UploadKind("listings", IMAGE_TYPES, 10 * MB),
     "lost_report_photo": UploadKind("lost-reports", IMAGE_TYPES, 10 * MB),
     "found_report_photo": UploadKind("found-reports", IMAGE_TYPES, 10 * MB),
-    "course_material": UploadKind("course-materials", MATERIAL_TYPES, 50 * MB),
+    "course_material": UploadKind("course-materials", MATERIAL_TYPES, 100 * MB),
+    # Placement Hub: a JD file attached to a company's role (placement moderators only).
+    "job_description": UploadKind("job-descriptions", DOCUMENT_TYPES, 20 * MB),
+    # Community Events: an optional poster image for an event.
+    "event_poster": UploadKind("event-posters", IMAGE_TYPES, 10 * MB),
+    # Mess menus: the month's menu as the mess shared it, a PDF or a photo (events moderators).
+    "mess_menu": UploadKind("mess-menus", {**IMAGE_TYPES, "application/pdf": "pdf"}, 20 * MB),
 }
 
 
@@ -174,6 +190,20 @@ async def mark_attached(keys: list[str]) -> None:
             await asyncio.to_thread(tag, key)
         except Exception:  # noqa: BLE001 - the post is already saved; never fail the request here
             log.exception("Could not mark %s as attached; the lifecycle rule may delete it", key)
+
+
+async def get_object(key: str) -> tuple[bytes, str]:
+    """A stored file's bytes and content type (e.g. a mess menu PDF to read the meals from)."""
+    s = get_settings()
+    obj = await asyncio.to_thread(s3_client().get_object, Bucket=s.s3_bucket, Key=key)
+    return await asyncio.to_thread(obj["Body"].read), obj.get("ContentType", "")
+
+
+async def put_object(key: str, body: bytes, content_type: str) -> None:
+    """Store a file the API itself produced (e.g. a pasted placement sheet, kept as the import's source)."""
+    s = get_settings()
+    await asyncio.to_thread(s3_client().put_object, Bucket=s.s3_bucket, Key=key, Body=body,
+                            ContentType=content_type, Tagging="state=attached")
 
 
 async def delete_objects(keys: list[str]) -> None:

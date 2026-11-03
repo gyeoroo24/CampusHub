@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from ..auth import CurrentUser, current_user
 from ..common import Page, PageParams, make_page, page_params
 from ..db import get_conn
+from ..mess_alerts import send_due_if_stale
 
 router = APIRouter(prefix="/me", tags=["Notifications"])
 
@@ -34,6 +35,7 @@ class DeviceToken(BaseModel):
 @router.get("/notifications", response_model=Page[Notification], summary="My notifications, newest first")
 async def list_notifications(unread_only: bool = False, page: PageParams = Depends(page_params),
                              user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
+    await send_due_if_stale(conn)   # meal alerts that are due (app/mess_alerts.py)
     rows = await conn.fetch(
         """SELECT id, type::text AS type, payload, is_read, created_at FROM notifications
            WHERE user_id = $1 AND (NOT $2 OR NOT is_read)

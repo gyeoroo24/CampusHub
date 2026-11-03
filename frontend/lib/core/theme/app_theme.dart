@@ -1,7 +1,41 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.light);
+
+/// Remembers the user's light/dark choice in this browser, so a refresh doesn't revert to light.
+class ThemeModeStorage {
+  static const _key = 'campushub_theme_mode';
+
+  static Future<ThemeMode?> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return switch (prefs.getString(_key)) {
+        'dark' => ThemeMode.dark,
+        'light' => ThemeMode.light,
+        _ => null,
+      };
+    } catch (e) {
+      debugPrint('[ThemeModeStorage] unavailable: $e');
+      return null;
+    }
+  }
+
+  static Future<void> save(ThemeMode mode) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_key, mode == ThemeMode.dark ? 'dark' : 'light');
+    } catch (_) {}
+  }
+}
+
+/// Applies the saved theme mode once, shortly after start. Watch it once near the app root.
+final themeModeInitProvider = FutureProvider<void>((ref) async {
+  final saved = await ThemeModeStorage.load();
+  if (saved != null) ref.read(themeModeProvider.notifier).state = saved;
+});
 
 class AppTheme {
   static const TextTheme _textTheme = TextTheme(

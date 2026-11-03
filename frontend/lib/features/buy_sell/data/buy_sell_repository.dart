@@ -56,7 +56,14 @@ abstract class IBuySellRepository {
     double? price,
     int? categoryId,
     String? location,
+    bool? negotiable,
   });
+
+  /// Price watch (future plan §2.3): be told when the price changes or it's marked negotiable.
+  Future<void> setWatching(String id, bool watching);
+
+  /// Listings the signed-in user is watching, most recently watched first.
+  Future<List<ListingItem>> fetchWatchedListings();
 
   /// Updates status to available, reserved, or sold (seller only, FR-5).
   Future<void> updateStatus(String id, ListingStatus newStatus);
@@ -65,7 +72,8 @@ abstract class IBuySellRepository {
   Future<void> replacePhotos(String id, List<String> photoKeys);
 
   /// Soft deletes a listing (seller, Buy & Sell moderator, or admin).
-  Future<void> deleteListing(String id, {String? reason});
+  /// [severity] matters only when a moderator removes a listing that was reported (it becomes a strike).
+  Future<void> deleteListing(String id, {String? reason, String? severity});
 
   /// Lists all Buy & Sell categories A-Z from `GET /api/v1/buy-sell/categories`.
   Future<List<CategoryRef>> fetchCategories();
@@ -73,11 +81,17 @@ abstract class IBuySellRepository {
   /// Adds a missing category or gets existing one (`POST /api/v1/buy-sell/categories`).
   Future<CategoryRef> createCategory(String name);
 
+  /// Nearest existing category for a typed title (`GET /api/v1/buy-sell/categories/suggest`,
+  /// future plan §2.4) - a hint only, never auto-applied. Returns null if nothing existing fits
+  /// well, or if the suggestion model isn't available (e.g. mock mode).
+  Future<CategoryRef?> suggestCategory(String title);
+
   /// Updates or renames an existing category.
   Future<CategoryRef> updateCategory(int id, String newName);
 
-  /// Deletes or removes a category.
-  Future<void> deleteCategory(int id);
+  /// Deletes a category (that module's moderators and the admin). If posts or saved searches use
+  /// it, they are moved to [moveTo]; without one the server answers 409 saying how many use it.
+  Future<void> deleteCategory(int id, {int? moveTo});
 }
 
 /// Backward compatibility alias for existing code

@@ -196,48 +196,59 @@ class _LostFoundCardState extends State<LostFoundCard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Category Tag right above title
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.0),
-                        decoration: BoxDecoration(
-                          color: badgeColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          item.category.name,
-                          style: TextStyle(
-                            color: badgeColor,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-
-                      // Title
-                      Text(
-                        item.displayTitle,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13.5,
-                          height: 1.25,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 3),
-
-                      // Description taking remaining white space
+                      // Category, title and description share whatever height the card has left and are
+                      // clipped, never overflowing, when a long title pushes the rest down.
                       Expanded(
-                        child: Text(
-                          item.description.isNotEmpty ? item.description : 'No distinguishing description provided.',
-                          style: TextStyle(
-                            fontSize: 11.0,
-                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                            height: 1.25,
+                        child: ClipRect(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Category Tag right above title
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.0),
+                                decoration: BoxDecoration(
+                                  color: badgeColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  item.category.name,
+                                  style: TextStyle(
+                                    color: badgeColor,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+
+                              // Title
+                              Text(
+                                item.displayTitle,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13.5,
+                                  height: 1.25,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 3),
+
+                              // Description taking remaining white space
+                              Flexible(
+                                child: Text(
+                                  item.description.isNotEmpty ? item.description : 'No distinguishing description provided.',
+                                  style: TextStyle(
+                                    fontSize: 11.0,
+                                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                    height: 1.25,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(height: 4),

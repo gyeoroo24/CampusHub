@@ -395,10 +395,10 @@ void main() {
 
       final updated = config.copyWith(
         useMockData: false,
-        apiBaseUrl: 'http://10.217.103.203:8000',
+        apiBaseUrl: 'http://localhost:8000',
       );
       expect(updated.useMockData, isFalse);
-      expect(updated.apiBaseUrl, 'http://10.217.103.203:8000');
+      expect(updated.apiBaseUrl, 'http://localhost:8000');
       expect(updated.devKey, 'test_key');
     });
 
@@ -421,7 +421,7 @@ void main() {
             lostFoundCategoriesProvider.overrideWith((ref) => [const CategoryRef(id: 1, name: 'Electronics')]),
           ],
           child: const MaterialApp(
-            home: AdminControlsScreen(initialTab: 4),
+            home: AdminControlsScreen(initialTab: 5), // after the Seller Strikes tab
           ),
         ),
       );

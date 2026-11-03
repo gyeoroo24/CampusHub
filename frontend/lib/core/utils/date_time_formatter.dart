@@ -29,6 +29,9 @@ class DateTimeFormatter {
     }
   }
 
+  /// A date without the time (e.g., '22 Oct 2026').
+  static String shortDate(DateTime dateTime) => '${dateTime.day} ${_months[dateTime.month - 1]} ${dateTime.year}';
+
   /// Full formatted timestamp (e.g., '22 Oct 2026, 04:30 PM').
   static String fullDateTime(DateTime dateTime) {
     final hour = dateTime.hour % 12 == 0 ? 12 : dateTime.hour % 12;

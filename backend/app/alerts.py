@@ -19,8 +19,11 @@ from .notify import create_notifications, deliver_push
 Push = tuple[list[UUID], str, dict]
 
 # Does listing l match saved search s? Same rules as GET /listings.
+# A search with no keyword, category or price (allowed before 2 Nov 2026) matches nothing: it used
+# to alert on every new post, e.g. "Drugs" for a search named "hero cycle".
 LISTING_MATCHES_SEARCH = """
-    (s.bs_category_id IS NULL OR s.bs_category_id = l.category_id)
+    (s.query IS NOT NULL OR s.bs_category_id IS NOT NULL OR s.min_price IS NOT NULL OR s.max_price IS NOT NULL)
+    AND (s.bs_category_id IS NULL OR s.bs_category_id = l.category_id)
     AND (s.min_price IS NULL OR l.price >= s.min_price)
     AND (s.max_price IS NULL OR l.price <= s.max_price)
     AND (s.query IS NULL OR numnode(websearch_to_tsquery('english', s.query)) = 0
@@ -29,7 +32,8 @@ LISTING_MATCHES_SEARCH = """
 
 # Does found report f match saved search s? Same rules as GET /found-reports (substring of the description).
 FOUND_MATCHES_SEARCH = r"""
-    (s.lf_category_id IS NULL OR s.lf_category_id = f.category_id)
+    (s.query IS NOT NULL OR s.lf_category_id IS NOT NULL)
+    AND (s.lf_category_id IS NULL OR s.lf_category_id = f.category_id)
     AND (s.query IS NULL OR f.description ILIKE
          '%' || replace(replace(replace(s.query, '\', '\\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
 """
@@ -55,7 +59,8 @@ async def listing_alerts(conn: asyncpg.Connection, listing_id: UUID) -> list[Pus
     rows = await conn.fetch(
         f"""SELECT DISTINCT ON (s.user_id) s.user_id, s.id AS search_id, s.name, l.title, l.price
             FROM listings l JOIN saved_searches s ON s.module = 'buy_sell' AND s.alerts_enabled
-            WHERE l.id = $1 AND l.deleted_at IS NULL AND l.status = 'available' AND s.user_id <> l.seller_id
+            WHERE l.id = $1 AND l.deleted_at IS NULL AND l.status = 'available' AND l.hidden_by_strike_id IS NULL
+              AND l.held_for_review_at IS NULL AND s.user_id <> l.seller_id
               AND {LISTING_MATCHES_SEARCH}
               AND NOT EXISTS (SELECT 1 FROM notifications n
                               WHERE n.user_id = s.user_id AND n.type = 'saved_search_match'
@@ -70,7 +75,8 @@ async def listing_alerts(conn: asyncpg.Connection, listing_id: UUID) -> list[Pus
         f"""SELECT DISTINCT ON (w.author_id) w.author_id, w.id AS wanted_id, w.title AS wanted_title,
                    l.title, l.price
             FROM listings l JOIN wanted_posts w ON w.status = 'open' AND w.deleted_at IS NULL
-            WHERE l.id = $1 AND l.deleted_at IS NULL AND l.status = 'available' AND w.author_id <> l.seller_id
+            WHERE l.id = $1 AND l.deleted_at IS NULL AND l.status = 'available' AND l.hidden_by_strike_id IS NULL
+              AND l.held_for_review_at IS NULL AND w.author_id <> l.seller_id
               AND {LISTING_MATCHES_WANTED}
               AND NOT EXISTS (SELECT 1 FROM notifications n
                               WHERE n.user_id = w.author_id AND n.type = 'wanted_post_match'

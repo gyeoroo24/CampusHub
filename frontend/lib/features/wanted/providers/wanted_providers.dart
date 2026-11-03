@@ -21,8 +21,12 @@ final wantedRepositoryProvider = Provider<IWantedRepository>((ref) {
 /// feed, so switching between "For sale" and "Wanted" keeps what the user typed.
 class WantedFilter {
   final bool showClosed;
+  final bool mine;
 
-  const WantedFilter({this.showClosed = false});
+  const WantedFilter({this.showClosed = false, this.mine = true});
+
+  WantedFilter copyWith({bool? showClosed, bool? mine}) =>
+      WantedFilter(showClosed: showClosed ?? this.showClosed, mine: mine ?? this.mine);
 }
 
 final wantedFilterProvider = StateProvider<WantedFilter>((ref) => const WantedFilter());
@@ -32,6 +36,7 @@ final wantedPostsProvider = FutureProvider<List<WantedPost>>((ref) async {
   final listingFilter = ref.watch(buySellFilterProvider);
   final filter = ref.watch(wantedFilterProvider);
   final categories = ref.watch(buySellCategoriesProvider).valueOrNull ?? const [];
+  final user = ref.watch(currentUserProvider);
 
   int? categoryId;
   if (listingFilter.category != 'All') {
@@ -39,10 +44,12 @@ final wantedPostsProvider = FutureProvider<List<WantedPost>>((ref) async {
     if (match.isEmpty) return []; // a preset category nobody has posted in yet
     categoryId = match.first.id;
   }
+  final mine = filter.mine && user != null && !user.isGuest;
   return repo.fetchWanted(
     query: listingFilter.query,
     categoryId: categoryId,
-    statuses: filter.showClosed ? WantedStatus.values : [WantedStatus.open],
+    authorId: mine ? user.id : null,
+    statuses: filter.showClosed ? [WantedStatus.closed] : [WantedStatus.open],
   );
 });
 

@@ -1,6 +1,8 @@
 import 'dart:async';
+import '../../../../core/widgets/category_picker.dart';
 
 import 'package:flutter/material.dart';
+import '../../../../core/utils/numbers_only_formatter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/models/category_ref.dart';
 import '../../../../core/utils/error_text.dart';
@@ -30,6 +32,18 @@ class CreateListingDialog extends ConsumerStatefulWidget {
 }
 
 class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
+  bool _numbersOnly = false;
+  Timer? _numbersOnlyTimer;
+
+  /// Shows "only numbers" under the price for a few seconds after a letter is typed or pasted.
+  void _flashNumbersOnly() {
+    _numbersOnlyTimer?.cancel();
+    if (!_numbersOnly) setState(() => _numbersOnly = true);
+    _numbersOnlyTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _numbersOnly = false);
+    });
+  }
+
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _priceController = TextEditingController();
@@ -43,12 +57,64 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
   List<CategoryRef> _availableCategories = [];
   bool _isLoadingCategories = true;
   bool _isCustomCategory = false;
+  bool _negotiable = false;
   final _customCategoryController = TextEditingController();
+
+  // Category auto-suggestion (future plan §2.4): a hint only, never auto-applied.
+  Timer? _suggestDebounce;
+  CategoryRef? _suggestedCategory;
+  bool _categoryTouchedByUser = false;
 
   @override
   void initState() {
     super.initState();
     _loadCategories();
+    _titleController.addListener(_onTitleChanged);
+  }
+
+  @override
+  void dispose() {
+    _numbersOnlyTimer?.cancel();
+    _suggestDebounce?.cancel();
+    _titleController.removeListener(_onTitleChanged);
+    super.dispose();
+  }
+
+  void _onTitleChanged() {
+    _suggestDebounce?.cancel();
+    if (_categoryTouchedByUser || _isCustomCategory) return;
+    final title = _titleController.text.trim();
+    if (title.length < 4) {
+      if (_suggestedCategory != null) setState(() => _suggestedCategory = null);
+      return;
+    }
+    _suggestDebounce = Timer(const Duration(milliseconds: 500), () => _fetchSuggestion(title));
+  }
+
+  Future<void> _fetchSuggestion(String title) async {
+    try {
+      final suggestion = await ref.read(buySellRepositoryProvider).suggestCategory(title);
+      if (!mounted || _titleController.text.trim() != title) return; // stale request
+      if (suggestion != null && suggestion.id == _selectedCategory?.id) {
+        setState(() => _suggestedCategory = null);
+        return;
+      }
+      setState(() => _suggestedCategory = suggestion);
+    } catch (_) {
+      // Suggestion is a nice-to-have; silently skip on any failure.
+    }
+  }
+
+  void _applySuggestion() {
+    final suggestion = _suggestedCategory;
+    if (suggestion == null) return;
+    final match = _availableCategories.where((c) => c.id == suggestion.id);
+    setState(() {
+      _selectedCategory = match.isNotEmpty ? match.first : suggestion;
+      _isCustomCategory = false;
+      _categoryTouchedByUser = true;
+      _suggestedCategory = null;
+    });
   }
 
   Future<void> _loadCategories() async {
@@ -105,6 +171,7 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TextFormField(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   controller: _titleController,
                   maxLength: 120,
                   decoration: const InputDecoration(
@@ -120,10 +187,14 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
                 ),
                 const SizedBox(height: 8),
                 TextFormField(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   controller: _priceController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
+                  inputFormatters: [NumbersOnlyFormatter(onRejected: _flashNumbersOnly)],
+                  decoration: InputDecoration(
                     labelText: 'Price (₹) *',
+                    helperText: _numbersOnly ? 'Only numbers can go here, e.g. 1500 or 99.50' : null,
+                    helperStyle: const TextStyle(color: Colors.orange),
                     hintText: 'e.g. 1500',
                     prefixText: '₹ ',
                   ),
@@ -138,6 +209,15 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
                     return null;
                   },
                 ),
+                const SizedBox(height: 4),
+                CheckboxListTile(
+                  value: _negotiable,
+                  onChanged: (v) => setState(() => _negotiable = v ?? false),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text('Price is negotiable'),
+                ),
                 const SizedBox(height: 8),
                 if (_isLoadingCategories)
                   const Padding(
@@ -145,34 +225,40 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
                     child: LinearProgressIndicator(),
                   )
                 else ...[
-                  DropdownButtonFormField<CategoryRef>(
-                    initialValue: _selectedCategory,
-                    decoration: const InputDecoration(labelText: 'Category *'),
-                    items: [
-                      ..._availableCategories.map(
-                        (c) => DropdownMenuItem(value: c, child: Text(c.name)),
-                      ),
-                      const DropdownMenuItem(
-                        value: CategoryRef(id: -1, name: '+ Add New Category...'),
-                        child: Text('+ Add New Category...', style: TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                    ],
+                  CategoryPicker(
+                    categories: _availableCategories,
+                    value: _selectedCategory,
+                    addNewLabel: CategoryPicker.addNew.name,
                     onChanged: (val) {
-                      if (val != null) {
-                        if (val.id == -1) {
-                          setState(() => _isCustomCategory = true);
-                        } else {
-                          setState(() {
-                            _selectedCategory = val;
-                            _isCustomCategory = false;
-                          });
-                        }
+                      if (val.id == -1) {
+                        setState(() {
+                          _isCustomCategory = true;
+                          _categoryTouchedByUser = true;
+                          _suggestedCategory = null;
+                        });
+                      } else {
+                        setState(() {
+                          _selectedCategory = val;
+                          _isCustomCategory = false;
+                          _categoryTouchedByUser = true;
+                          _suggestedCategory = null;
+                        });
                       }
                     },
                   ),
+                  if (_suggestedCategory != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: ActionChip(
+                        avatar: const Icon(Icons.auto_awesome, size: 16),
+                        label: Text('Suggested category: ${_suggestedCategory!.name}'),
+                        onPressed: _applySuggestion,
+                      ),
+                    ),
                   if (_isCustomCategory) ...[
                     const SizedBox(height: 8),
                     TextFormField(
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       controller: _customCategoryController,
                       decoration: const InputDecoration(
                         labelText: 'New Category Name',
@@ -189,6 +275,7 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
                 ],
                 const SizedBox(height: 8),
                 TextFormField(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   controller: _locationController,
                   maxLength: 200,
                   decoration: const InputDecoration(
@@ -204,6 +291,7 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
                 ),
                 const SizedBox(height: 8),
                 TextFormField(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   controller: _descController,
                   maxLines: 3,
                   maxLength: 5000,
@@ -270,6 +358,7 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
       title: _titleController.text.trim(),
       description: _descController.text.trim(),
       price: price,
+      negotiable: _negotiable,
       status: ListingStatus.available,
       location: _locationController.text.trim().isNotEmpty
           ? _locationController.text.trim()

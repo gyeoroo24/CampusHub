@@ -3,14 +3,15 @@ from datetime import datetime
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from .. import otp
 from ..auth import CurrentUser, current_user, optional_user
-from ..common import Contact, forbidden, not_found, set_clause, text
+from ..common import Contact, forbidden, like_pattern, not_found, search_text, set_clause, text
 from ..db import get_conn
 from ..permissions import log_moderation
+from .moderators import notify_role_change
 
 router = APIRouter(tags=["Users"])
 
@@ -138,6 +139,30 @@ async def verify_phone_code(body: PhoneVerify, user: CurrentUser = Depends(curre
     return await _my_profile(conn, user.id)
 
 
+class UserMatch(BaseModel):
+    id: UUID
+    name: str
+    email: str
+    programme: str | None
+
+
+@router.get("/users/search", response_model=list[UserMatch],
+            summary="Find people by name or email, to start a chat (signed-in users)")
+async def search_users(q: str = Query(..., min_length=2, max_length=100), limit: int = Query(20, ge=1, le=50),
+                       user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
+    """Active accounts other than mine whose name or email contains q. Names that start with q come first."""
+    q = search_text(q) or ""
+    if len(q) < 2:
+        return []
+    rows = await conn.fetch(
+        """SELECT id, name, email::text AS email, programme FROM users
+            WHERE is_active AND id <> $1
+              AND (name ILIKE '%' || $2 || '%' ESCAPE '\' OR email::text ILIKE '%' || $2 || '%' ESCAPE '\')
+            ORDER BY (name ILIKE $2 || '%' ESCAPE '\') DESC, (email::text ILIKE $2 || '%' ESCAPE '\') DESC, name
+            LIMIT $3""", user.id, like_pattern(q), limit)
+    return [UserMatch(**dict(r)) for r in rows]
+
+
 @router.get("/users/lookup", response_model=AccountStatus, summary="Find an account by email (admin)")
 async def lookup_user(email: str = Query(..., min_length=3, max_length=320),
                       user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
@@ -182,7 +207,7 @@ async def update_account(user_id: UUID, body: AccountUpdate, user: CurrentUser =
 
 @router.post("/users/{user_id}/make-admin", response_model=AccountStatus,
              summary="Hand the admin role to someone else (admin); you become a signed-in user")
-async def make_admin(user_id: UUID, user: CurrentUser = Depends(current_user),
+async def make_admin(user_id: UUID, background: BackgroundTasks, user: CurrentUser = Depends(current_user),
                      conn: asyncpg.Connection = Depends(get_conn)):
     """There is exactly one admin. The current admin names their successor; in one transaction the
     successor becomes admin and the caller is downgraded to a normal signed-in user."""
@@ -206,4 +231,6 @@ async def make_admin(user_id: UUID, user: CurrentUser = Depends(current_user),
         row = await conn.fetchrow(
             f"UPDATE users SET base_role = 'admin' WHERE id = $1 RETURNING {_STATUS_COLUMNS}", user_id)
         await log_moderation(conn, user.id, "transfer_admin", "user", user_id)
+        await notify_role_change(conn, background, user_id,
+                                 f"{user.name or 'The previous admin'} made you the CampusHub admin.")
     return AccountStatus(**dict(row))

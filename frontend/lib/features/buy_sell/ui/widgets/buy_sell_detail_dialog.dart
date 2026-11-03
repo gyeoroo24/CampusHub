@@ -6,12 +6,14 @@ import '../../../../core/utils/date_time_formatter.dart';
 import '../../../../core/utils/web_history_support.dart';
 import '../../../../core/widgets/photo_carousel.dart';
 import '../../../../core/widgets/report_content_dialog.dart';
+import '../../../../core/widgets/seller_trust_badge.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../../../auth/ui/auth_dialog.dart';
 import '../../../messages/ui/messages_screen.dart';
 import '../../domain/buy_sell_item.dart';
 import '../../providers/buy_sell_providers.dart';
 import 'edit_listing_dialog.dart';
+import 'price_watch.dart';
 
 class BuySellDetailDialog extends ConsumerWidget {
   final ListingItem item;
@@ -196,6 +198,10 @@ class BuySellDetailDialog extends ConsumerWidget {
                                 ),
                               ],
                             ),
+                            if (item.sellerTrustTag != null) ...[
+                              const SizedBox(height: 4),
+                              SellerTrustBadge(tag: item.sellerTrustTag, fontSize: 10),
+                            ],
                             const SizedBox(height: 3),
                             Row(
                               mainAxisSize: MainAxisSize.min,
@@ -214,13 +220,19 @@ class BuySellDetailDialog extends ConsumerWidget {
                             ),
                           ],
                         ),
-                        Text(
-                          '₹${item.price.toStringAsFixed(0)}',
-                          style: TextStyle(
-                            color: theme.colorScheme.primary,
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
-                          ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '₹${item.price.toStringAsFixed(0)}',
+                              style: TextStyle(
+                                color: theme.colorScheme.primary,
+                                fontSize: 26,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            if (item.negotiable) const NegotiableBadge(fontSize: 11),
+                          ],
                         ),
                       ],
                     ),
@@ -294,6 +306,8 @@ class BuySellDetailDialog extends ConsumerWidget {
                       const SizedBox(height: 16),
                     ],
 
+                    if (item.heldForReview) const HeldForReviewBanner(),
+
                     // ── In-app messaging (joins the chat with this person) ─────
                     if (!isOwner && item.status != ListingStatus.sold) ...[
                       SizedBox(
@@ -305,6 +319,11 @@ class BuySellDetailDialog extends ConsumerWidget {
                           label: const Text('Message seller'),
                         ),
                       ),
+                      // Price watch (future plan §2.3), signed-in buyers only.
+                      if (currentUser != null && !currentUser.isGuest) ...[
+                        const SizedBox(height: 8),
+                        SizedBox(width: double.infinity, child: WatchPriceButton(item: item)),
+                      ],
                       const SizedBox(height: 12),
                     ],
 
@@ -528,10 +547,11 @@ class BuySellDetailDialog extends ConsumerWidget {
   }
 
   /// Removes the listing, waiting for the server before closing anything.
-  Future<void> _remove(BuildContext context, WidgetRef ref, BuildContext promptContext, {String? reason}) async {
+  Future<void> _remove(BuildContext context, WidgetRef ref, BuildContext promptContext,
+      {String? reason, String? severity}) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await ref.read(buySellRepositoryProvider).deleteListing(item.id, reason: reason);
+      await ref.read(buySellRepositoryProvider).deleteListing(item.id, reason: reason, severity: severity);
     } catch (e) {
       messenger.showSnackBar(SnackBar(
         content: Text("Couldn't remove the listing: ${errorText(e)}"),
@@ -575,36 +595,63 @@ class BuySellDetailDialog extends ConsumerWidget {
 
   void _confirmModeratorDelete(BuildContext context, WidgetRef ref) {
     final reasonController = TextEditingController();
+    var severity = 'non_severe';
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Remove Listing (Moderation)'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'As a moderator, you can remove this listing. Please provide a reason for the audit log:',
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: reasonController,
-              decoration: const InputDecoration(
-                labelText: 'Reason for removal',
-                hintText: 'e.g. Prohibited item, duplicate, or spam',
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Remove Listing (Moderation)'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'The seller is told the reason. If someone reported this listing, removing it also '
+                'counts as a strike on the seller\'s record (they can appeal).',
+                style: TextStyle(fontSize: 13),
               ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(
+                  labelText: 'Reason for removal',
+                  hintText: 'e.g. Prohibited item, duplicate, or spam',
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text('If it was reported, how serious is it?',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              RadioGroup<String>(
+                groupValue: severity,
+                onChanged: (v) => setDialogState(() => severity = v ?? severity),
+                child: const Column(children: [
+                  RadioListTile<String>(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: 'non_severe',
+                    title: Text('Non-severe (scam, misleading, duplicate)'),
+                    subtitle: Text('Counts toward the strike ladder'),
+                  ),
+                  RadioListTile<String>(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: 'severe',
+                    title: Text('Severe (illegal: drugs, weapons)'),
+                    subtitle: Text('Blocks the seller from posting immediately'),
+                  ),
+                ]),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+              onPressed: () => _remove(context, ref, ctx, reason: reasonController.text.trim(), severity: severity),
+              child: const Text('Confirm Remove'),
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-            onPressed: () => _remove(context, ref, ctx, reason: reasonController.text.trim()),
-            child: const Text('Confirm Remove'),
-          ),
-        ],
       ),
     );
   }
