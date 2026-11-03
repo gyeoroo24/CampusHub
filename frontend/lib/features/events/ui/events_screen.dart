@@ -99,6 +99,12 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
                         icon: const Icon(Icons.restaurant_menu_rounded, size: 18),
                         label: const Text('Mess menu'),
                       ),
+                      const SizedBox(width: 8),
+                      IconButton.outlined(
+                        tooltip: 'Follow tags: get alerts for new events',
+                        onPressed: () => _followTags(context, ref),
+                        icon: const Icon(Icons.notifications_none_rounded),
+                      ),
                       // Only Events moderators and the admin add events.
                       if (ref.watch(currentUserProvider)?.canModerateModule('events') ?? false) ...[
                         const SizedBox(width: 8),
@@ -190,11 +196,6 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
                                     tagIds: filter.tagIds.length == 1 && filter.tagIds.contains(t.id) ? const {} : {t.id})),
                               ),
                             ),
-                          TextButton.icon(
-                            onPressed: () => _followTags(context, ref),
-                            icon: const Icon(Icons.notifications_none_rounded, size: 16),
-                            label: const Text('Follow tags'),
-                          ),
                         ],
                       ),
                     ),

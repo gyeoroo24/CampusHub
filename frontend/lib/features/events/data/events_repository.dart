@@ -27,6 +27,15 @@ abstract class IEventsRepository {
   /// Saves bookmarks a guest kept on the device to the account; returns how many were added.
   Future<int> importBookmarks(List<String> eventIds);
 
+  /// Newest first.
+  Future<List<EventUpdate>> fetchUpdates(String eventId);
+
+  /// Events moderators, admins and the organizer. [startTime] / [location] also move the event or change
+  /// its venue. Everyone who bookmarked the event is notified.
+  Future<void> postUpdate(String eventId, String message, {DateTime? startTime, DateTime? endTime, String? location});
+
+  Future<void> deleteUpdate(String updateId);
+
   Future<EventTag> createTag(String name);
 }
 
@@ -106,6 +115,28 @@ class ApiEventsRepository implements IEventsRepository {
       'items': [for (final id in eventIds) {'target_type': 'event', 'target_id': id}],
     });
     return ((response.data as Map<String, dynamic>)['added'] as int?) ?? 0;
+  }
+
+  @override
+  Future<List<EventUpdate>> fetchUpdates(String eventId) async {
+    final response = await apiClient.get(ApiEndpoints.eventUpdates(eventId));
+    return (response.data as List<dynamic>).map((j) => EventUpdate.fromJson(j as Map<String, dynamic>)).toList();
+  }
+
+  @override
+  Future<void> postUpdate(String eventId, String message,
+      {DateTime? startTime, DateTime? endTime, String? location}) async {
+    await apiClient.post(ApiEndpoints.eventUpdates(eventId), data: {
+      'message': message,
+      if (startTime != null) 'start_time': startTime.toUtc().toIso8601String(),
+      if (endTime != null) 'end_time': endTime.toUtc().toIso8601String(),
+      if (location != null && location.trim().isNotEmpty) 'location': location.trim(),
+    });
+  }
+
+  @override
+  Future<void> deleteUpdate(String updateId) async {
+    await apiClient.delete(ApiEndpoints.eventUpdate(updateId));
   }
 
   @override
@@ -267,5 +298,32 @@ class MockEventsRepository implements IEventsRepository {
     final tag = EventTag(id: _tags.length + 1, name: name);
     _tags.add(tag);
     return tag;
+  }
+
+  static final _updates = <String, List<EventUpdate>>{};
+
+  @override
+  Future<List<EventUpdate>> fetchUpdates(String eventId) async => [...?_updates[eventId]];
+
+  @override
+  Future<void> postUpdate(String eventId, String message,
+      {DateTime? startTime, DateTime? endTime, String? location}) async {
+    final moved = startTime != null, newPlace = location != null && location.trim().isNotEmpty;
+    _updates.putIfAbsent(eventId, () => []).insert(
+        0,
+        EventUpdate(
+            id: 'up_${DateTime.now().microsecondsSinceEpoch}',
+            kind: moved && newPlace ? 'time_venue' : (moved ? 'time' : (newPlace ? 'venue' : 'info')),
+            message: message,
+            authorName: 'You',
+            createdAt: DateTime.now(),
+            canDelete: true));
+  }
+
+  @override
+  Future<void> deleteUpdate(String updateId) async {
+    for (final list in _updates.values) {
+      list.removeWhere((u) => u.id == updateId);
+    }
   }
 }

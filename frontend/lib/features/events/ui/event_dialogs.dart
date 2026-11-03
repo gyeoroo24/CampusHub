@@ -4,8 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/utils/date_time_formatter.dart';
 import '../../../core/utils/error_text.dart';
 import '../../../core/widgets/photo_picker_field.dart';
-import '../../forums/domain/forum_models.dart';
-import '../../forums/ui/forum_board.dart';
+import '../../auth/providers/auth_providers.dart';
 import '../domain/event_models.dart';
 import '../providers/events_providers.dart';
 import 'events_screen.dart' show EventBookmarkButton, EventPoster, eventTimeRange;
@@ -238,27 +237,301 @@ class EventDetailScreen extends ConsumerWidget {
                         ),
                       ],
                       const SizedBox(height: 28),
-                      Row(
-                        children: [
-                          const Icon(Icons.forum_outlined, size: 20),
-                          const SizedBox(width: 8),
-                          Text('Discussion', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      ForumBoard(
-                        scope: ForumScope.event,
-                        scopeId: event.id,
-                        placeName: event.title,
-                        blurb: 'ask about it, find people to go with, share photos after',
-                        embedded: true,
-                      ),
+                      _UpdatesSection(event: event),
                     ],
                   ),
                 ),
           ),
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------- updates
+({IconData icon, Color color, String label}) _updateStyle(String kind) => switch (kind) {
+      'time' => (icon: Icons.schedule_rounded, color: const Color(0xFFD97706), label: 'Time changed'),
+      'venue' => (icon: Icons.place_rounded, color: const Color(0xFF7C3AED), label: 'Venue changed'),
+      'time_venue' => (icon: Icons.edit_calendar_rounded, color: const Color(0xFFDC2626), label: 'Time and venue changed'),
+      _ => (icon: Icons.campaign_rounded, color: const Color(0xFF2563EB), label: 'Update'),
+    };
+
+/// Official notices on an event, newest first. Events moderators, admins and the organizer post them;
+/// everyone who bookmarked the event is notified.
+class _UpdatesSection extends ConsumerWidget {
+  final CampusEvent event;
+
+  const _UpdatesSection({required this.event});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final isGuest = ref.watch(isGuestUserProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text('Updates', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            ),
+            if (event.canEdit)
+              FilledButton.tonalIcon(
+                onPressed: () => showDialog(context: context, builder: (_) => PostUpdateDialog(event: event)),
+                icon: const Icon(Icons.campaign_outlined, size: 18),
+                label: const Text('Post update'),
+              ),
+          ],
+        ),
+        Text(
+          event.canEdit
+              ? 'Tell attendees about delays, venue changes or anything they should know.'
+              : (event.isBookmarked
+                  ? 'You\'ll get a notification when the organizers post an update.'
+                  : 'Bookmark this event${isGuest ? ' (signed in)' : ''} to get a notification for each update.'),
+          style: TextStyle(fontSize: 12, color: theme.hintColor),
+        ),
+        const SizedBox(height: 12),
+        ref.watch(eventUpdatesProvider(event.id)).when(
+              loading: () => const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())),
+              error: (e, _) => Text(errorText(e)),
+              data: (updates) => updates.isEmpty
+                  ? Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text('No updates yet. Changes to the time or venue will show up here.',
+                          textAlign: TextAlign.center, style: TextStyle(color: theme.hintColor)),
+                    )
+                  : Column(children: [for (final u in updates) _UpdateTile(update: u, eventId: event.id)]),
+            ),
+      ],
+    );
+  }
+}
+
+class _UpdateTile extends ConsumerWidget {
+  final EventUpdate update;
+  final String eventId;
+
+  const _UpdateTile({required this.update, required this.eventId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final style = _updateStyle(update.kind);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+      decoration: BoxDecoration(
+        color: style.color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border(left: BorderSide(color: style.color, width: 4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(style.icon, color: style.color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(style.label.toUpperCase(),
+                    style: TextStyle(fontSize: 10, letterSpacing: 0.6, fontWeight: FontWeight.bold, color: style.color)),
+                const SizedBox(height: 2),
+                SelectableText(update.message),
+                const SizedBox(height: 4),
+                Text('${update.authorName} · ${DateTimeFormatter.timeAgo(update.createdAt)}',
+                    style: TextStyle(fontSize: 11, color: theme.hintColor)),
+              ],
+            ),
+          ),
+          if (update.canDelete)
+            IconButton(
+              tooltip: 'Remove update',
+              icon: Icon(Icons.delete_outline_rounded, size: 18, color: theme.hintColor),
+              onPressed: () async {
+                try {
+                  await ref.read(eventsRepositoryProvider).deleteUpdate(update.id);
+                  if (context.mounted) ref.invalidate(eventUpdatesProvider(eventId));
+                } catch (e) {
+                  if (context.mounted) _snack(context, errorText(e));
+                }
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Post an update; optionally move the event or change its venue in the same step.
+class PostUpdateDialog extends ConsumerStatefulWidget {
+  final CampusEvent event;
+
+  const PostUpdateDialog({super.key, required this.event});
+
+  @override
+  ConsumerState<PostUpdateDialog> createState() => _PostUpdateDialogState();
+}
+
+class _PostUpdateDialogState extends ConsumerState<PostUpdateDialog> {
+  final _message = TextEditingController();
+  late final _venue = TextEditingController(text: widget.event.location);
+  bool _changeTime = false;
+  bool _changeVenue = false;
+  late DateTime _start = widget.event.startTime;
+  late DateTime _end = widget.event.endTime;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _message.dispose();
+    _venue.dispose();
+    super.dispose();
+  }
+
+  Future<DateTime?> _pick(DateTime initial) async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(now.year - 1),
+      lastDate: now.add(const Duration(days: 395)),
+    );
+    if (date == null || !mounted) return null;
+    final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(initial));
+    if (time == null) return null;
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+  }
+
+  Future<void> _post() async {
+    if (_message.text.trim().isEmpty) {
+      setState(() => _error = 'Write what changed or what attendees should know.');
+      return;
+    }
+    if (_changeTime && !_end.isAfter(_start)) {
+      setState(() => _error = 'The event must end after it starts.');
+      return;
+    }
+    if (_changeVenue && _venue.text.trim().isEmpty) {
+      setState(() => _error = 'Enter the new venue.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await ref.read(eventsRepositoryProvider).postUpdate(
+            widget.event.id,
+            _message.text.trim(),
+            startTime: _changeTime ? _start : null,
+            endTime: _changeTime ? _end : null,
+            location: _changeVenue ? _venue.text : null,
+          );
+      ref.invalidate(eventUpdatesProvider(widget.event.id));
+      ref.invalidate(eventProvider(widget.event.id));
+      ref.invalidate(eventsProvider);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) setState(() => _error = errorText(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    Widget timeRow(String label, DateTime value, ValueChanged<DateTime> onPicked) => Row(
+          children: [
+            SizedBox(width: 56, child: Text(label, style: TextStyle(color: theme.hintColor))),
+            Expanded(child: Text(DateTimeFormatter.fullDateTime(value), style: const TextStyle(fontWeight: FontWeight.w600))),
+            TextButton(
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      final picked = await _pick(value);
+                      if (picked != null) onPicked(picked);
+                    },
+              child: const Text('Change'),
+            ),
+          ],
+        );
+    return AlertDialog(
+      title: Text('Update on “${widget.event.title}”'),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _message,
+                autofocus: true,
+                minLines: 3,
+                maxLines: 6,
+                maxLength: 1000,
+                decoration: const InputDecoration(
+                  labelText: 'Message',
+                  hintText: 'e.g. Delayed by an hour because of rain.',
+                  alignLabelWithHint: true,
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _changeTime,
+                onChanged: _busy ? null : (v) => setState(() => _changeTime = v ?? false),
+                title: const Text('Also change the time'),
+              ),
+              if (_changeTime) ...[
+                timeRow('Starts', _start, (t) => setState(() {
+                      final length = _end.difference(_start);
+                      _start = t;
+                      _end = t.add(length);
+                    })),
+                timeRow('Ends', _end, (t) => setState(() => _end = t)),
+              ],
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _changeVenue,
+                onChanged: _busy ? null : (v) => setState(() => _changeVenue = v ?? false),
+                title: const Text('Also change the venue'),
+              ),
+              if (_changeVenue)
+                TextField(
+                  controller: _venue,
+                  maxLength: 200,
+                  decoration: const InputDecoration(labelText: 'New venue', border: OutlineInputBorder()),
+                ),
+              const SizedBox(height: 4),
+              Text('Everyone who bookmarked this event gets a notification.',
+                  style: TextStyle(fontSize: 12, color: theme.hintColor)),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(_error!, style: TextStyle(color: theme.colorScheme.error, fontSize: 13)),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(
+          onPressed: _busy ? null : _post,
+          child: _busy
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Post update'),
+        ),
+      ],
     );
   }
 }

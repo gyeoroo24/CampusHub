@@ -156,3 +156,36 @@ Reported during a UI pass, then fixed and verified the same day (signed in as a 
 **Verified in browser:** all 8, signed in as a seller (`mohammadazam@iisc.ac.in`) and as the
 `cadithya` Buy & Sell moderator. **Not run:** the backend pytest suite and Flutter test suite —
 these were pure-frontend changes with no new backend behavior, but worth a pass before merging.
+
+## Three UI features ported from `backend_v3` (3 Nov)
+
+Cherry-picked (not merged) from `backend_v3`'s `ca8bc83`, which bundled these with two things that
+weren't requested — moderator-only event posting (already independently present on `backend_v2`)
+and full-size letterboxed posters — neither of which was touched here.
+
+- **Event "Updates" replace the Discussion forum on an event page** (future plan, Community
+  Events). The organizer, an Events moderator or admin posts a notice (optionally moving the event
+  or changing its venue); everyone who bookmarked it gets a `bookmarked_event_update` notification.
+  New table `event_updates` (migration `024`, schema rev 24), endpoints on
+  `backend/app/routers/events.py` (`GET/POST /events/{id}/updates`, `DELETE /event-updates/{id}`),
+  UI in `frontend/lib/features/events/ui/event_dialogs.dart`. The event's discussion forum (rev 17)
+  stays in the schema, just no longer shown on the event page.
+  **Fixed one real integration bug while porting:** the ported code re-validated the whole event's
+  duration (≤ 30 days) on every update post, even one that didn't touch the time — which made it
+  impossible to ever post a plain info update on a mess's always-open event card (a `backend_v2`-
+  only feature `backend_v3` never had to contend with). Now that check only runs when the update
+  actually moves the event.
+- **Placement schedule card redesign** (company page, Placement Hub): replaced the card-per-date
+  `ScheduleTile` rendering with flat icon-led rows (colored icon, kind badge + bold date/time,
+  venue/details subtitle) matching `backend_v3`'s layout, in
+  `frontend/lib/features/placement/ui/company_screen.dart` only — the shared `ScheduleTile` widget
+  itself, still used on the main Placement Hub "coming up" list, was left alone. Preserved
+  `backend_v2`'s own `timeTbd` ("time to be announced") handling, which `backend_v3` doesn't have.
+- **"Follow tags" moved to a standalone bell icon** in the Events page header (next to "Mess menu"
+  and "Add event"), out of the scrollable tag-chip row — pure placement change, same single-select
+  tag-chip behavior as before (`frontend/lib/features/events/ui/events_screen.dart`).
+
+**Verified in browser** (fresh Flutter web instance against the live API): posted and deleted a
+real event update end-to-end; viewed Accenture's redesigned Placement schedule card (confirmed the
+TBA-time case renders correctly); confirmed the bell icon's new header position. `tests/test_events.py`
+(6 tests) still passes.

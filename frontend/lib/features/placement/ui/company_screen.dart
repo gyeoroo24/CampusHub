@@ -14,7 +14,7 @@ import '../../forums/domain/forum_models.dart';
 import '../../forums/ui/forum_board.dart';
 import 'company_seniors.dart';
 import 'placement_dialogs.dart';
-import 'placement_screen.dart' show CompanyAvatar, ScheduleTile;
+import 'placement_screen.dart' show CompanyAvatar, ScheduleKindBadge, scheduleKindColor, scheduleKindIcon;
 
 const _tabs = ['overview', 'interviews', 'stats', 'forum'];
 
@@ -319,7 +319,7 @@ class _OverviewTab extends ConsumerWidget {
         ),
         const SizedBox(height: 16),
         _Section(
-          title: 'Placement dates',
+          title: 'Placement schedule',
           action: manage
               ? TextButton.icon(
                   onPressed: () => edit(PptFormDialog(companyId: company.id)),
@@ -333,8 +333,25 @@ class _OverviewTab extends ConsumerWidget {
                   children: [
                     // Upcoming first (soonest first), then dates to be announced, then past ones.
                     for (final p in _scheduleOrder(company.ppts))
-                      ScheduleTile(
-                        date: p,
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          scheduleKindIcon(p.kind),
+                          color: p.when == PptWhen.past ? theme.hintColor : scheduleKindColor(p.kind),
+                        ),
+                        title: Wrap(
+                          spacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            ScheduleKindBadge(kind: p.kind),
+                            Text(_scheduleWhen(p), style: const TextStyle(fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                        subtitle: Text([
+                          if (p.when == PptWhen.past) 'Done',
+                          if (p.venue != null) p.venue!,
+                          if (p.details != null) p.details!,
+                        ].join(' · ')),
                         trailing: manage
                             ? PopupMenuButton<String>(
                                 onSelected: (v) => v == 'edit'
@@ -353,6 +370,15 @@ class _OverviewTab extends ConsumerWidget {
       ],
     ));
   }
+}
+
+/// "4 Nov 2026, 8:30 PM", or the day only with "time to be announced" when only the day was
+/// imported, or "Date to be announced" when nothing is scheduled yet.
+String _scheduleWhen(Ppt p) {
+  final at = p.scheduledAt;
+  if (at == null) return 'Date to be announced';
+  if (p.timeTbd) return '${DateTimeFormatter.shortDate(at)}, time to be announced';
+  return DateTimeFormatter.fullDateTime(at);
 }
 
 List<Ppt> _scheduleOrder(List<Ppt> ppts) {

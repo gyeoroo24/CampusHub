@@ -155,3 +155,35 @@ class EventDraft {
         if (posterKey != null) 'poster_s3_key': posterKey else if (removePoster) 'poster_s3_key': null,
       };
 }
+
+/// An official notice on an event from an Events moderator, admin or the organizer.
+class EventUpdate {
+  final String id;
+
+  /// What changed with it: info (just a message), time, venue or time_venue.
+  final String kind;
+  final String message;
+  final String authorName;
+  final DateTime createdAt;
+
+  /// The viewer may remove it.
+  final bool canDelete;
+
+  const EventUpdate({
+    required this.id,
+    required this.kind,
+    required this.message,
+    required this.authorName,
+    required this.createdAt,
+    this.canDelete = false,
+  });
+
+  factory EventUpdate.fromJson(Map<String, dynamic> json) => EventUpdate(
+        id: '${json['id']}',
+        kind: json['kind']?.toString() ?? 'info',
+        message: json['message']?.toString() ?? '',
+        authorName: '${(json['author'] as Map?)?['name'] ?? ''}',
+        createdAt: DateTime.tryParse('${json['created_at']}')?.toLocal() ?? DateTime.now(),
+        canDelete: json['can_delete'] == true,
+      );
+}

@@ -1,9 +1,15 @@
 -- ============================================================================
--- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 23
+-- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 24
 -- DS252 Introduction to Cloud Computing — Team "Order of Phoenix"
 --
 -- Permission modules (FR-2, NFR-6): buy_sell, lost_found, academic_help,
 -- placement_hub, events (rev 17: Community Events moderators).
+--
+-- Changes from rev. 23 (event updates, 3 Nov 2026):
+--   1. event_updates: official notices on an event (delays, venue/time changes) from its organizer or
+--      an events moderator/admin. Shown on the event page instead of its discussion forum, which stays
+--      in the schema (unused by the app) rather than being dropped.
+--   Upgrade: db/migrations/024_event_updates.sql.
 --
 -- Changes from rev. 21 (course repository, 3 Nov 2026):
 --   1. Course materials are a shared repository: anyone signed in uploads (up to 100 MB). New columns
@@ -1063,6 +1069,21 @@ CREATE TABLE event_tag_map (
     PRIMARY KEY (event_id, tag_id)
 );
 CREATE INDEX idx_event_tag_map_tag ON event_tag_map(tag_id, event_id);   -- FR-18 filter by tag
+
+-- rev 24: official notices on an event (delays, venue changes) from its organizer or an events
+-- moderator/admin, shown on the event page instead of its (still-present, unused) discussion forum.
+CREATE TABLE event_updates (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id   UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    author_id  UUID NOT NULL REFERENCES users(id),
+    kind       TEXT NOT NULL DEFAULT 'info' CHECK (kind IN ('info', 'time', 'venue', 'time_venue')),
+    message    TEXT NOT NULL CHECK (char_length(btrim(message)) BETWEEN 1 AND 1000),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_at TIMESTAMPTZ,
+    deleted_by UUID REFERENCES users(id),
+    CONSTRAINT event_updates_deleted_pair_chk CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))
+);
+CREATE INDEX idx_event_updates_event ON event_updates(event_id, created_at DESC) WHERE deleted_at IS NULL;
 
 -- FR-20 "followed-tag": a user follows a tag (e.g. Photography) and is
 -- notified about new or updated events carrying it. Separate from bookmarks,

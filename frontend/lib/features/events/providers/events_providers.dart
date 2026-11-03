@@ -114,3 +114,8 @@ Future<void> toggleEventBookmark(WidgetRef ref, CampusEvent event) async {
   ref.invalidate(eventsProvider);
   ref.invalidate(eventProvider(event.id));
 }
+
+final eventUpdatesProvider = FutureProvider.autoDispose.family<List<EventUpdate>, String>((ref, eventId) {
+  ref.watch(currentUserProvider); // can_delete depends on who is viewing
+  return ref.watch(eventsRepositoryProvider).fetchUpdates(eventId);
+});

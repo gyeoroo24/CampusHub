@@ -89,6 +89,29 @@ class EventUpdate(BaseModel):
         return self
 
 
+class EventUpdateIn(BaseModel):
+    message: text(1000) = Field(examples=["Delayed by an hour because of rain."])
+    start_time: datetime | None = Field(None, description="Also move the event (send end_time too if it changes)")
+    end_time: datetime | None = None
+    location: text(200) | None = Field(None, description="Also change the venue")
+
+    @model_validator(mode="after")
+    def _times(self):
+        _aware(self.start_time, "start_time")
+        _aware(self.end_time, "end_time")
+        return self
+
+
+class EventUpdateOut(BaseModel):
+    id: UUID
+    event_id: UUID
+    kind: Literal["info", "time", "venue", "time_venue"] = Field(description="What changed with this update")
+    message: str
+    author: UserRef
+    created_at: datetime
+    can_delete: bool = Field(description="The viewer may remove it (Events moderator, admin or the organizer)")
+
+
 class TagIn(BaseModel):
     name: text(40) = Field(examples=["Photography"])
 
@@ -470,6 +493,95 @@ async def delete_event(event_id: UUID, background: BackgroundTasks, reason: str 
                                                   "bookmarked_event_update", payload)
         await conn.execute("DELETE FROM bookmarks WHERE target_type = 'event' AND target_id = $1", event_id)
     background.add_task(deliver_push, notified, "bookmarked_event_update", payload)
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------- updates (official notices on an event)
+_UPDATE_SELECT = """
+SELECT up.id, up.event_id, up.kind, up.message, up.created_at, up.author_id, u.name AS author_name
+FROM event_updates up JOIN users u ON u.id = up.author_id
+"""
+
+
+def _update_out(r: asyncpg.Record, can_delete: bool) -> EventUpdateOut:
+    return EventUpdateOut(id=r["id"], event_id=r["event_id"], kind=r["kind"], message=r["message"],
+                          author=UserRef(id=r["author_id"], name=r["author_name"]), created_at=r["created_at"],
+                          can_delete=can_delete)
+
+
+async def _can_post_updates(conn: asyncpg.Connection, organizer_id: UUID, viewer: CurrentUser | None) -> bool:
+    return viewer is not None and (viewer.id == organizer_id or await _is_moderator(conn, viewer))
+
+
+@router.get("/events/{event_id}/updates", response_model=list[EventUpdateOut],
+            summary="Updates on an event, newest first (guests allowed)")
+async def list_updates(event_id: UUID, viewer: CurrentUser | None = Depends(optional_user),
+                       conn: asyncpg.Connection = Depends(get_conn)):
+    organizer = await conn.fetchval("SELECT created_by FROM events WHERE id = $1 AND deleted_at IS NULL", event_id)
+    if organizer is None:
+        raise not_found("Event")
+    can_delete = await _can_post_updates(conn, organizer, viewer)
+    rows = await conn.fetch(_UPDATE_SELECT + """ WHERE up.event_id = $1 AND up.deleted_at IS NULL
+                            ORDER BY up.created_at DESC, up.id LIMIT 100""", event_id)
+    return [_update_out(r, can_delete) for r in rows]
+
+
+@router.post("/events/{event_id}/updates", response_model=EventUpdateOut, status_code=201,
+             summary="Post an update on an event (Events moderator, admin or the organizer); it can also move "
+                     "the event or change its venue. People who bookmarked the event are alerted")
+async def post_update(event_id: UUID, body: EventUpdateIn, background: BackgroundTasks,
+                      user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
+    notified, payload = [], {}
+    async with conn.transaction():
+        old = await _editable(conn, event_id, user)  # organizer, events moderator or admin only
+        start, end = body.start_time or old["start_time"], body.end_time or old["end_time"]
+        if body.start_time and not body.end_time:
+            end = start + (old["end_time"] - old["start_time"])     # moving the start keeps the length
+        if body.start_time or body.end_time:
+            # Only re-check these when the update is actually moving the event: an update that
+            # doesn't touch the time shouldn't be blocked by an existing event's own duration (e.g.
+            # a mess's always-open event card, which legitimately runs longer than 30 days).
+            if end <= start:
+                raise HTTPException(422, "end_time must be after start_time.")
+            if end - start > MAX_DURATION:
+                raise HTTPException(422, "An event can last at most 30 days.")
+        moved = (start, end) != (old["start_time"], old["end_time"])
+        new_place = body.location is not None and body.location != (old["location"] or "")
+        if moved or new_place:
+            await conn.execute("UPDATE events SET start_time = $2, end_time = $3, location = $4 WHERE id = $1",
+                               event_id, start, end, body.location if new_place else old["location"])
+        kind = "time_venue" if moved and new_place else "time" if moved else "venue" if new_place else "info"
+        update_id = await conn.fetchval(
+            "INSERT INTO event_updates (event_id, author_id, kind, message) VALUES ($1, $2, $3, $4) RETURNING id",
+            event_id, user.id, kind, body.message)
+        if old["created_by"] != user.id:
+            await log_moderation(conn, user.id, "post_event_update", "event", event_id)
+        details = [body.message]
+        if moved:
+            details.append(f"now {_when_text(start)}")
+        if new_place:
+            details.append(f"at {body.location}")
+        payload = {"event_id": str(event_id), "update_id": str(update_id), "cancelled": False,
+                   "message": f"Update on “{old['title']}”: {' · '.join(details)}"[:300]}
+        notified = await create_notifications(conn, await _bookmarkers(conn, event_id, user.id),
+                                              "bookmarked_event_update", payload)
+    background.add_task(deliver_push, notified, "bookmarked_event_update", payload)
+    row = await conn.fetchrow(_UPDATE_SELECT + " WHERE up.id = $1", update_id)
+    return _update_out(row, True)
+
+
+@router.delete("/event-updates/{update_id}", status_code=204,
+               summary="Remove an update (Events moderator, admin or the event's organizer)")
+async def delete_update(update_id: UUID, user: CurrentUser = Depends(current_user),
+                        conn: asyncpg.Connection = Depends(get_conn)):
+    row = await conn.fetchrow(
+        """SELECT up.event_id, e.created_by FROM event_updates up JOIN events e ON e.id = up.event_id
+           WHERE up.id = $1 AND up.deleted_at IS NULL""", update_id)
+    if row is None:
+        raise not_found("Update")
+    if not await _can_post_updates(conn, row["created_by"], user):
+        raise forbidden("Only Events moderators and the event's organizer can remove updates.")
+    await conn.execute("UPDATE event_updates SET deleted_at = now(), deleted_by = $2 WHERE id = $1", update_id, user.id)
     return Response(status_code=204)
 
 

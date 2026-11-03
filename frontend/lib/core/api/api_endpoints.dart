@@ -163,6 +163,8 @@ class ApiEndpoints {
   static const String events = '$version/events';
   static String event(String id) => '$version/events/$id';
   static const String eventTags = '$version/event-tags';
+  static String eventUpdates(String eventId) => '$version/events/$eventId/updates';
+  static String eventUpdate(String id) => '$version/event-updates/$id';
   static String followedTag(int tagId) => '$version/me/followed-tags/$tagId';
   static String bookmark(String targetType, String targetId) => '$version/me/bookmarks/$targetType/$targetId';
   static const String bookmarksImport = '$version/me/bookmarks/import';
