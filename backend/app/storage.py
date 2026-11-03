@@ -40,13 +40,17 @@ log = logging.getLogger("campushub.storage")
 
 MB = 1024 * 1024
 IMAGE_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic"}
+# Course materials (rev 22: anyone shares them; every file is opened and checked in app/material_check.py).
 MATERIAL_TYPES = {
     **IMAGE_TYPES,
     "application/pdf": "pdf",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
     "application/zip": "zip",
     "text/plain": "txt",
+    "text/csv": "csv",
+    "text/markdown": "md",
 }
 
 DOCUMENT_TYPES = {
@@ -67,7 +71,7 @@ UPLOAD_KINDS: dict[str, UploadKind] = {
     "listing_photo": UploadKind("listings", IMAGE_TYPES, 10 * MB),
     "lost_report_photo": UploadKind("lost-reports", IMAGE_TYPES, 10 * MB),
     "found_report_photo": UploadKind("found-reports", IMAGE_TYPES, 10 * MB),
-    "course_material": UploadKind("course-materials", MATERIAL_TYPES, 50 * MB),
+    "course_material": UploadKind("course-materials", MATERIAL_TYPES, 100 * MB),
     # Placement Hub: a JD file attached to a company's role (placement moderators only).
     "job_description": UploadKind("job-descriptions", DOCUMENT_TYPES, 20 * MB),
     # Community Events: an optional poster image for an event.

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from .conftest import ADMIN, API, ASHA, KIRAN, MEERA, RAVI, category, make_admin, sign_in
+from .conftest import ADMIN, API, ASHA, KIRAN, MEERA, RAVI, category, make_admin, sign_in, post_event
 
 NOW = datetime.now(timezone.utc)
 
@@ -29,7 +29,7 @@ def tags(client):
 def _event(client, headers, tag_ids, start=timedelta(days=2), hours=2, **fields):
     body = {"title": "Bird walk", "location": "Main gate", "start_time": _iso(start),
             "end_time": _iso(start + timedelta(hours=hours)), "tag_ids": tag_ids} | fields
-    r = client.post(f"{API}/events", headers=headers, json=body)
+    r = post_event(client, headers, body)
     assert r.status_code == 201, r.text
     return r.json()
 
@@ -72,16 +72,19 @@ def test_events_classify_by_time_and_filter_by_tag(client, tags):
 def test_event_validation_and_ownership(client, tags):
     bad = {"title": "x", "start_time": _iso(timedelta(days=2)), "end_time": _iso(timedelta(days=1)),
            "tag_ids": [tags["Sports"]]}
-    assert client.post(f"{API}/events", headers=ASHA, json=bad).status_code == 422          # ends before it starts
-    assert client.post(f"{API}/events", headers=ASHA, json=bad | {
+    assert client.post(f"{API}/events", headers=ADMIN, json=bad).status_code == 422          # ends before it starts
+    assert client.post(f"{API}/events", headers=ADMIN, json=bad | {
         "end_time": _iso(timedelta(days=40))}).status_code == 422                            # longer than 30 days
-    assert client.post(f"{API}/events", headers=ASHA, json=bad | {
+    assert client.post(f"{API}/events", headers=ADMIN, json=bad | {
         "end_time": _iso(timedelta(days=3)), "tag_ids": []}).status_code == 422             # needs a tag
-    assert client.post(f"{API}/events", headers=ASHA, json=bad | {
+    assert client.post(f"{API}/events", headers=ADMIN, json=bad | {
         "end_time": _iso(timedelta(days=3)), "tag_ids": [999]}).status_code == 422          # unknown tag
-    assert client.post(f"{API}/events", headers=ASHA, json=bad | {
+    assert client.post(f"{API}/events", headers=ADMIN, json=bad | {
         "start_time": "2026-12-01T10:00:00", "end_time": "2026-12-01T12:00:00"}).status_code == 422   # no timezone
     assert client.post(f"{API}/events", json=bad).status_code == 401                          # guests read only
+    good = bad | {"end_time": _iso(timedelta(days=3))}
+    r = client.post(f"{API}/events", headers=RAVI, json=good)
+    assert r.status_code == 403 and "moderators" in r.text                                   # students can't add events
 
     event = _event(client, ASHA, [tags["Sports"]])
     assert event["can_edit"] is True

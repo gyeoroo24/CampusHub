@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from .. import sentiment
 from ..common import not_found
 from ..db import get_conn
+from ..sentiment_backends import score_sentences
 
 router = APIRouter(tags=["Academic Help"])
 
@@ -157,8 +158,13 @@ async def survival_guide(course_id: UUID, conn: asyncpg.Connection = Depends(get
     by_term: dict[tuple[int, int], list[list[tuple[str, float]]]] = {}
     advice: Counter[str] = Counter()
     advice_text: dict[str, str] = {}
-    for r in rows:
-        scored = [(s, sentiment.score(s)) for s in sentiment.sentences(r["content"])]
+    # Every sentence of every feedback in one batch to the sentiment backend (model or Comprehend).
+    split = [sentiment.sentences(r["content"]) for r in rows]
+    flat = await score_sentences([s for sentences in split for s in sentences])
+    position = 0
+    for r, sentences in zip(rows, split):
+        scored = list(zip(sentences, flat[position:position + len(sentences)]))
+        position += len(sentences)
         if not scored:
             continue
         by_term.setdefault(_term(r["created_at"]), []).append(scored)

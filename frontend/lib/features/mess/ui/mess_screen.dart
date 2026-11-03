@@ -117,14 +117,10 @@ class _MessScreenState extends ConsumerState<MessScreen> {
                           selected: m.id == mess.id,
                           onSelected: (_) => setState(() => _messId = m.id),
                         ),
-                      if (list.canManage) ...[
-                        FilledButton.tonalIcon(
-                            onPressed: () => _upload(messes),
-                            icon: const Icon(Icons.upload_file_rounded, size: 18),
-                            label: const Text('Upload a mess menu')),
+                      // A mess's menu is posted from its own page ("Post a menu"); new messes start here.
+                      if (list.canManage)
                         TextButton.icon(onPressed: _addMess, icon: const Icon(Icons.add_rounded, size: 18),
                             label: const Text('Add a mess')),
-                      ],
                     ],
                   ),
                   const SizedBox(height: 16),

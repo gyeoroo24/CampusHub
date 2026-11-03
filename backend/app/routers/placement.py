@@ -26,6 +26,7 @@ from ..common import (Page, PageParams, UserRef, forbidden, like_pattern, make_p
 from ..db import get_conn
 from ..permissions import close_reports, is_module_moderator, log_moderation
 from ..placement_csv import parse_companies, parse_schedule
+from ..placement_roles import parse_inr, parse_roles
 from ..placement_sheet import SheetError, parse_sheet
 from ..storage import delete_objects, file_url, mark_attached, put_object, verify_own_uploads
 
@@ -62,10 +63,18 @@ class CompanyUpdate(BaseModel):
     _url = field_validator("website")(_check_url)
 
 
+JobType = Literal["full_time", "internship", "ppo", "other"]
+
+
 class JobDescriptionIn(BaseModel):
     role_title: text(200) = Field(examples=["Software Engineer"])
     description: text(20_000, min_length=0) | None = Field(None, description="The JD as text")
-    compensation: text(200, min_length=0) | None = Field(None, examples=["₹32 LPA"])
+    compensation: text(200, min_length=0) | None = Field(
+        None, examples=["₹32 LPA"], description="As announced; the amount is read from it (ctc_min / ctc_max)")
+    placement_year: int | None = Field(None, ge=2000, le=2100, description="The season, e.g. 2026 for 2025-26")
+    job_type: JobType = "full_time"
+    base: text(200, min_length=0) | None = Field(None, description="Base / fixed pay, as announced")
+    skills: text(5000, min_length=0) | None = None
     file_s3_key: str | None = Field(None, description="Optional JD file: s3_key from POST /uploads "
                                                       "(kind job_description)")
 
@@ -74,6 +83,10 @@ class JobDescriptionUpdate(BaseModel):
     role_title: text(200) | None = None
     description: text(20_000, min_length=0) | None = None
     compensation: text(200, min_length=0) | None = None
+    placement_year: int | None = Field(None, ge=2000, le=2100)
+    job_type: JobType | None = None
+    base: text(200, min_length=0) | None = None
+    skills: text(5000, min_length=0) | None = None
     file_s3_key: str | None = Field(None, description="A new file's s3_key, or null to remove the file")
 
 
@@ -107,6 +120,9 @@ class InterviewUpdate(BaseModel):
 
 class CsvImportRequest(BaseModel):
     csv: str = Field(min_length=1, max_length=2_000_000, description="CSV or tab-separated text with a header row")
+    file_name: str | None = Field(None, max_length=255, description="Placement dates: the file's name. When neither "
+                                  "a Type column nor the column names say the round, \"interview\", \"test\" or "
+                                  "\"PPT\" in it does (\"slot 2 interview schedule.csv\").")
 
 
 class ImportRequest(BaseModel):
@@ -121,7 +137,14 @@ class JobDescription(BaseModel):
     company_id: UUID
     role_title: str
     description: str | None
-    compensation: str | None
+    compensation: str | None = Field(description="As announced, e.g. '₹32 LPA' or 'Refer JD'")
+    ctc_min: int | None = Field(None, description="Rupees a year read from compensation (null if it has no amount)")
+    ctc_max: int | None = Field(None, description="Same as ctc_min unless compensation is a range")
+    base: str | None = Field(None, description="Base / fixed pay, as announced")
+    base_annual: int | None = None
+    placement_year: int | None = Field(None, description="The season the role was offered in")
+    job_type: JobType = "full_time"
+    skills: str | None = None
     file_s3_key: str | None
     file_url: str | None = Field(description="Short-lived download link for the JD file")
     created_at: datetime
@@ -156,6 +179,9 @@ class CompanySummary(BaseModel):
     latest_year: int | None = Field(description="The latest placement year with hires")
     latest_year_selected: int = Field(description="Students selected in latest_year")
     total_selected: int = Field(description="Students selected across all imported years")
+    ctc_year: int | None = Field(None, description="The latest season with a known compensation")
+    ctc_min: int | None = Field(None, description="Lowest compensation offered in ctc_year, rupees a year")
+    ctc_max: int | None = Field(None, description="Highest compensation offered in ctc_year, rupees a year")
 
 
 class CompanyDetail(CompanySummary):
@@ -195,12 +221,25 @@ class TopCompany(BaseModel):
     company_id: UUID
     company_name: str
     students_selected: int
+    ctc_min: int | None = Field(None, description="Lowest full-time compensation offered that season, rupees a year")
+    ctc_max: int | None = None
+
+
+class CompanyPay(BaseModel):
+    company_id: UUID
+    company_name: str
+    ctc_min: int = Field(description="Rupees a year")
+    ctc_max: int
+    roles: int = Field(description="Roles with a known compensation that season")
 
 
 class PlacementOverview(BaseModel):
     seasons: list[SeasonStats] = Field(description="Newest first")
     year: int | None = Field(description="The season top_companies is for")
     top_companies: list[TopCompany]
+    pay_year: int | None = Field(None, description="The latest season with compensation data")
+    top_paying: list[CompanyPay] = Field(default_factory=list,
+                                         description="Full-time roles in pay_year, highest compensation first")
 
 
 class Interview(BaseModel):
@@ -277,8 +316,14 @@ SELECT c.id, c.name, c.industry, c.description, c.website, c.created_at, c.updat
         WHERE p.company_id = c.id AND p.kind = 'ppt' AND p.scheduled_at >= now()) AS next_ppt_at,
        nd.next_date_at, nd.next_date_kind,
        ly.latest_year, coalesce(ly.latest_year_selected, 0) AS latest_year_selected,
-       (SELECT count(*) FROM placement_records r WHERE r.company_id = c.id) AS total_selected
+       (SELECT count(*) FROM placement_records r WHERE r.company_id = c.id) AS total_selected,
+       pay.ctc_year, pay.ctc_min, pay.ctc_max
 FROM companies c
+LEFT JOIN LATERAL (
+    SELECT j.placement_year AS ctc_year, min(j.ctc_min) AS ctc_min, max(j.ctc_max) AS ctc_max
+    FROM job_descriptions j WHERE j.company_id = c.id AND j.ctc_min IS NOT NULL AND j.job_type <> 'internship'
+    GROUP BY j.placement_year ORDER BY j.placement_year DESC NULLS LAST LIMIT 1
+) pay ON true
 LEFT JOIN LATERAL (
     SELECT r.placement_year AS latest_year, count(*) AS latest_year_selected
     FROM placement_records r WHERE r.company_id = c.id
@@ -297,13 +342,17 @@ def _company_summary(r: asyncpg.Record) -> CompanySummary:
                           role_count=r["role_count"], interview_count=r["interview_count"],
                           next_ppt_at=r["next_ppt_at"], next_date_at=r["next_date_at"],
                           next_date_kind=r["next_date_kind"], latest_year=r["latest_year"],
-                          latest_year_selected=r["latest_year_selected"], total_selected=r["total_selected"])
+                          latest_year_selected=r["latest_year_selected"], total_selected=r["total_selected"],
+                          ctc_year=r["ctc_year"], ctc_min=r["ctc_min"], ctc_max=r["ctc_max"])
 
 
 def _jd(r: asyncpg.Record) -> JobDescription:
     key = r["jd_s3_key"]
     return JobDescription(id=r["id"], company_id=r["company_id"], role_title=r["role_title"],
-                          description=r["description"], compensation=r["compensation"], file_s3_key=key,
+                          description=r["description"], compensation=r["compensation"], ctc_min=r["ctc_min"],
+                          ctc_max=r["ctc_max"], base=r["base_text"], base_annual=r["base_annual"],
+                          placement_year=r["placement_year"], job_type=r["job_type"], skills=r["skills"],
+                          file_s3_key=key,
                           file_url=file_url(key) if key else None, created_at=r["created_at"],
                           updated_at=r["updated_at"])
 
@@ -342,9 +391,10 @@ async def _company_detail(conn: asyncpg.Connection, company_id: UUID, viewer: Cu
 async def list_companies(
     q: str | None = Query(None, max_length=200, description="Words in the company name or industry"),
     industry: str | None = Query(None, max_length=80),
-    sort: Literal["name", "most_hired", "upcoming_ppt"] = Query(
+    sort: Literal["name", "most_hired", "upcoming_ppt", "highest_pay"] = Query(
         "name", description="most_hired: by students selected in their latest season; "
-                            "upcoming_ppt: companies with the soonest talk first"),
+                            "upcoming_ppt: companies with the soonest talk first; "
+                            "highest_pay: by the top compensation of their latest season with pay data"),
     page: PageParams = Depends(page_params),
     conn: asyncpg.Connection = Depends(get_conn),
 ):
@@ -352,6 +402,7 @@ async def list_companies(
         "name": "lower(x.name), x.id",
         "most_hired": "x.latest_year DESC NULLS LAST, x.latest_year_selected DESC, lower(x.name), x.id",
         "upcoming_ppt": "x.next_date_at ASC NULLS LAST, lower(x.name), x.id",
+        "highest_pay": "x.ctc_max DESC NULLS LAST, lower(x.name), x.id",
     }[sort]
     q = search_text(q)
     rows = await conn.fetch(
@@ -406,18 +457,29 @@ async def update_company(company_id: UUID, body: CompanyUpdate, user: CurrentUse
 
 
 @router.delete("/companies/{company_id}", status_code=204,
-               summary="Delete a company with its JDs, PPTs, hiring records, interview experiences and forum (admin)")
-async def delete_company(company_id: UUID, user: CurrentUser = Depends(current_user),
-                         conn: asyncpg.Connection = Depends(get_conn)):
-    if not user.is_admin:
-        raise forbidden("Only an admin can delete a company: it also deletes its hiring records.")
+               summary="Delete a company with everything under it (Placement Hub moderator or admin)")
+async def delete_company(company_id: UUID, reason: str | None = Query(None, max_length=500),
+                         user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
+    """For a company that withdrew: its roles and JD files, every date on its schedule (upcoming PPTs, tests and
+    interviews included), hiring records, seniors, interview experiences and its forum all go. Open reports
+    about its interview experiences and forum posts are closed."""
+    await _require_moderator(conn, user)
     keys = [r["jd_s3_key"] for r in await conn.fetch(
         "SELECT jd_s3_key FROM job_descriptions WHERE company_id = $1 AND jd_s3_key IS NOT NULL", company_id)]
     async with conn.transaction():
+        interviews = [r["id"] for r in await conn.fetch(
+            "SELECT id FROM interview_experiences WHERE company_id = $1", company_id)]
+        threads = [r["id"] for r in await conn.fetch(
+            "SELECT t.id FROM threads t JOIN forums f ON f.id = t.forum_id WHERE f.company_id = $1", company_id)]
+        comments = [r["id"] for r in await conn.fetch(
+            "SELECT c.id FROM comments c WHERE c.thread_id = ANY($1::uuid[])", threads)]
+        await close_reports(conn, "interview_experience", interviews, user.id, reason or "Company removed")
+        await close_reports(conn, "thread", threads, user.id, reason or "Company removed")
+        await close_reports(conn, "comment", comments, user.id, reason or "Company removed")
         deleted = await conn.fetchval("DELETE FROM companies WHERE id = $1 RETURNING true", company_id)
         if not deleted:
             raise not_found("Company")
-        await log_moderation(conn, user.id, "delete_company", "company", company_id)
+        await log_moderation(conn, user.id, "delete_company", "company", company_id, reason)
     await delete_objects(keys)
     return Response(status_code=204)
 
@@ -438,10 +500,18 @@ async def create_jd(company_id: UUID, body: JobDescriptionIn, user: CurrentUser 
     await _company_exists(conn, company_id)
     if body.file_s3_key:
         await verify_own_uploads([body.file_s3_key], "job_description", user.id)
-    jd_id = await conn.fetchval(
-        """INSERT INTO job_descriptions (company_id, role_title, description, compensation, jd_s3_key)
-           VALUES ($1, $2, $3, $4, $5) RETURNING id""",
-        company_id, body.role_title, body.description or None, body.compensation or None, body.file_s3_key)
+    ctc = parse_inr(body.compensation)
+    base = parse_inr(body.base)
+    try:
+        jd_id = await conn.fetchval(
+            """INSERT INTO job_descriptions (company_id, role_title, description, compensation, jd_s3_key, placement_year,
+                                             job_type, ctc_min, ctc_max, base_text, base_annual, skills)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id""",
+            company_id, body.role_title, body.description or None, body.compensation or None, body.file_s3_key,
+            body.placement_year, body.job_type, ctc[0] if ctc else None, ctc[1] if ctc else None, body.base or None,
+            base[1] if base else None, body.skills or None)
+    except asyncpg.UniqueViolationError as exc:
+        raise HTTPException(409, "This company already has that role for that season. Edit it instead.") from exc
     if body.file_s3_key:
         await mark_attached([body.file_s3_key])
     return await _jd_detail(conn, jd_id)
@@ -464,10 +534,23 @@ async def update_jd(jd_id: UUID, body: JobDescriptionUpdate, user: CurrentUser =
         await verify_own_uploads([new_key], "job_description", user.id)
     if new_key != old_key:
         changes["jd_s3_key"] = new_key
-    changes = {k: (v or None) if k in ("description", "compensation") else v for k, v in changes.items()}
+    changes = {k: (v or None) if k in ("description", "compensation", "base", "skills") else v
+               for k, v in changes.items()}
+    if "job_type" in changes and changes["job_type"] is None:
+        raise HTTPException(422, "job_type can't be empty.")
+    if "compensation" in changes:
+        ctc = parse_inr(changes["compensation"])
+        changes["ctc_min"], changes["ctc_max"] = ctc if ctc else (None, None)
+    if "base" in changes:
+        base = parse_inr(changes["base"])
+        changes["base_text"] = changes.pop("base")
+        changes["base_annual"] = base[1] if base else None
     sql, values = set_clause(changes, start=2)
     async with conn.transaction():
-        await conn.execute(f"UPDATE job_descriptions SET {sql} WHERE id = $1", jd_id, *values)
+        try:
+            await conn.execute(f"UPDATE job_descriptions SET {sql} WHERE id = $1", jd_id, *values)
+        except asyncpg.UniqueViolationError as exc:
+            raise HTTPException(409, "This company already has that role for that season.") from exc
         await log_moderation(conn, user.id, "edit_job_description", "job_description", jd_id)
     if new_key != old_key:
         if new_key:
@@ -592,12 +675,25 @@ async def placement_overview(years: int = Query(5, ge=1, le=30, description="How
            FROM placement_records GROUP BY placement_year ORDER BY placement_year DESC LIMIT $1""", years)
     season = year if year is not None else (seasons[0]["year"] if seasons else None)
     top_rows = [] if season is None else await conn.fetch(
-        """SELECT c.id AS company_id, c.name AS company_name, count(*) AS students_selected
+        """SELECT c.id AS company_id, c.name AS company_name, count(*) AS students_selected,
+                  (SELECT min(j.ctc_min) FROM job_descriptions j WHERE j.company_id = c.id AND j.placement_year = $1
+                     AND j.job_type <> 'internship') AS ctc_min,
+                  (SELECT max(j.ctc_max) FROM job_descriptions j WHERE j.company_id = c.id AND j.placement_year = $1
+                     AND j.job_type <> 'internship') AS ctc_max
            FROM placement_records r JOIN companies c ON c.id = r.company_id
            WHERE r.placement_year = $1
            GROUP BY c.id, c.name ORDER BY students_selected DESC, lower(c.name) LIMIT $2""", season, top)
+    pay_year = await conn.fetchval(
+        "SELECT max(placement_year) FROM job_descriptions WHERE ctc_min IS NOT NULL AND job_type <> 'internship'")
+    paying = [] if pay_year is None else await conn.fetch(
+        """SELECT c.id AS company_id, c.name AS company_name, min(j.ctc_min) AS ctc_min, max(j.ctc_max) AS ctc_max,
+                  count(*) AS roles
+           FROM job_descriptions j JOIN companies c ON c.id = j.company_id
+           WHERE j.placement_year = $1 AND j.ctc_min IS NOT NULL AND j.job_type <> 'internship'
+           GROUP BY c.id, c.name ORDER BY max(j.ctc_max) DESC, lower(c.name) LIMIT $2""", pay_year, top)
     return PlacementOverview(seasons=[SeasonStats(**dict(s)) for s in seasons], year=season,
-                             top_companies=[TopCompany(**dict(t)) for t in top_rows])
+                             top_companies=[TopCompany(**dict(t)) for t in top_rows], pay_year=pay_year,
+                             top_paying=[CompanyPay(**dict(p)) for p in paying])
 
 
 # ---------------------------------------------------------------- interview experiences
@@ -850,13 +946,14 @@ async def import_companies(body: CsvImportRequest, user: CurrentUser = Depends(c
              summary="Add placement dates (talks, online tests, interviews) from a CSV (Placement Hub moderator or admin)")
 async def import_schedule(body: CsvImportRequest, user: CurrentUser = Depends(current_user),
                           conn: asyncpg.Connection = Depends(get_conn)):
-    """Columns: Company (required), Type (PPT, OA, Interview or Other; default PPT), Date and Time (or one
+    """Columns: Company (required), Type (PPT, OA, Interview or Other; else from the column names or the file
+    name, e.g. "Venue of Interview" or "slot 2 test schedule.csv"; default PPT), Date and Time (or one
     Date and time column; India time unless a timezone is given), Venue, Details. Companies not seen before
     are created. A row with the same company, type and time as an existing entry updates its venue and
     details instead of adding it twice."""
     await _require_moderator(conn, user)
     try:
-        rows, rejected = parse_schedule(body.csv)
+        rows, rejected = parse_schedule(body.csv, body.file_name)
     except SheetError as exc:
         raise HTTPException(422, str(exc)) from exc
     new_companies: list[str] = []
@@ -1066,3 +1163,58 @@ async def hide_sheet_senior(record_id: UUID, body: HiddenIn, user: CurrentUser =
         await log_moderation(conn, user.id, "hide_company_senior" if body.hidden else "show_company_senior",
                              "placement_record", record_id)
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------- roles and compensation (rev 21)
+class RolesImportRequest(BaseModel):
+    csv: str = Field(min_length=1, max_length=5_000_000, description="Rows of a roles-and-compensation file")
+    placement_year: int | None = Field(None, ge=2000, le=2100,
+                                       description="Season for rows without a Batch/Year column (e.g. 2026 for 2025-26)")
+
+
+@router.post("/placement/roles/import", response_model=CsvImportResult, status_code=201,
+             summary="Import roles and compensation (Placement Hub moderator or admin)")
+async def import_roles(body: RolesImportRequest, user: CurrentUser = Depends(current_user),
+                       conn: asyncpg.Connection = Depends(get_conn)):
+    """Columns by name (app/placement_roles.py): Company and Position / Job title (required); Batch or Year;
+    Overall CTC; Base; Job type; Description; Skills. Compensation stays as written and its amount is read into
+    rupees a year. A role is one company, title, season and type: importing again updates it, filling in what
+    the file has and keeping what it doesn't."""
+    await _require_moderator(conn, user)
+    try:
+        rows, rejected = parse_roles(body.csv, body.placement_year)
+    except SheetError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    new_companies: list[str] = []
+    company_ids: dict[str, UUID] = {}
+    created = updated = 0
+    async with conn.transaction():
+        for row in rows:
+            key = row.company.lower()
+            if key not in company_ids:
+                company_ids[key] = await _company_id_for(conn, row.company, new_companies)
+            was_created = await conn.fetchval(
+                """INSERT INTO job_descriptions (company_id, role_title, placement_year, job_type, compensation, ctc_min,
+                                                 ctc_max, base_text, base_annual, description, skills)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                   ON CONFLICT (company_id, lower(role_title), coalesce(placement_year, 0), job_type) DO UPDATE SET
+                     compensation = coalesce(EXCLUDED.compensation, job_descriptions.compensation),
+                     ctc_min = coalesce(EXCLUDED.ctc_min, job_descriptions.ctc_min),
+                     ctc_max = coalesce(EXCLUDED.ctc_max, job_descriptions.ctc_max),
+                     base_text = coalesce(EXCLUDED.base_text, job_descriptions.base_text),
+                     base_annual = coalesce(EXCLUDED.base_annual, job_descriptions.base_annual),
+                     description = coalesce(EXCLUDED.description, job_descriptions.description),
+                     skills = coalesce(EXCLUDED.skills, job_descriptions.skills),
+                     updated_at = now()
+                   RETURNING (xmax = 0)""",
+                company_ids[key], row.role, row.placement_year, row.job_type, row.ctc_text, row.ctc_min, row.ctc_max,
+                row.base_text, row.base_annual, row.description, row.skills)
+            if was_created:
+                created += 1
+            else:
+                updated += 1
+        await log_moderation(conn, user.id, "import_roles", "placement_csv", user.id,
+                             f"{created} created, {updated} updated, {len(rejected)} rejected")
+    return CsvImportResult(rows_total=len(rows) + len(rejected), rows_created=created, rows_updated=updated,
+                           rows_rejected=len(rejected), companies_created=new_companies,
+                           rejected_rows=[RejectedRowOut(line=r.line, reason=r.reason) for r in rejected])

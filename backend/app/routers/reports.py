@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from ..auth import CurrentUser, current_user
 from ..common import Page, PageParams, UserRef, forbidden, make_page, not_found, page_params, text
+from ..course_updates import notify_course_followers
 from ..db import get_conn
 from ..notify import create_notifications, deliver_push
 from ..permissions import log_moderation
@@ -281,6 +282,17 @@ async def resolve_report(report_id: UUID, body: ResolveRequest, background: Back
         if target_type == "listing":
             # A moderator has decided: an automatic hold (§1.6) ends either way. Removal hides it below.
             await conn.execute("UPDATE listings SET held_for_review_at = NULL WHERE id = $1", target_id)
+        if target_type == "course_material" and not body.remove_content:
+            # A held upload the moderator kept: it appears for everyone, and the course's followers hear of it.
+            released = await conn.fetchrow(
+                """UPDATE course_materials SET held_for_review_at = NULL
+                   WHERE id = $1 AND held_for_review_at IS NOT NULL AND deleted_at IS NULL
+                   RETURNING course_id, uploaded_by, title""", target_id)
+            if released:
+                await notify_course_followers(conn, background, released["course_id"], released["uploaded_by"],
+                                              f"new material “{released['title']}”", {"material_id": str(target_id)})
+        # Read before removing: a removed Wanted post is deleted outright.
+        item = await _owner_and_title(conn, target_type, target_id)
         if body.remove_content:
             if target_type == "listing":
                 # Hidden, not deleted: a report-driven removal is reversible via the seller-trust
@@ -295,6 +307,11 @@ async def resolve_report(report_id: UUID, body: ResolveRequest, background: Back
                     await record_strike(conn, report_id=report_id, listing_id=target_id, seller_id=row["seller_id"],
                                         listing_title=row["title"], severity=body.severity,
                                         moderator_id=user.id, note=body.note)
+            elif target_type == "wanted_post":
+                # Permanent, like DELETE /wanted/{id}: its reports (this one too) go with it.
+                removed = await conn.fetchval("DELETE FROM wanted_posts WHERE id = $1 RETURNING true", target_id) or False
+                if removed:
+                    await log_moderation(conn, user.id, "remove_wanted_post", target_type, target_id, body.note)
             else:
                 table, _ = TARGETS[target_type]
                 removed = await conn.fetchval(
@@ -304,7 +321,6 @@ async def resolve_report(report_id: UUID, body: ResolveRequest, background: Back
                     await log_moderation(conn, user.id, f"remove_{target_type}", target_type, target_id, body.note)
         await log_moderation(conn, user.id, f"report_{body.action}", target_type, target_id, body.note)
         # A removed listing's owner is told by record_strike(); everyone else hears the outcome here.
-        item = await _owner_and_title(conn, target_type, target_id)
         if item and not (removed and target_type == "listing"):
             noun, title = OWNED[target_type][3], _short(item["title"])
             if removed:

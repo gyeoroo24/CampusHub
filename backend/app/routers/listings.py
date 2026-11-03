@@ -337,8 +337,9 @@ async def replace_photos(listing_id: UUID, body: PhotosUpdate, background: Backg
                description="A moderator removing a listing that has an open report counts as resolving "
                            "that report: the listing is hidden (the seller can appeal), the seller gets "
                            "a strike (`severity`, default non_severe; future plan §1.5) and is told why "
-                           "(`reason`). Any other removal by a moderator is a plain soft delete, and the "
-                           "seller is told the reason.")
+                           "(`reason`). Any other removal (by the seller, a moderator or an admin) is "
+                           "permanent: the listing, its photos, watches and reports are deleted from the "
+                           "database and storage. A moderator's removal tells the seller the reason.")
 async def delete_listing(background: BackgroundTasks, listing_id: UUID,
                          reason: str | None = Query(None, max_length=500),
                          severity: Severity = Query("non_severe", description="Only used when a moderator "
@@ -363,9 +364,12 @@ async def delete_listing(background: BackgroundTasks, listing_id: UUID,
             await record_strike(conn, report_id=report_id, listing_id=listing_id, seller_id=seller_id,
                                 listing_title=row["title"], severity=severity, moderator_id=user.id, note=reason)
         else:
-            await conn.execute("UPDATE listings SET deleted_at = now(), deleted_by = $2 WHERE id = $1",
-                               listing_id, user.id)
-            await close_reports(conn, "listing", [listing_id], user.id, reason)
+            # Permanent: photos, watches and reports go with it (ON DELETE CASCADE); a strike or chat
+            # about it keeps a copy of the title (migration 023).
+            photo_keys = [r["s3_key"] for r in await conn.fetch(
+                "SELECT s3_key FROM listing_photos WHERE listing_id = $1", listing_id)]
+            await conn.execute("DELETE FROM listings WHERE id = $1", listing_id)
+            background.add_task(delete_objects, photo_keys)
             if not is_owner:
                 payload = {"message": f'A moderator removed your listing "{row["title"]}".'
                                       + (f" Reason: {reason}" if reason else ""),

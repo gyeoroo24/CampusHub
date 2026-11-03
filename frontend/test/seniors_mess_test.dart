@@ -1,6 +1,13 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:campus_hub/core/utils/numbers_only_formatter.dart';
+import 'package:campus_hub/core/utils/text_file_picker.dart';
+import 'package:campus_hub/features/academics/ui/course_materials.dart';
+import 'package:campus_hub/features/placement/ui/placement_dialogs.dart' show seasonFromFileName;
 import 'package:campus_hub/features/mess/mess_models.dart';
 import 'package:campus_hub/features/mess/ui/menu_editor.dart';
+import 'package:campus_hub/features/placement/domain/placement_models.dart';
 import 'package:campus_hub/features/placement/ui/company_seniors.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -52,5 +59,49 @@ void main() {
     expect(f.formatEditUpdate(old, const TextEditingValue(text: '12a')).text, '12');
     expect(f.formatEditUpdate(old, const TextEditingValue(text: '1.2.')).text, '12');
     expect(rejected, 2);
+  });
+
+  test('compensation shows in LPA, ranges and crores', () {
+    expect(formatCtc(4800000, 4800000), '₹48 LPA');
+    expect(formatCtc(1200000, 1500000), '₹12–15 LPA');
+    expect(formatCtc(960000, null), '₹9.6 LPA');
+    expect(formatCtc(1505000, 1505000), '₹15.05 LPA');
+    expect(formatCtc(12000000, 12000000), '₹1.2 Cr');
+    expect(formatCtc(2000000, 10000000), '₹20 LPA–₹1 Cr');
+    expect(formatCtc(null, null), '');
+  });
+
+  test('roles carry season, type and compensation', () {
+    final jd = JobDescription.fromJson({'id': 'j', 'company_id': 'c', 'role_title': 'NLP', 'compensation': '₹ 48,00,000',
+        'ctc_min': 4800000, 'ctc_max': 4800000, 'base': 'INR 30,00,000', 'base_annual': 3000000,
+        'placement_year': 2026, 'job_type': 'internship', 'skills': 'Python'});
+    expect((jd.placementYear, jd.jobTypeLabel, jd.ctcMin, jd.baseAnnual), (2026, 'Internship', 4800000, 3000000));
+    final c = Company.fromJson({'id': 'c', 'name': 'Observe', 'ctc_year': 2026, 'ctc_min': 2500000, 'ctc_max': 4800000});
+    expect(formatCtc(c.ctcMin, c.ctcMax), '₹25–48 LPA');
+  });
+
+  test('CSV files decode as UTF-8 or, from Excel on Windows, Windows-1252', () {
+    final utf = Uint8List.fromList([0xEF, 0xBB, 0xBF, ...utf8.encode('Company,Role\nCafé,SDE')]);
+    expect(decodeText(utf), 'Company,Role\nCafé,SDE');
+    // "Founder’s Office" with a Windows-1252 curly quote (0x92) and a non-breaking space (0xA0).
+    final cp1252 = Uint8List.fromList([...latin1.encode('Founder'), 0x92, ...latin1.encode('s'), 0xA0, ...latin1.encode('Office')]);
+    expect(decodeText(cp1252), 'Founder’s Office');
+  });
+
+  test('the season comes from the file name', () {
+    expect(seasonFromFileName('Placement Updates_FT 2025-26(Selection).csv'), 2026);
+    expect(seasonFromFileName('placement data 2025_26.csv'), 2026);
+    expect(seasonFromFileName('placement data 2026.csv'), 2026);
+    expect(seasonFromFileName('selections.csv'), isNull);
+  });
+
+  test('shared course materials parse with tags and file details', () {
+    final m = CourseMaterial.fromJson({'id': 'm', 'title': 'Endsem 2025', 'tags': ['pyq', 'solutions'],
+        'file_name': 'endsem.pdf', 'size_bytes': 2500000, 'content_type': 'application/pdf', 'held': true,
+        'can_edit': true, 'download_url': 'https://x', 'uploaded_by': {'id': 'u', 'name': 'Asha'},
+        'created_at': '2026-11-02T10:00:00Z'});
+    expect((m.kindLabel, m.held, m.canEdit, m.uploaderName), ('PDF', true, true, 'Asha'));
+    expect(formatBytes(m.sizeBytes), '2.4 MB');
+    expect(materialTags[m.tags.first], 'PYQs');
   });
 }

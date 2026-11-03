@@ -99,15 +99,16 @@ docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub 
 python -m app.matching --backfill
 ```
 
-A database created before revision 20 (1–2 Nov 2026: seller trust strikes, automatic flagging,
+A database created before revision 22 (1–2 Nov 2026: seller trust strikes, automatic flagging,
 price watch and the Negotiable badge, Placement Hub and Events, then Events moderators, Reddit-style
-forums, the placement schedule and event posters, then senior contacts and mess menus, then hiding chats and any email in placement sheets, then mess event cards) needs these, in order, then
+forums, the placement schedule and event posters, then senior contacts and mess menus, then hiding chats and any email in placement sheets, then mess event cards, then role compensation, then the course repository) needs these, in order, then
 `db/reference-data.sql` once more for the default event tags:
 
 ```bash
 for m in 013_seller_trust 014_reversible_listing_hide 015_auto_flags_and_price_watch 016_placement_and_events \
          017_forums_events_moderation 018_seniors_and_mess_menus 019_chat_hiding_and_any_email \
-         020_mess_event_cards_and_tba_times; do
+         020_mess_event_cards_and_tba_times 021_role_compensation 022_course_repository_and_follows \
+         023_permanent_buy_sell_deletes; do
   docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub < db/migrations/$m.sql
 done
 ```

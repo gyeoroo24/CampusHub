@@ -17,6 +17,7 @@ import urllib.request
 MINILM = ("sentence-transformers/all-MiniLM-L6-v2", "1110a243fdf4706b3f48f1d95db1a4f5529b4d41")
 MOBILECLIP = ("Xenova/mobileclip_s0", "757d59c9c6870a76a4b0306f05f5061bca15c39f")
 BGE = ("Xenova/bge-small-en-v1.5", "ea104dacec62c0de699686887e3f920caeb4f3e3")   # category suggestion
+SENTIMENT = ("Xenova/twitter-roberta-base-sentiment-latest", "f3ec4d0925f90c3ca7ee7814f52d6ee7cf180445")   # course feedback
 NSFW = ("onnx-community/nsfw_image_detection-ONNX", "1ceb3c7fe1e9f3f2507e6df577437f23a9149fd5")   # obscene photos
 
 FILES = [  # (repo, revision, path in repo, local path, sha256)
@@ -36,8 +37,14 @@ FILES = [  # (repo, revision, path in repo, local path, sha256)
      "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66"),
     (*NSFW, "onnx/model_int8.onnx", "nsfw_image_detection/onnx/model_int8.onnx",
      "bdc941491cd09ae75c5f40b038a5cd64482fa4e2b5297747323c5cda31303920"),
+    (*SENTIMENT, "onnx/model_quantized.onnx", "twitter-roberta-sentiment/onnx/model_quantized.onnx",
+     "046f7e4cc46b399558fa9b2de966f6b0d42c69e4b01f582bfb4099b01a0bb5d7"),
+    (*SENTIMENT, "tokenizer.json", "twitter-roberta-sentiment/tokenizer.json",
+     "1e6506713f00e34406a757acb80f9f3233c1c3950857d32bbc41bcd419d5d8b6"),
 ]
-SUGGEST_ONLY = {"bge-small-en-v1.5/onnx/model_quantized.onnx", "bge-small-en-v1.5/tokenizer.json"}
+# Models the API image itself needs (category suggestion and course-feedback sentiment).
+SUGGEST_ONLY = {"bge-small-en-v1.5/onnx/model_quantized.onnx", "bge-small-en-v1.5/tokenizer.json",
+                "twitter-roberta-sentiment/onnx/model_quantized.onnx", "twitter-roberta-sentiment/tokenizer.json"}
 
 
 def sha256(path: pathlib.Path) -> str:

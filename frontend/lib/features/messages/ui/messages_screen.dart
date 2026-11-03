@@ -160,10 +160,17 @@ class MessagesScreen extends ConsumerWidget {
                 onPressed: () => context.canPop() ? context.pop() : context.go('/buy'),
               ),
               title: const Text('Messages'),
-              actions: [
-                if (session?.isReady == true) const _PeopleSearch(),
-                if (session?.isReady == true) const _SecurityMenu(),
-              ],
+              // The people search sits in the middle of the bar (on phones, under the title row).
+              flexibleSpace: session?.isReady == true && MediaQuery.of(context).size.width >= 720
+                  ? const SafeArea(child: Center(child: _PeopleSearch()))
+                  : null,
+              bottom: session?.isReady == true && MediaQuery.of(context).size.width < 720
+                  ? const PreferredSize(
+                      preferredSize: Size.fromHeight(52),
+                      child: Padding(padding: EdgeInsets.fromLTRB(12, 0, 12, 6), child: _PeopleSearch()),
+                    )
+                  : null,
+              actions: [if (session?.isReady == true) const _SecurityMenu()],
             ),
       body: SafeArea(child: body),
     );
@@ -289,8 +296,13 @@ class _Inbox extends ConsumerWidget {
                 trailing: PopupMenuButton<String>(
                   tooltip: 'Chat options',
                   icon: Icon(Icons.more_vert_rounded, size: 18, color: theme.hintColor),
-                  onSelected: (_) => _confirmDelete(context, ref, c),
+                  onSelected: (v) => v == 'delete' ? _confirmDelete(context, ref, c) : _toggleBlock(context, ref, c),
                   itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'block',
+                      child: Text(c.blockedByMe ? 'Unblock ${c.peerName}' : 'Block ${c.peerName}',
+                          style: TextStyle(color: c.blockedByMe ? null : Colors.red.shade700)),
+                    ),
                     PopupMenuItem(value: 'delete', child: Text('Delete chat', style: TextStyle(color: Colors.red.shade700))),
                   ],
                 ),
@@ -300,6 +312,45 @@ class _Inbox extends ConsumerWidget {
         );
       },
     );
+  }
+}
+
+/// Blocks or unblocks the person in a chat (from its ⋮ menu in the list). Blocking asks first.
+Future<void> _toggleBlock(BuildContext context, WidgetRef ref, Conversation c) async {
+  final block = !c.blockedByMe;
+  if (block) {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Block ${c.peerName}?'),
+        content: const Text('They won’t be able to message you or start chats with you. They won’t be told. '
+            'You can unblock them any time.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Block'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+  }
+  try {
+    final repo = ref.read(messagesRepositoryProvider)!;
+    block ? await repo.block(c.peerId) : await repo.unblock(c.peerId);
+    ref.invalidate(conversationsProvider);
+    ref.invalidate(conversationControllerProvider(c.id));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(block ? 'Blocked ${c.peerName}.' : 'Unblocked ${c.peerName}.'),
+          behavior: SnackBarBehavior.floating));
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorText(e)), behavior: SnackBarBehavior.floating));
+    }
   }
 }
 
@@ -395,7 +446,7 @@ class _PeopleSearchState extends ConsumerState<_PeopleSearch> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: SizedBox(
-        width: width < 600 ? width * 0.55 : 340,
+        width: width < 720 ? double.infinity : 380,
         child: SearchAnchor.bar(
           searchController: _controller,
           barHintText: 'Search people to chat with',

@@ -1,9 +1,23 @@
 -- ============================================================================
--- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 20
+-- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 23
 -- DS252 Introduction to Cloud Computing — Team "Order of Phoenix"
 --
 -- Permission modules (FR-2, NFR-6): buy_sell, lost_found, academic_help,
 -- placement_hub, events (rev 17: Community Events moderators).
+--
+-- Changes from rev. 21 (course repository, 3 Nov 2026):
+--   1. Course materials are a shared repository: anyone signed in uploads (up to 100 MB). New columns
+--      tags, description, file_name, size_bytes, content_type, and held_for_review_at (a file that
+--      looks wrong is hidden until a course moderator decides; app/material_check.py).
+--   2. course_follows and notification type course_update: following a course alerts you to new
+--      materials, feedback and forum posts.
+--   Upgrade: db/migrations/022_course_repository_and_follows.sql.
+--
+-- Changes from rev. 20 (role compensation, 3 Nov 2026):
+--   1. job_descriptions.placement_year, job_type, ctc_min / ctc_max (rupees a year, read from the
+--      compensation text), base_text / base_annual, skills: a company's roles per season with what they
+--      pay, imported from "roles and compensation" files (app/placement_roles.py) or typed in.
+--   Upgrade: db/migrations/021_role_compensation.sql.
 --
 -- Changes from rev. 19 (mess cards and schedule times, 3 Nov 2026):
 --   1. messes.event_id: every mess has a Food/Mess event card (its meal times and dishes), created
@@ -159,7 +173,7 @@ CREATE TYPE bookmark_target_type AS ENUM ('listing', 'event');
 CREATE TYPE notification_type    AS ENUM ('lost_found_match', 'forum_reply', 'listing_status_change',
                                           'bookmarked_event_update', 'followed_tag_event', 'moderation_action',
                                           'saved_search_match', 'wanted_post_match', 'chat_message',
-                                          'listing_watch', 'mess_menu');
+                                          'listing_watch', 'mess_menu', 'course_update');
 CREATE TYPE report_target_type   AS ENUM ('listing', 'lost_report', 'found_report', 'course_material',
                                           'course_feedback', 'thread', 'comment', 'interview_experience',
                                           'wanted_post');
@@ -539,6 +553,14 @@ CREATE TABLE course_materials (
     title             TEXT NOT NULL,
     material_type     material_type NOT NULL DEFAULT 'other',
     file_s3_key       TEXT NOT NULL,
+    -- rev 22: the shared repository. Tags say what it is (pyq, quiz, notes, ...); held_for_review_at hides
+    -- a file the upload check found suspicious until a course moderator decides.
+    tags              TEXT[] NOT NULL DEFAULT '{}' CHECK (cardinality(tags) <= 5),
+    description       TEXT CHECK (char_length(description) <= 2000),
+    file_name         TEXT,
+    size_bytes        BIGINT,
+    content_type      TEXT,
+    held_for_review_at TIMESTAMPTZ,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at        TIMESTAMPTZ,
@@ -546,6 +568,15 @@ CREATE TABLE course_materials (
     CONSTRAINT materials_deleted_pair_chk CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))
 );
 CREATE INDEX idx_materials_course ON course_materials(course_id) WHERE deleted_at IS NULL;   -- FR-11
+
+-- rev 22: following a course: new materials, feedback and forum posts there notify you.
+CREATE TABLE course_follows (
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    course_id  UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, course_id)
+);
+CREATE INDEX idx_course_follows_course ON course_follows(course_id);
 
 CREATE TABLE course_feedback (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -587,8 +618,20 @@ CREATE TABLE job_descriptions (
     compensation    TEXT,                      -- rev 16: as announced, e.g. '₹32 LPA'
     jd_s3_key       TEXT,                      -- optional JD file
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- rev 21: the season and what the role pays. ctc_min/ctc_max are rupees a year read from
+    -- `compensation` (equal unless it's a range); NULL when it says "refer JD" and the like.
+    placement_year  SMALLINT CHECK (placement_year BETWEEN 2000 AND 2100),
+    job_type        TEXT NOT NULL DEFAULT 'full_time' CHECK (job_type IN ('full_time', 'internship', 'ppo', 'other')),
+    ctc_min         BIGINT CHECK (ctc_min > 0),
+    ctc_max         BIGINT CHECK (ctc_max >= ctc_min),
+    base_text       TEXT,
+    base_annual     BIGINT CHECK (base_annual > 0),
+    skills          TEXT
 );
+-- One role per company, title, season and type: re-importing a file updates instead of duplicating.
+CREATE UNIQUE INDEX uq_job_role_season
+    ON job_descriptions (company_id, lower(role_title), coalesce(placement_year, 0), job_type);
 CREATE INDEX idx_jd_company ON job_descriptions(company_id);
 
 CREATE TABLE ppt_info (
@@ -930,8 +973,10 @@ CREATE TABLE moderation_log (
 CREATE TABLE seller_strikes (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     seller_id      UUID NOT NULL REFERENCES users(id),
-    listing_id     UUID NOT NULL REFERENCES listings(id),
-    report_id      UUID NOT NULL UNIQUE REFERENCES reports(id),  -- one strike per resolved report
+    -- Both null once the seller deletes the listing (deletes are permanent, rev 23); the title stays.
+    listing_id     UUID REFERENCES listings(id) ON DELETE SET NULL,
+    listing_title  TEXT,
+    report_id      UUID UNIQUE REFERENCES reports(id) ON DELETE SET NULL,  -- one strike per resolved report
     severity       seller_strike_severity NOT NULL,
     moderator_id   UUID NOT NULL REFERENCES users(id),
     moderator_note TEXT,
@@ -1200,7 +1245,10 @@ CREATE TABLE chat_topics (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conversation_id UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
     kind            chat_topic_kind NOT NULL,
-    listing_id      UUID REFERENCES listings(id),
+    -- No foreign key: a deleted listing is gone (rev 23) but the chat keeps its title and seller.
+    listing_id      UUID,
+    listing_title   TEXT,
+    listing_seller_id UUID REFERENCES users(id),
     lost_report_id  UUID REFERENCES lost_reports(id),
     found_report_id UUID REFERENCES found_reports(id),
     started_by      UUID NOT NULL REFERENCES users(id),

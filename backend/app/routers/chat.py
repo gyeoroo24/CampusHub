@@ -271,14 +271,16 @@ WHERE (c.user_a = $1 OR c.user_b = $1)
 _TOPICS = """
 SELECT t.id, t.conversation_id, t.kind::text AS kind, t.started_by, t.created_at,
        coalesce(t.listing_id, t.lost_report_id, t.found_report_id) AS ref_id,
-       coalesce(l.seller_id, lr.reporter_id, fr.reporter_id) AS owner_id,
-       CASE t.kind WHEN 'listing' THEN l.title
+       coalesce(l.seller_id, t.listing_seller_id, lr.reporter_id, fr.reporter_id) AS owner_id,
+       CASE t.kind WHEN 'listing' THEN coalesce(l.title, t.listing_title, 'Deleted listing')
                    WHEN 'lost_report' THEN 'Lost: ' || lc.name
                    ELSE 'Found: ' || fc.name END AS title,
        coalesce(lr.description, fr.description) AS description,
        l.price,
-       coalesce(l.status::text, lr.status::text, fr.status::text) AS status,
-       coalesce(l.deleted_at, lr.deleted_at, fr.deleted_at) IS NOT NULL AS is_removed,
+       coalesce(l.status::text, lr.status::text, fr.status::text, 'available') AS status,
+       -- A deleted listing is gone from the database (rev 23); its topic keeps the title and seller.
+       coalesce(l.deleted_at, lr.deleted_at, fr.deleted_at) IS NOT NULL
+         OR (t.kind = 'listing' AND l.id IS NULL) AS is_removed,
        CASE t.kind
          WHEN 'listing' THEN (SELECT ph.s3_key FROM listing_photos ph WHERE ph.listing_id = l.id
                               ORDER BY ph.sort_order LIMIT 1)
@@ -557,6 +559,11 @@ async def start_conversation(body: ConversationStart, response: Response,
                     ON CONFLICT (conversation_id, {column}) DO UPDATE SET started_by = chat_topics.started_by
                     RETURNING id""",
                 conversation_id, kind, target, user.id)
+            if kind == "listing":
+                # Kept so the chat still says what it was about after the listing is deleted.
+                await conn.execute(
+                    "UPDATE chat_topics SET listing_title = $2, listing_seller_id = $3 WHERE id = $1",
+                    topic_id, found["title"], owner_id)
     response.status_code = 201
     return StartedConversation(conversation=await _conversation(conn, conversation_id, user), topic_id=topic_id)
 
@@ -704,7 +711,7 @@ async def answer_offer(message_id: UUID, body: OfferAction, background: Backgrou
         listing = await conn.fetchrow(
             "SELECT title, status::text AS status, deleted_at FROM listings WHERE id = $1 FOR UPDATE",
             message["listing_id"])
-        if body.action == "accept" and (listing["deleted_at"] is not None or listing["status"] == "sold"):
+        if body.action == "accept" and (listing is None or listing["status"] == "sold"):
             raise HTTPException(409, "This listing is no longer for sale.")
         seq = await _next_seq(conn, message["conversation_id"])
         row = await conn.fetchrow(
@@ -720,7 +727,7 @@ async def answer_offer(message_id: UUID, body: OfferAction, background: Backgrou
                                message["listing_id"])
         if not mine:
             payload = {"conversation_id": str(message["conversation_id"]),
-                       "message": f"{user.name} {status} your offer on “{listing['title']}”"}
+                       "message": f"{user.name} {status} your offer on “{listing['title'] if listing else 'a deleted listing'}”"}
             notified = await create_notifications(conn, [message["sender_id"]], "chat_message", payload)
     background.add_task(deliver_push, notified, "chat_message", payload)
     return _message(row)

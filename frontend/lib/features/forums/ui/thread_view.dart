@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/date_time_formatter.dart';
 import '../../../core/utils/error_text.dart';
@@ -396,16 +397,21 @@ class _CommentBox extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        TextField(
-          controller: controller,
-          minLines: 2,
-          maxLines: 8,
-          maxLength: 10000,
-          enabled: !busy,
-          decoration: InputDecoration(
-            hintText: hint,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-            counterText: '',
+        // Enter posts the comment; Shift+Enter starts a new line.
+        CallbackShortcuts(
+          bindings: {const SingleActivator(LogicalKeyboardKey.enter): () => busy ? null : onSend()},
+          child: TextField(
+            controller: controller,
+            minLines: 2,
+            maxLines: 8,
+            maxLength: 10000,
+            enabled: !busy,
+            decoration: InputDecoration(
+              hintText: hint,
+              helperText: 'Enter to post · Shift+Enter for a new line',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+              counterText: '',
+            ),
           ),
         ),
         const SizedBox(height: 6),
@@ -448,16 +454,21 @@ class _InlineReplyState extends State<_InlineReply> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            minLines: 2,
-            maxLines: 6,
-            enabled: !widget.busy,
-            decoration: InputDecoration(
-              hintText: 'Reply to ${widget.replyingTo}',
-              isDense: true,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          CallbackShortcuts(
+            bindings: {
+              const SingleActivator(LogicalKeyboardKey.enter): () => widget.busy ? null : widget.onSend(_controller.text),
+            },
+            child: TextField(
+              controller: _controller,
+              autofocus: true,
+              minLines: 2,
+              maxLines: 6,
+              enabled: !widget.busy,
+              decoration: InputDecoration(
+                hintText: 'Reply to ${widget.replyingTo} (Enter to send, Shift+Enter for a new line)',
+                isDense: true,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
             ),
           ),
           const SizedBox(height: 4),

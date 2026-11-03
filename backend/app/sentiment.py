@@ -1,9 +1,9 @@
 """Sentence-level sentiment, themes and advice for course feedback (used by the survival guide).
 
-A small word list in the style of VADER, tuned to how students write about courses. It needs
-no AWS call, so it's free and instant, and good enough to show a trend. To swap in Amazon
-Comprehend (DetectSentiment) or a Bedrock model later, keep the same output: a score from -1
-(negative) to +1 (positive) per sentence.
+Sentence scores come from app/sentiment_backends.py: a local RoBERTa sentiment model, Amazon
+Comprehend, or the word list below (VADER-style, tuned to how students write about courses), chosen
+by CAMPUSHUB_SENTIMENT_BACKEND with no code change. Every backend gives -1 (negative) to +1 (positive)
+per sentence; themes and advice detection below stay rule-based.
 """
 import math
 import re
@@ -55,8 +55,8 @@ def sentences(text: str) -> list[str]:
     return [s.strip() for s in _SENTENCE.split(text) if s.strip()]
 
 
-def score(sentence: str) -> float:
-    """-1 (very negative) to +1 (very positive)."""
+def lexicon_score(sentence: str) -> float:
+    """The word-list score: -1 (very negative) to +1 (very positive)."""
     lowered = sentence.lower()
     tokens = _TOKEN.findall(lowered)
     weights = []
@@ -77,6 +77,9 @@ def score(sentence: str) -> float:
         weights = [w * (0.75 if i < cut else 1.25) for i, w in enumerate(weights)]
     total = sum(weights) + sum(v for phrase, v in PHRASES.items() if phrase in lowered)
     return total / math.sqrt(total * total + 15) if total else 0.0
+
+
+score = lexicon_score   # synchronous scoring for scripts and tests; the API uses sentiment_backends
 
 
 def themes(sentence: str) -> list[str]:

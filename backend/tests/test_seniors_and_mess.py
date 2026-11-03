@@ -260,3 +260,99 @@ def test_interview_schedule_without_times(client, people):
     # A moderator setting the time makes it exact.
     r = client.patch(f"{API}/ppts/{dates[0]['id']}", headers=RAVI, json={"scheduled_at": "2030-10-19T10:30:00+05:30"})
     assert r.json()["time_tbd"] is False
+
+
+# ---------------------------------------------------------------- rev 21: roles and compensation
+def test_parse_inr_formats():
+    from app.placement_roles import parse_inr
+    cases = {"4000000": (4000000, 4000000), "₹ 12,00,000": (1200000, 1200000), "15.05 lakhs.": (1505000, 1505000),
+             "₹1200000-₹1500000": (1200000, 1500000), "2021600 rupees per Annum": (2021600, 2021600),
+             "3. 3,635,000": (3635000, 3635000), "12-15 LPA": (1200000, 1500000), "27L": (2700000, 2700000),
+             "11,00,000 LPA": (1100000, 1100000), "50000 per month": (600000, 600000), "1.2 Cr": (12000000, 12000000),
+             "2,389,811 + USD 6000 RSU": (2389811, 2389811)}
+    for text, expected in cases.items():
+        assert parse_inr(text) == expected, text
+    for text in ("NA", "Refer below table", "-", "0", "$120,000", None):
+        assert parse_inr(text) is None, text
+
+
+def test_roles_and_compensation_import(client, people):
+    three_years = ("Batch,Company,Position,Overall CTC,Apporaching Person ,Comments \n"
+                   "2023 - 24,Observe ai,NLP,4000000,someone@iisc.ac.in,call back\n"
+                   "2024 - 25,Observe ai,NLP,4500000,....,\n"
+                   "2024 - 25,Observe ai,Data Scientist,2500000,....,\n"
+                   "2024 - 25,KPMG,,2300000,....,\n")
+    assert client.post(f"{API}/placement/roles/import", headers=ASHA, json={"csv": three_years}).status_code == 403
+    r = client.post(f"{API}/placement/roles/import", headers=RAVI, json={"csv": three_years})
+    assert r.status_code == 201, r.text
+    assert (r.json()["rows_created"], r.json()["rows_rejected"]) == (3, 1)
+    this_season = ('"CompanyName","jobtype","jobtitle","description","Anual overall CTC","Anual base CTC/ Month","skillset"\n'
+                   '"Observe ai","Full Time Placement","NLP","Speech NLP","₹ 48,00,000","INR 30,00,000","Python, PyTorch"\n'
+                   '"Observe ai","Summer Internship","Intern","-","80000 per month","NA","-"\n'
+                   '"Observe ai","Full Time Placement","NLP","-","Refer below table","-","Check JD"\n')
+    r = client.post(f"{API}/placement/roles/import", headers=RAVI, json={"csv": this_season, "placement_year": 2026})
+    assert (r.json()["rows_created"], r.json()["rows_updated"]) == (2, 0)   # the repeated NLP row merges
+    company = client.get(f"{API}/companies", params={"q": "observe"}).json()["items"][0]
+    assert (company["ctc_year"], company["ctc_min"], company["ctc_max"]) == (2026, 4800000, 4800000)  # interns don't count
+    roles = {(j["role_title"], j["placement_year"], j["job_type"]): j
+             for j in client.get(f"{API}/companies/{company['id']}").json()["job_descriptions"]}
+    nlp = roles[("NLP", 2026, "full_time")]
+    assert (nlp["compensation"], nlp["ctc_min"], nlp["base_annual"], nlp["skills"]) == \
+        ("₹ 48,00,000", 4800000, 3000000, "Python, PyTorch")
+    assert roles[("Intern", 2026, "internship")]["ctc_min"] == 960000
+    assert "someone@iisc.ac.in" not in str(roles) and "call back" not in str(roles)   # never imported
+    stats = client.get(f"{API}/placement/stats").json()
+    assert stats["pay_year"] == 2026 and stats["top_paying"][0]["ctc_max"] == 4800000
+
+    # A role typed in by hand reads its amount too.
+    r = client.post(f"{API}/companies/{company['id']}/jds", headers=RAVI, json={
+        "role_title": "Research Scientist", "compensation": "₹52 LPA", "placement_year": 2026})
+    assert r.status_code == 201 and r.json()["ctc_min"] == 5200000
+    assert client.get(f"{API}/companies", params={"sort": "highest_pay"}).json()["items"][0]["ctc_max"] == 5200000
+
+
+def test_moderators_delete_a_withdrawn_company(client, people):
+    company = client.post(f"{API}/companies", headers=RAVI, json={"name": "Retracted Co"}).json()
+    client.post(f"{API}/companies/{company['id']}/ppts", headers=RAVI, json={
+        "kind": "oa", "scheduled_at": "2030-01-10T10:00:00+05:30", "venue": "Online"})
+    client.post(f"{API}/companies/{company['id']}/interviews", headers=KIRAN, json={
+        "role_title": "SDE", "content": "Two rounds", "placement_year": 2026})
+    assert client.delete(f"{API}/companies/{company['id']}", headers=KIRAN).status_code == 403
+    assert client.delete(f"{API}/companies/{company['id']}", headers=RAVI).status_code == 204
+    assert client.get(f"{API}/companies/{company['id']}").status_code == 404
+    assert not [p for p in client.get(f"{API}/placement/ppts").json()["items"] if p["company_name"] == "Retracted Co"]
+    assert sql("SELECT count(*) FROM interview_experiences")[0][0] == 0
+
+
+ROTATED_PDF = __import__("pathlib").Path(__file__).resolve().parents[3] / "E mess menu.pdf"
+
+
+@pytest.mark.skipif(not (__import__("shutil").which("tesseract") and ROTATED_PDF.exists()),
+                    reason="needs Tesseract and the sample E Mess menu")
+def test_reading_a_menu_printed_sideways():
+    from app.mess_extract import extract_menu
+    found = extract_menu(ROTATED_PDF.read_bytes(), "application/pdf")
+    assert found.mess_name == "E Mess" and found.starts == date(2026, 9, 22)
+    assert len(found.items) == 28
+    assert "Poha" in found.items[(1, "breakfast")] and "Samosa" in found.items[(1, "snacks")]
+    assert "Breakfast every day: Tea" in found.notes
+
+
+def test_menu_with_meals_replaces_a_file_only_menu(client, people, s3):
+    """D and E Mess were posted as just the PDF for November, so their meals could only go in December and
+    the page stayed empty. Meals for the same weeks now replace a menu that has none."""
+    mess = client.post(f"{API}/messes", headers=MEERA, json={"name": "D Mess"}).json()
+    today = datetime.now(IST).date()
+    pdf = upload(client, s3, MEERA, "mess_menu", content=b"%PDF-1.7 menu", content_type="application/pdf")
+    dates = {"valid_from": (today - timedelta(days=1)).isoformat(), "valid_to": (today + timedelta(days=27)).isoformat()}
+    file_only = client.post(f"{API}/messes/{mess['id']}/menus", headers=MEERA,
+                            json=dates | {"file_s3_key": pdf, "items": []}).json()
+    with_meals = client.post(f"{API}/messes/{mess['id']}/menus", headers=MEERA,
+                             json=dates | {"file_s3_key": pdf, "items": _grid({d: f"Day{d}" for d in range(1, 8)})})
+    assert with_meals.status_code == 201, with_meals.text
+    assert client.get(f"{API}/mess-menus/{file_only['id']}").status_code == 404
+    assert [m["id"] for m in client.get(f"{API}/messes/{mess['id']}/menus").json()] == [with_meals.json()["id"]]
+    # A menu that has meals is never replaced: overlapping it is still refused.
+    again = client.post(f"{API}/messes/{mess['id']}/menus", headers=MEERA,
+                        json=dates | {"file_s3_key": None, "items": _grid({1: "Other"})})
+    assert again.status_code == 409

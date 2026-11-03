@@ -52,8 +52,8 @@ def test_only_placement_moderators_manage_companies(client, placement):
     # Moderators edit; only the admin deletes (it takes the hiring records with it).
     r = client.patch(f"{API}/companies/{company['id']}", headers=RAVI, json={"industry": "Search and cloud"})
     assert r.status_code == 200 and r.json()["industry"] == "Search and cloud"
-    assert client.delete(f"{API}/companies/{company['id']}", headers=RAVI).status_code == 403
-    assert client.delete(f"{API}/companies/{company['id']}", headers=ADMIN).status_code == 204
+    assert client.delete(f"{API}/companies/{company['id']}", headers=ASHA).status_code == 403
+    assert client.delete(f"{API}/companies/{company['id']}", headers=RAVI).status_code == 204   # moderators too (rev 21)
     assert client.get(f"{API}/companies/{company['id']}").status_code == 404
 
 
@@ -247,3 +247,37 @@ def test_company_forum(client, placement):
     assert client.get(f"{API}/threads/{thread['id']}", headers=MEERA).json()["viewer_can_moderate"] is False
     assert client.delete(f"{API}/threads/{thread['id']}", headers=RAVI).status_code == 204
     assert client.get(f"{API}/companies/00000000-0000-0000-0000-000000000000/forum").status_code == 404
+
+
+def test_placement_office_schedule_styles():
+    """The slot 1-3 schedule sheets as the placement office exports them (Placement/ folder)."""
+    from app.placement_csv import parse_schedule
+    # A header cell with a line break, month-first dates, "Venue of Interview", the round only in the file name.
+    slot1 = ('OCCaP Primary POC,Company,"Date \n[MM/DD/YYYY]",Day,Mode of Interview,Venue of Interview,Remarks\n'
+             'Anisha,Qualcomm,10/5/2026,Monday,In Person,TBD,Schedule is Confirmed\n')
+    [row], rejected = parse_schedule(slot1, "slot 1 interview schedule.csv")
+    assert not rejected and row.line == 3
+    assert (row.company, row.kind, row.scheduled_at.date().isoformat(), row.venue, row.time_tbd) == \
+        ("Qualcomm", "interview", "2026-10-05", "TBD", True)
+    assert row.details == "Mode: In Person · Schedule is Confirmed"
+
+    # No round in the columns: the file name says it. "7-Oct-26", "No test", two days, "CANCELLED".
+    slot2 = ("SNo,Company,Date,Day,Timings,Mode,Shortlist Released?\n"
+             "1,Caterpillar,7-Oct-26,Wednesday,09 30 PM - 10 30 PM,Online,Yes\n"
+             "2,Netradyne,10-Oct-26,Saturday,No test,CV Shortlist,\n"
+             "3,Lam Research,16/10/2026 & 17/10/2026,Fri,,In Person,\n"
+             "4,Ixana,CANCELLED,,,,\n")
+    rows, rejected = parse_schedule(slot2, "slot 2 test schedule.csv")
+    assert not rejected
+    assert [(r.company, r.kind) for r in rows] == [("Caterpillar", "oa"), ("Netradyne", "oa"), ("Lam Research", "oa"),
+                                                   ("Lam Research", "oa"), ("Ixana", "oa")]
+    assert rows[0].scheduled_at.hour == 21 and rows[0].details == "Mode: Online · Shortlist released: Yes"
+    assert rows[1].time_tbd and rows[1].details.startswith("Time: No test")
+    assert [r.scheduled_at.day for r in rows[2:4]] == [16, 17]
+    assert rows[4].scheduled_at is None and rows[4].details == "Date: CANCELLED"
+
+    # Without a hint in the header, a date that only reads month-first ("9/28/2026") makes the file month-first.
+    rows, _ = parse_schedule("Company,Date\nIBM,9/28/2026\nEXL,10/5/2026\n", "tests.csv")
+    assert [r.scheduled_at.date().isoformat() for r in rows] == ["2026-09-28", "2026-10-05"]
+    rows, _ = parse_schedule("Company,Date\nIBM,28/9/2026\nEXL,10/5/2026\n")
+    assert [r.scheduled_at.date().isoformat() for r in rows] == ["2026-09-28", "2026-05-10"]

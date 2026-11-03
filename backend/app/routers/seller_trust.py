@@ -27,18 +27,19 @@ from ..seller_trust import reject_appeal as _reject_appeal
 router = APIRouter(tags=["Seller trust score"])
 
 _SELECT = """
-SELECT s.id, s.seller_id, u.name AS seller_name, s.listing_id, l.title AS listing_title,
+SELECT s.id, s.seller_id, u.name AS seller_name, s.listing_id,
+       coalesce(l.title, s.listing_title, 'Deleted listing') AS listing_title,
        COALESCE(l.hidden_by_strike_id = s.id, false) AS listing_hidden, s.severity::text AS severity,
        s.moderator_note, s.excluded, s.appeal_message, s.appeal_created_at,
        s.appeal_resolved_at, s.created_at
-FROM seller_strikes s JOIN listings l ON l.id = s.listing_id JOIN users u ON u.id = s.seller_id
+FROM seller_strikes s LEFT JOIN listings l ON l.id = s.listing_id JOIN users u ON u.id = s.seller_id
 """
 
 
 class StrikeOut(BaseModel):
     id: UUID
     seller: UserRef
-    listing_id: UUID
+    listing_id: UUID | None = Field(description="Null once the seller deleted the listing")
     listing_title: str
     listing_hidden: bool = Field(description="True if this strike is the reason the listing is "
                                              "currently hidden (it hasn't been overturned yet).")

@@ -2,8 +2,12 @@
 
   departments        admins create/rename/delete
   courses            admins and department moderators add/edit/remove courses in their department
-  materials          course moderators (own course) and department moderators (their department)
-                     create/edit/remove; anyone can read
+  materials          a shared repository (rev 22): anyone signed in shares files (up to 100 MB, tagged
+                     pyq / quiz / notes ...); every file is checked (app/material_check.py) and
+                     suspicious ones are held for the course's moderators. The uploader edits/removes
+                     their own; course and department moderators edit/remove any; anyone can read
+  follows            anyone signed in follows a course: new materials, feedback and forum posts notify
+                     them (app/course_updates.py)
   feedback           any signed-in user posts one review per course (optionally anonymous); the author,
                      department moderators and admins edit;
                      the author, moderators of the course (course or department level) and admins remove
@@ -11,6 +15,7 @@
 Deleting a course deletes everything under it (materials, feedback, its forum, threads,
 comments, course moderator roles and reports about them) — a team decision.
 """
+import asyncio
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
@@ -21,13 +26,26 @@ from pydantic import BaseModel, Field
 
 from ..auth import CurrentUser, current_user, optional_user
 from ..common import Page, PageParams, UserRef, forbidden, make_page, not_found, page_params, set_clause, text
+from ..course_updates import notify_course_followers
 from ..db import get_conn
+from ..material_check import SPAM_PER_HOUR, Rejected, check_material, text_flags
+from ..notify import create_notifications
 from ..permissions import can_manage_course, can_manage_department, close_reports, log_moderation
-from ..storage import delete_objects, file_url, mark_attached, verify_own_uploads
+from ..storage import delete_objects, file_url, get_object, mark_attached, verify_own_uploads
 
 router = APIRouter(tags=["Academic Help"])
 
 MaterialType = Literal["notes", "slides", "past_assignment", "exam_material", "other"]
+MaterialTag = Literal["pyq", "quiz", "assignment", "notes", "slides", "lab", "solutions", "cheat_sheet",
+                      "textbook", "project", "other"]
+# The older single type, kept filled in from the tags for clients that still read it.
+_TYPE_FOR_TAG = {"pyq": "exam_material", "quiz": "exam_material", "solutions": "exam_material",
+                 "assignment": "past_assignment", "lab": "past_assignment", "project": "past_assignment",
+                 "notes": "notes", "cheat_sheet": "notes", "textbook": "notes", "slides": "slides"}
+
+
+def _type_from_tags(tags: list[str], fallback: str = "other") -> str:
+    return next((_TYPE_FOR_TAG[t] for t in tags if t in _TYPE_FOR_TAG), fallback)
 
 
 # ---------------------------------------------------------------- models
@@ -61,18 +79,25 @@ class Course(BaseModel):
     material_count: int
     feedback_count: int
     has_content: bool = Field(description="False means show 'No data yet' (FR-11)")
+    following: bool = Field(False, description="The viewer follows this course (always false for guests)")
+    follower_count: int = 0
     created_at: datetime
     updated_at: datetime
 
 
 class MaterialCreate(BaseModel):
     title: text(200)
-    material_type: MaterialType = "other"
+    tags: list[MaterialTag] = Field(default_factory=list, max_length=5, description="What it is: pyq, quiz, notes ...")
+    description: text(2000, min_length=0) | None = None
+    material_type: MaterialType | None = Field(None, description="Older single type; filled in from tags if left out")
+    file_name: str | None = Field(None, max_length=255, description="The file's original name, shown on downloads")
     s3_key: str = Field(description="From POST /uploads with kind=course_material and this course_id")
 
 
 class MaterialUpdate(BaseModel):
     title: text(200) | None = None
+    tags: list[MaterialTag] | None = Field(None, max_length=5)
+    description: text(2000, min_length=0) | None = None
     material_type: MaterialType | None = None
 
 
@@ -81,6 +106,13 @@ class Material(BaseModel):
     course_id: UUID
     title: str
     material_type: MaterialType
+    tags: list[str] = Field(default_factory=list)
+    description: str | None = None
+    file_name: str | None = None
+    size_bytes: int | None = None
+    content_type: str | None = None
+    held: bool = Field(False, description="Hidden for a moderator's review; only the uploader and moderators see it")
+    can_edit: bool = Field(False, description="The viewer uploaded it or moderates the course")
     download_url: str
     uploaded_by: UserRef
     created_at: datetime
@@ -161,14 +193,16 @@ async def delete_department(department_id: UUID, background: BackgroundTasks,
 # ---------------------------------------------------------------- courses
 _COURSE_SELECT = """
 SELECT c.id, c.department_id, c.code, c.name, c.created_at, c.updated_at,
-       (SELECT count(*) FROM course_materials m WHERE m.course_id = c.id AND m.deleted_at IS NULL) AS material_count,
-       (SELECT count(*) FROM course_feedback f WHERE f.course_id = c.id AND f.deleted_at IS NULL) AS feedback_count
+       (SELECT count(*) FROM course_materials m WHERE m.course_id = c.id AND m.deleted_at IS NULL
+          AND m.held_for_review_at IS NULL) AS material_count,
+       (SELECT count(*) FROM course_feedback f WHERE f.course_id = c.id AND f.deleted_at IS NULL) AS feedback_count,
+       (SELECT count(*) FROM course_follows w WHERE w.course_id = c.id)::int AS follower_count
 FROM courses c
 """
 
 
-def _course(r: asyncpg.Record) -> Course:
-    return Course(**dict(r), has_content=(r["material_count"] + r["feedback_count"]) > 0)
+def _course(r: asyncpg.Record, following: bool = False) -> Course:
+    return Course(**dict(r), following=following, has_content=(r["material_count"] + r["feedback_count"]) > 0)
 
 
 async def _course_department(conn: asyncpg.Connection, course_id: UUID) -> UUID:
@@ -188,11 +222,32 @@ async def list_courses(department_id: UUID, conn: asyncpg.Connection = Depends(g
 
 
 @router.get("/courses/{course_id}", response_model=Course, summary="One course")
-async def get_course(course_id: UUID, conn: asyncpg.Connection = Depends(get_conn)):
+async def get_course(course_id: UUID, viewer: CurrentUser | None = Depends(optional_user),
+                     conn: asyncpg.Connection = Depends(get_conn)):
     r = await conn.fetchrow(_COURSE_SELECT + " WHERE c.id = $1", course_id)
     if r is None:
         raise not_found("Course")
-    return _course(r)
+    following = viewer is not None and await conn.fetchval(
+        "SELECT EXISTS (SELECT 1 FROM course_follows WHERE course_id = $1 AND user_id = $2)", course_id, viewer.id)
+    return _course(r, following)
+
+
+@router.put("/courses/{course_id}/follow", response_model=Course,
+            summary="Follow a course: new materials, feedback and forum posts there notify you")
+async def follow_course(course_id: UUID, user: CurrentUser = Depends(current_user),
+                        conn: asyncpg.Connection = Depends(get_conn)):
+    await _course_department(conn, course_id)
+    await conn.execute("INSERT INTO course_follows (user_id, course_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                       user.id, course_id)
+    return await get_course(course_id, user, conn)
+
+
+@router.delete("/courses/{course_id}/follow", response_model=Course, summary="Stop following a course")
+async def unfollow_course(course_id: UUID, user: CurrentUser = Depends(current_user),
+                          conn: asyncpg.Connection = Depends(get_conn)):
+    await _course_department(conn, course_id)
+    await conn.execute("DELETE FROM course_follows WHERE user_id = $1 AND course_id = $2", user.id, course_id)
+    return await get_course(course_id, user, conn)
 
 
 @router.post("/departments/{department_id}/courses", response_model=Course, status_code=201,
@@ -238,16 +293,19 @@ async def delete_course(course_id: UUID, background: BackgroundTasks, user: Curr
     return Response(status_code=204)
 
 
-# ---------------------------------------------------------------- materials
+# ---------------------------------------------------------------- materials (a shared repository, rev 22)
 _MATERIAL_SELECT = """
-SELECT m.id, m.course_id, m.title, m.material_type::text AS material_type, m.file_s3_key,
+SELECT m.id, m.course_id, m.title, m.material_type::text AS material_type, m.file_s3_key, m.tags, m.description,
+       m.file_name, m.size_bytes, m.content_type, m.held_for_review_at IS NOT NULL AS held,
        m.created_at, m.updated_at, u.id AS uploader_id, u.name AS uploader_name
 FROM course_materials m JOIN users u ON u.id = m.uploaded_by
 """
 
 
-def _material(r: asyncpg.Record) -> Material:
+def _material(r: asyncpg.Record, can_edit: bool = False) -> Material:
     return Material(id=r["id"], course_id=r["course_id"], title=r["title"], material_type=r["material_type"],
+                    tags=list(r["tags"] or []), description=r["description"], file_name=r["file_name"],
+                    size_bytes=r["size_bytes"], content_type=r["content_type"], held=r["held"], can_edit=can_edit,
                     download_url=file_url(r["file_s3_key"]),
                     uploaded_by=UserRef(id=r["uploader_id"], name=r["uploader_name"]),
                     created_at=r["created_at"], updated_at=r["updated_at"])
@@ -255,7 +313,7 @@ def _material(r: asyncpg.Record) -> Material:
 
 async def _material_course(conn: asyncpg.Connection, material_id: UUID) -> asyncpg.Record:
     row = await conn.fetchrow(
-        "SELECT course_id, uploaded_by FROM course_materials WHERE id = $1 AND deleted_at IS NULL", material_id)
+        "SELECT course_id, uploaded_by, title FROM course_materials WHERE id = $1 AND deleted_at IS NULL", material_id)
     if row is None:
         raise not_found("Material")
     return row
@@ -263,24 +321,45 @@ async def _material_course(conn: asyncpg.Connection, material_id: UUID) -> async
 
 @router.get("/courses/{course_id}/materials", response_model=Page[Material], summary="A course's materials")
 async def list_materials(course_id: UUID, material_type: MaterialType | None = None,
-                         page: PageParams = Depends(page_params), conn: asyncpg.Connection = Depends(get_conn)):
+                         tag: MaterialTag | None = Query(None, description="Only materials with this tag"),
+                         q: str | None = Query(None, max_length=200, description="Words in the title or description"),
+                         page: PageParams = Depends(page_params), viewer: CurrentUser | None = Depends(optional_user),
+                         conn: asyncpg.Connection = Depends(get_conn)):
+    """Held materials (waiting for a moderator) show only to their uploader and the course's moderators."""
     await _course_department(conn, course_id)
+    moderator = viewer is not None and await can_manage_course(conn, viewer, course_id)
+    viewer_id = viewer.id if viewer else None
     rows = await conn.fetch(
         _MATERIAL_SELECT + """
         WHERE m.course_id = $1 AND m.deleted_at IS NULL AND ($2::text IS NULL OR m.material_type::text = $2)
+          AND ($5::text IS NULL OR $5 = ANY(m.tags))
+          AND ($6::text IS NULL OR m.title ILIKE '%' || $6 || '%' OR m.description ILIKE '%' || $6 || '%')
+          AND (m.held_for_review_at IS NULL OR $7 OR m.uploaded_by = $8)
         ORDER BY m.created_at DESC, m.id DESC LIMIT $3 OFFSET $4""",
-        course_id, material_type, page.limit + 1, page.offset)
-    return make_page(rows, page, _material)
+        course_id, material_type, page.limit + 1, page.offset, tag, (q or "").strip() or None, moderator, viewer_id)
+    return make_page(rows, page, lambda r: _material(r, moderator or r["uploader_id"] == viewer_id))
 
 
 @router.post("/courses/{course_id}/materials", response_model=Material, status_code=201,
-             summary="Add a material (course moderator of this course, department moderator or admin)")
-async def create_material(course_id: UUID, body: MaterialCreate, user: CurrentUser = Depends(current_user),
-                          conn: asyncpg.Connection = Depends(get_conn)):
+             summary="Share a material with the course (anyone signed in; checked, and held if it looks wrong)")
+async def create_material(course_id: UUID, body: MaterialCreate, background: BackgroundTasks,
+                          user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
     await _course_department(conn, course_id)
-    if not await can_manage_course(conn, user, course_id):
-        raise forbidden("Only moderators of this course or its department can add materials.")
     await verify_own_uploads([body.s3_key], "course_material", user.id, course_id)
+    # Open the file and check what it really is (app/material_check.py) before anyone else can get it.
+    data, content_type = await get_object(body.s3_key)
+    try:
+        result = await asyncio.to_thread(check_material, data, content_type, body.file_name or "")
+    except Rejected as exc:
+        background.add_task(delete_objects, [body.s3_key])
+        raise HTTPException(422, str(exc)) from exc
+    flags = result.flags + text_flags(body.title, body.description)
+    recent = await conn.fetchval(
+        "SELECT count(*) FROM course_materials WHERE uploaded_by = $1 AND created_at > now() - interval '1 hour'",
+        user.id)
+    if recent >= SPAM_PER_HOUR:
+        flags.append(f"more than {SPAM_PER_HOUR} uploads in an hour")
+    tags = list(dict.fromkeys(body.tags))
     async with conn.transaction():
         # One uploaded file backs one material (the lock stops two requests attaching it at once).
         await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1))", body.s3_key)
@@ -288,39 +367,73 @@ async def create_material(course_id: UUID, body: MaterialCreate, user: CurrentUs
                                body.s3_key):
             raise HTTPException(409, "This file is already attached to a material. Upload it again for a new one.")
         material_id = await conn.fetchval(
-            """INSERT INTO course_materials (course_id, uploaded_by, title, material_type, file_s3_key)
-               VALUES ($1, $2, $3, $4, $5) RETURNING id""",
-            course_id, user.id, body.title, body.material_type, body.s3_key)
+            """INSERT INTO course_materials (course_id, uploaded_by, title, material_type, file_s3_key, tags,
+                                             description, file_name, size_bytes, content_type, held_for_review_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CASE WHEN $11 THEN now() END) RETURNING id""",
+            course_id, user.id, body.title, body.material_type or _type_from_tags(tags), body.s3_key, tags,
+            (body.description or "").strip() or None, (body.file_name or "")[:255] or None, len(data), content_type,
+            bool(flags))
+        if flags:
+            # Hidden until a course moderator decides (the report shows in their queue).
+            await conn.execute(
+                """INSERT INTO reports (source, module, target_type, course_material_id, reason)
+                   VALUES ('system', 'academic_help', 'course_material', $1, left($2, 1000))""",
+                material_id, "Automatic flag: " + "; ".join(flags))
+            await create_notifications(conn, [user.id], "moderation_action", {
+                "message": f'Your upload "{body.title}" is waiting for a moderator to check it ({"; ".join(flags)}). '
+                           "It appears for others once they approve it.",
+                "target_type": "course_material", "target_id": str(material_id)})
+        else:
+            await notify_course_followers(conn, background, course_id, user.id, f"new material “{body.title}”",
+                                          {"material_id": str(material_id)})
     await mark_attached([body.s3_key])
-    return _material(await conn.fetchrow(_MATERIAL_SELECT + " WHERE m.id = $1", material_id))
+    return _material(await conn.fetchrow(_MATERIAL_SELECT + " WHERE m.id = $1", material_id), True)
 
 
-@router.patch("/materials/{material_id}", response_model=Material, summary="Edit a material's title or type")
+async def _may_change_material(conn: asyncpg.Connection, user: CurrentUser, row: asyncpg.Record) -> bool:
+    """The uploader, or a moderator of the course (True when it's a moderator changing someone else's)."""
+    if row["uploaded_by"] == user.id:
+        return False
+    if await can_manage_course(conn, user, row["course_id"]):
+        return True
+    raise forbidden("Only whoever shared this material or the course's moderators can change it.")
+
+
+@router.patch("/materials/{material_id}", response_model=Material, summary="Edit a material's title, tags or description")
 async def update_material(material_id: UUID, body: MaterialUpdate, user: CurrentUser = Depends(current_user),
                           conn: asyncpg.Connection = Depends(get_conn)):
     row = await _material_course(conn, material_id)
-    if not await can_manage_course(conn, user, row["course_id"]):
-        raise forbidden("Only moderators of this course or its department can edit materials.")
-    changes = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    as_moderator = await _may_change_material(conn, user, row)
+    changes = body.model_dump(exclude_unset=True)
+    if "title" in changes and changes["title"] is None:
+        raise HTTPException(422, "title can't be empty.")
+    if changes.get("tags") is not None:
+        changes["tags"] = list(dict.fromkeys(changes["tags"]))
+        changes.setdefault("material_type", _type_from_tags(changes["tags"]))
+    elif "tags" in changes:
+        changes["tags"] = []
+    if "description" in changes:
+        changes["description"] = (changes["description"] or "").strip() or None
+    if changes.get("material_type") is None:
+        changes.pop("material_type", None)
     sql, values = set_clause(changes, start=2)
     async with conn.transaction():
-        await conn.execute(f"UPDATE course_materials SET {sql} WHERE id = $1", material_id, *values)
-        if row["uploaded_by"] != user.id:
+        await conn.execute(f"UPDATE course_materials SET {sql}, updated_at = now() WHERE id = $1", material_id, *values)
+        if as_moderator:
             await log_moderation(conn, user.id, "edit_course_material", "course_material", material_id)
-    return _material(await conn.fetchrow(_MATERIAL_SELECT + " WHERE m.id = $1", material_id))
+    return _material(await conn.fetchrow(_MATERIAL_SELECT + " WHERE m.id = $1", material_id), True)
 
 
-@router.delete("/materials/{material_id}", status_code=204, summary="Remove a material")
+@router.delete("/materials/{material_id}", status_code=204, summary="Remove a material (its uploader or a moderator)")
 async def delete_material(material_id: UUID, reason: str | None = Query(None, max_length=500),
                           user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
     row = await _material_course(conn, material_id)
-    if not await can_manage_course(conn, user, row["course_id"]):
-        raise forbidden("Only moderators of this course or its department can remove materials.")
+    as_moderator = await _may_change_material(conn, user, row)
     async with conn.transaction():
         await conn.execute("UPDATE course_materials SET deleted_at = now(), deleted_by = $2 WHERE id = $1",
                            material_id, user.id)
         await close_reports(conn, "course_material", [material_id], user.id, reason)
-        if row["uploaded_by"] != user.id:
+        if as_moderator:
             await log_moderation(conn, user.id, "remove_course_material", "course_material", material_id, reason)
     return Response(status_code=204)
 
@@ -385,13 +498,16 @@ async def my_feedback(course_id: UUID, user: CurrentUser = Depends(current_user)
 
 @router.post("/courses/{course_id}/feedback", response_model=Feedback, status_code=201,
              summary="Post feedback on a course (FR-12); one per person per course")
-async def create_feedback(course_id: UUID, body: FeedbackIn, user: CurrentUser = Depends(current_user),
-                          conn: asyncpg.Connection = Depends(get_conn)):
+async def create_feedback(course_id: UUID, body: FeedbackIn, background: BackgroundTasks,
+                          user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
     await _course_department(conn, course_id)
     try:
-        feedback_id = await conn.fetchval(
-            "INSERT INTO course_feedback (course_id, author_id, content, is_anonymous) VALUES ($1, $2, $3, $4) "
-            "RETURNING id", course_id, user.id, body.content, body.is_anonymous)
+        async with conn.transaction():
+            feedback_id = await conn.fetchval(
+                "INSERT INTO course_feedback (course_id, author_id, content, is_anonymous) VALUES ($1, $2, $3, $4) "
+                "RETURNING id", course_id, user.id, body.content, body.is_anonymous)
+            await notify_course_followers(conn, background, course_id, user.id, "new feedback posted",
+                                          {"feedback_id": str(feedback_id)})
     except asyncpg.UniqueViolationError as exc:
         # One review per person keeps the survival guide's numbers from being skewed by repeat posts.
         raise HTTPException(409, "You've already reviewed this course. Edit your feedback instead.") from exc

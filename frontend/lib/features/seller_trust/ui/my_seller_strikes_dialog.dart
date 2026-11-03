@@ -98,12 +98,16 @@ class _StrikeCount extends StatelessWidget {
           triggerMode: TooltipTriggerMode.tap,
           showDuration: const Duration(seconds: 12),
           preferBelow: true,
+          // Fixed dark box with white text: readable in both themes (the dark theme's default tooltip is
+          // light grey, which washed the white text out).
           textStyle: const TextStyle(fontSize: 12, color: Colors.white, height: 1.4),
+          decoration: BoxDecoration(color: const Color(0xFF1F2937), borderRadius: BorderRadius.circular(8)),
+          padding: const EdgeInsets.all(10),
           child: Padding(
             padding: const EdgeInsets.all(6),
             child: MouseRegion(
               cursor: SystemMouseCursors.help,
-              child: Icon(Icons.help_outline_rounded, size: 18, color: theme.hintColor),
+              child: Icon(Icons.help_outline_rounded, size: 18, color: theme.colorScheme.onSurfaceVariant),
             ),
           ),
         ),

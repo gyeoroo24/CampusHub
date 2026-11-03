@@ -25,6 +25,11 @@ class Company {
   final int latestYearSelected;
   final int totalSelected;
 
+  /// Full-time compensation in the latest season that has it: lowest and highest, rupees a year.
+  final int? ctcYear;
+  final int? ctcMin;
+  final int? ctcMax;
+
   /// Only on the company page (GET /companies/{id}).
   final List<JobDescription> jobDescriptions;
   final List<Ppt> ppts;
@@ -44,6 +49,9 @@ class Company {
     this.latestYear,
     this.latestYearSelected = 0,
     this.totalSelected = 0,
+    this.ctcYear,
+    this.ctcMin,
+    this.ctcMax,
     this.jobDescriptions = const [],
     this.ppts = const [],
     this.viewerCanManage = false,
@@ -63,6 +71,9 @@ class Company {
         latestYear: _intOrNull(json['latest_year']),
         latestYearSelected: _int(json['latest_year_selected']),
         totalSelected: _int(json['total_selected']),
+        ctcYear: _intOrNull(json['ctc_year']),
+        ctcMin: _intOrNull(json['ctc_min']),
+        ctcMax: _intOrNull(json['ctc_max']),
         jobDescriptions: _list(json['job_descriptions']).map(JobDescription.fromJson).toList(),
         ppts: _list(json['ppts']).map(Ppt.fromJson).toList(),
         viewerCanManage: json['viewer_can_manage'] == true,
@@ -82,7 +93,19 @@ class JobDescription {
   final String companyId;
   final String roleTitle;
   final String? description;
+  /// As announced ("₹32 LPA", "Refer JD"); [ctcMin]/[ctcMax] are the amount read from it, rupees a year.
   final String? compensation;
+  final int? ctcMin;
+  final int? ctcMax;
+  final String? base;
+  final int? baseAnnual;
+
+  /// The season the role was offered in, e.g. 2026 for 2025-26.
+  final int? placementYear;
+
+  /// full_time, internship, ppo or other.
+  final String jobType;
+  final String? skills;
   final String? fileS3Key;
   final String? fileUrl;
 
@@ -92,9 +115,20 @@ class JobDescription {
     required this.roleTitle,
     this.description,
     this.compensation,
+    this.ctcMin,
+    this.ctcMax,
+    this.base,
+    this.baseAnnual,
+    this.placementYear,
+    this.jobType = 'full_time',
+    this.skills,
     this.fileS3Key,
     this.fileUrl,
   });
+
+  static const jobTypeLabels = {'full_time': 'Full time', 'internship': 'Internship', 'ppo': 'PPO', 'other': 'Other'};
+
+  String get jobTypeLabel => jobTypeLabels[jobType] ?? jobType;
 
   factory JobDescription.fromJson(Map<String, dynamic> json) => JobDescription(
         id: '${json['id']}',
@@ -102,6 +136,13 @@ class JobDescription {
         roleTitle: json['role_title']?.toString() ?? '',
         description: _str(json['description']),
         compensation: _str(json['compensation']),
+        ctcMin: _intOrNull(json['ctc_min']),
+        ctcMax: _intOrNull(json['ctc_max']),
+        base: _str(json['base']),
+        baseAnnual: _intOrNull(json['base_annual']),
+        placementYear: _intOrNull(json['placement_year']),
+        jobType: json['job_type']?.toString() ?? 'full_time',
+        skills: _str(json['skills']),
         fileS3Key: _str(json['file_s3_key']),
         fileUrl: _str(json['file_url']),
       );
@@ -220,14 +261,57 @@ class TopCompany {
   final String companyId;
   final String companyName;
   final int studentsSelected;
+  final int? ctcMin;
+  final int? ctcMax;
 
-  const TopCompany({required this.companyId, required this.companyName, required this.studentsSelected});
+  const TopCompany(
+      {required this.companyId, required this.companyName, required this.studentsSelected, this.ctcMin, this.ctcMax});
 
   factory TopCompany.fromJson(Map<String, dynamic> json) => TopCompany(
         companyId: '${json['company_id']}',
         companyName: json['company_name']?.toString() ?? '',
         studentsSelected: _int(json['students_selected']),
+        ctcMin: _intOrNull(json['ctc_min']),
+        ctcMax: _intOrNull(json['ctc_max']),
       );
+}
+
+/// A company's full-time compensation in a season (Statistics: highest packages).
+class CompanyPay {
+  final String companyId;
+  final String companyName;
+  final int ctcMin;
+  final int ctcMax;
+  final int roles;
+
+  const CompanyPay(
+      {required this.companyId, required this.companyName, required this.ctcMin, required this.ctcMax, this.roles = 1});
+
+  factory CompanyPay.fromJson(Map<String, dynamic> json) => CompanyPay(
+        companyId: '${json['company_id']}',
+        companyName: json['company_name']?.toString() ?? '',
+        ctcMin: _int(json['ctc_min']),
+        ctcMax: _int(json['ctc_max']),
+        roles: _int(json['roles']),
+      );
+}
+
+/// "₹48 LPA", "₹12–15 LPA", "₹9.6 LPA" from rupees a year.
+String formatCtc(int? min, int? max) {
+  if (min == null && max == null) return '';
+  String lpa(int v) {
+    final l = v / 100000;
+    if (l >= 100) return '${(l / 100).toStringAsFixed(2).replaceAll(RegExp(r'\.?0+$'), '')} Cr';
+    // Up to two decimals, trailing zeros dropped: 48, 9.6, 15.05.
+    return l.toStringAsFixed(2).replaceAll(RegExp(r'\.?0+$'), '');
+  }
+  final lo = min ?? max!, hi = max ?? min!;
+  String one(int v) => v >= 10000000 ? '₹${lpa(v)}' : '₹${lpa(v)} LPA';
+  if (lo == hi) return one(lo);
+  // Same unit on both ends shares it ("₹12–15 LPA"); a range across ₹1 Cr names both ("₹20 LPA–₹1 Cr").
+  if (hi < 10000000) return '₹${lpa(lo)}–${lpa(hi)} LPA';
+  if (lo >= 10000000) return '₹${lpa(lo)}–${lpa(hi)}';
+  return '${one(lo)}–${one(hi)}';
 }
 
 class PlacementOverview {
@@ -238,12 +322,19 @@ class PlacementOverview {
   final int? year;
   final List<TopCompany> topCompanies;
 
-  const PlacementOverview({this.seasons = const [], this.year, this.topCompanies = const []});
+  /// The latest season with compensation data, and its best-paying companies (full-time roles).
+  final int? payYear;
+  final List<CompanyPay> topPaying;
+
+  const PlacementOverview(
+      {this.seasons = const [], this.year, this.topCompanies = const [], this.payYear, this.topPaying = const []});
 
   factory PlacementOverview.fromJson(Map<String, dynamic> json) => PlacementOverview(
         seasons: _list(json['seasons']).map(SeasonStats.fromJson).toList(),
         year: _intOrNull(json['year']),
         topCompanies: _list(json['top_companies']).map(TopCompany.fromJson).toList(),
+        payYear: _intOrNull(json['pay_year']),
+        topPaying: _list(json['top_paying']).map(CompanyPay.fromJson).toList(),
       );
 }
 

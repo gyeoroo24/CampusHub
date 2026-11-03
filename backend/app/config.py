@@ -111,6 +111,11 @@ class Settings(BaseSettings):
     # go out without any scheduler while people are using CampusHub.
     meal_alerts_on_requests: bool = True
 
+    # --- Course feedback sentiment (app/sentiment_backends.py) ---
+    # auto: the local model if its files are there, else the word list. comprehend: Amazon Comprehend.
+    sentiment_backend: Literal["auto", "local", "comprehend", "lexicon"] = "auto"
+    comprehend_region: str = "ap-south-1"
+
     # --- HTTP ---
     api_prefix: str = "/api/v1"
     cors_allow_origins: list[str] = Field(default_factory=lambda: ["*"])

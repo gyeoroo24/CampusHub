@@ -12,6 +12,9 @@ abstract class IAcademicsRepository {
 
   Future<Course?> getCourse(String courseId);
 
+  /// Follow or stop following a course; returns it with the new state.
+  Future<Course?> setFollowing(String courseId, bool follow);
+
   Future<SurvivalGuide> fetchSurvivalGuide(String courseId);
 
   /// Newest first.
@@ -48,6 +51,14 @@ class ApiAcademicsRepository implements IAcademicsRepository {
   @override
   Future<Course?> getCourse(String courseId) async {
     final response = await apiClient.get(ApiEndpoints.course(courseId));
+    return Course.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  @override
+  Future<Course?> setFollowing(String courseId, bool follow) async {
+    final response = follow
+        ? await apiClient.put(ApiEndpoints.courseFollow(courseId))
+        : await apiClient.delete(ApiEndpoints.courseFollow(courseId));
     return Course.fromJson(response.data as Map<String, dynamic>);
   }
 
@@ -191,6 +202,14 @@ class MockAcademicsRepository implements IAcademicsRepository {
   Future<Course?> getCourse(String courseId) async {
     final match = _courses.where((c) => c.id == courseId);
     return match.isEmpty ? null : match.first;
+  }
+
+  @override
+  Future<Course?> setFollowing(String courseId, bool follow) async {
+    final c = await getCourse(courseId);
+    if (c == null) return null;
+    return Course(id: c.id, departmentId: c.departmentId, code: c.code, name: c.name, materialCount: c.materialCount,
+        feedbackCount: c.feedbackCount, following: follow, followerCount: c.followerCount + (follow ? 1 : -1));
   }
 
   @override

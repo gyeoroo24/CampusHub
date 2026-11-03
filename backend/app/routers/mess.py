@@ -374,7 +374,19 @@ async def create_menu(mess_id: int, body: MenuIn, user: CurrentUser = Depends(cu
         raise not_found("Mess")
     if body.file_s3_key:
         await verify_own_uploads([body.file_s3_key], "mess_menu", user.id)
+    replaced_files: list[str] = []
     async with conn.transaction():
+        if body.items:
+            # A menu posted as a file only (no meals typed in) gives way to one with the meals for the same
+            # weeks; otherwise the meals could only be posted for later dates and the page stays empty.
+            replaced = await conn.fetch(
+                """DELETE FROM mess_menus mm WHERE mess_id = $1 AND valid_from <= $3 AND valid_to >= $2
+                     AND NOT EXISTS (SELECT 1 FROM mess_menu_items i WHERE i.menu_id = mm.id)
+                   RETURNING id, file_s3_key""", mess_id, body.valid_from, body.valid_to)
+            for r in replaced:
+                await log_moderation(conn, user.id, "replace_mess_menu", "mess_menu", r["id"])
+            replaced_files = [r["file_s3_key"] for r in replaced
+                              if r["file_s3_key"] and r["file_s3_key"] != body.file_s3_key]
         await _check_overlap(conn, mess_id, body.valid_from, body.valid_to)
         menu_id = await conn.fetchval(
             """INSERT INTO mess_menus (mess_id, valid_from, valid_to, file_s3_key, notes, created_by)
@@ -385,6 +397,7 @@ async def create_menu(mess_id: int, body: MenuIn, user: CurrentUser = Depends(cu
         await sync_mess_event(conn, mess_id, user.id)
     if body.file_s3_key:
         await mark_attached([body.file_s3_key])
+    await delete_objects(replaced_files)
     return await _menu_detail(conn, menu_id)
 
 
@@ -520,6 +533,7 @@ class ExtractIn(BaseModel):
 class Extracted(BaseModel):
     mess_name: str | None = Field(None, description="The mess named in the file's title, e.g. C Mess")
     month: date | None = Field(None, description="First day of the month the title names, if any")
+    starts: date | None = Field(None, description="The date the menu says it's effective from, if any")
     items: list[MenuItem]
     notes: str | None
     warnings: list[str] = Field(description="What couldn't be read; show these above the form")
@@ -541,7 +555,7 @@ async def extract(body: ExtractIn, user: CurrentUser = Depends(current_user),
             items.append(MenuItem(weekday=day, meal=meal, items=dishes[:1000]))
         except ValueError:
             continue
-    return Extracted(mess_name=found.mess_name, month=found.month, items=items,
+    return Extracted(mess_name=found.mess_name, month=found.month, starts=found.starts, items=items,
                      notes=found.notes[:2000] if found.notes else None, warnings=found.warnings)
 
 

@@ -34,12 +34,42 @@ a suggestion needs a calibrated score and a clear lead over the runner-up
 (`scripts/calibrate_category_suggest.py`). So the footprint is now five small models, not four. The
 AWS alternative for it is still Titan Text Embeddings V2, with the same trade-offs as §3.
 
+**Update (3 Nov 2026): course-feedback sentiment is now a model, swappable for Comprehend.** Row 3
+above (DeBERTa, "not built") is replaced by an off-the-shelf model that needs no fine-tuning:
+**`cardiffnlp/twitter-roberta-base-sentiment-latest`** (RoBERTa-base, 3 classes negative / neutral /
+positive, int8 ONNX from `Xenova/twitter-roberta-base-sentiment-latest`, ~126 MB, MIT), fetched with the
+other models by `scripts/fetch_match_models.py`. It scores a sentence as P(positive) − P(negative), so
+neutral facts ("Assignments are due every Friday") land near 0 and "Great content, but the grading was
+opaque" comes out mildly positive, which the word list got wrong. ~5 ms a sentence on one core.
+`backend/app/sentiment_backends.py` picks the backend from one setting, **with no code change between
+local and AWS**:
+
+| `CAMPUSHUB_SENTIMENT_BACKEND` | What scores the sentences |
+| --- | --- |
+| `auto` (default) | the local model when its files are in the image, else the word list |
+| `local` | the RoBERTa model, in the API process |
+| `comprehend` | Amazon Comprehend `BatchDetectSentiment` (25 sentences a call), score = Positive − Negative; needs `comprehend:BatchDetectSentiment` on the API role and `CAMPUSHUB_COMPREHEND_REGION` (default ap-south-1) |
+| `lexicon` | the original VADER-style word list (`app/sentiment.py`) |
+
+Whatever the backend, a failure falls back to the word list for that request, so the survival guide
+never breaks. Themes and advice detection stay rule-based. Tests: `tests/test_sentiment_backends.py`.
+
+**Update (3 Nov 2026): placement compensation needs no model.** Roles-and-compensation files write pay
+as free text ("₹ 12,00,000", "15.05 lakhs.", "12-15 LPA", "2021600 rupees per Annum", "3. 3,635,000",
+"Refer below table"). `backend/app/placement_roles.py` reads them with a few deterministic rules (units,
+ranges, per-month, list numbers, Indian digit grouping, other currencies left as text): on the two real
+files it reads 566 of 566 and 336 of 445 amounts, and every miss is a cell with no amount in it. A model
+would add size and nondeterminism for no gain here; the original text is always kept beside the number.
+
 **Update (3 Nov 2026): reading mess menus (OCR).** Mess committees share the month's menu as a PDF
 or photo, usually a scanned table. `backend/app/mess_extract.py` prefills the menu form from it:
 pypdfium2 renders the page, the table's ruled lines are found with plain numpy, and each cell is read
 by **Tesseract 5** (`tesseract` program, LSTM English model ~4 MB, Apache-2.0), three ways per cell
 (grey and two colour thresholds, since veg/non-veg items are printed in colour) keeping the cleanest
-reading. On the sample C Mess menu it reads all 28 meals and the "every day" rows in ~5 s; a few words
+reading. Pages printed sideways (a landscape table on a portrait page, like the sample E Mess menu) are
+turned upright with Tesseract's orientation check (`--psm 0`), and a small slant (±6°, a phone photo) is
+straightened by finding the angle at which the table's rows line up best. On the five sample menus (A–E)
+it reads all 28 meals of each. On the sample C Mess menu it reads all 28 meals and the "every day" rows in ~5 s; a few words
 per page come out misspelt ("Matta nce"), which is why the moderator always reviews the table before
 posting. Nothing is posted automatically.
 

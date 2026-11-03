@@ -17,7 +17,8 @@ enum AppealStatus {
 class SellerStrike {
   final String id;
   final UserRef seller;
-  final String listingId;
+  /// Null once the seller deleted the listing (the title is a copy kept with the strike).
+  final String? listingId;
   final String listingTitle;
   final bool listingHidden;
   final String severity; // 'severe' | 'non_severe'
@@ -50,7 +51,7 @@ class SellerStrike {
     return SellerStrike(
       id: json['id'].toString(),
       seller: UserRef.fromJson(json['seller'] as Map<String, dynamic>),
-      listingId: json['listing_id'].toString(),
+      listingId: json['listing_id']?.toString(),
       listingTitle: json['listing_title']?.toString() ?? '',
       listingHidden: json['listing_hidden'] as bool? ?? false,
       severity: json['severity']?.toString() ?? 'non_severe',

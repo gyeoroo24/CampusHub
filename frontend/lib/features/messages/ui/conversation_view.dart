@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/utils/date_time_formatter.dart';
 import '../../../core/utils/error_text.dart';
@@ -143,37 +142,6 @@ class _ConversationViewState extends ConsumerState<ConversationView> {
     }
   }
 
-  Future<void> _toggleBlock(Conversation c) async {
-    final block = !c.blockedByMe;
-    if (block) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text('Block ${c.peerName}?'),
-          content: Text(
-            '${c.peerName} won’t be able to message you or start new chats with you. '
-            'They won’t be told. You can unblock them any time.',
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Block'),
-            ),
-          ],
-        ),
-      );
-      if (ok != true) return;
-    }
-    try {
-      await _controller.setBlocked(block);
-      ref.invalidate(conversationsProvider);
-    } catch (e) {
-      if (mounted) _snack(context, e);
-    }
-  }
-
   Future<void> _openListing(ChatTopic topic) async {
     if (!topic.isListing || topic.isRemoved) return;
     try {
@@ -237,36 +205,6 @@ class _ConversationViewState extends ConsumerState<ConversationView> {
     }
   }
 
-  Future<void> _deleteChat(Conversation c) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete your chat with ${c.peerName}?'),
-        content: Text(
-          'It disappears from your messages. ${c.peerName} keeps their copy. If they write again, '
-          'you’ll see only the new messages.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete chat'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    try {
-      final router = GoRouter.of(context);
-      await _controller.deleteChat();
-      ref.invalidate(conversationsProvider);
-      router.replace('/messages');
-    } catch (e) {
-      if (mounted) _snack(context, e);
-    }
-  }
-
   Future<void> _answer(ChatMessage m, String action) async {
     try {
       await _controller.answerOffer(m.id, action);
@@ -301,7 +239,7 @@ class _ConversationViewState extends ConsumerState<ConversationView> {
 
     return Column(
       children: [
-        _Header(conversation: c, onBack: widget.onBack, onBlock: () => _toggleBlock(c), onDelete: () => _deleteChat(c)),
+        _Header(conversation: c, onBack: widget.onBack),
         if (c.topics.isNotEmpty)
           _TopicBar(
             topics: c.topics,
@@ -383,10 +321,8 @@ class _ConversationViewState extends ConsumerState<ConversationView> {
 class _Header extends StatelessWidget {
   final Conversation conversation;
   final VoidCallback? onBack;
-  final VoidCallback onBlock;
-  final VoidCallback onDelete;
 
-  const _Header({required this.conversation, required this.onBack, required this.onBlock, required this.onDelete});
+  const _Header({required this.conversation, required this.onBack});
 
   @override
   Widget build(BuildContext context) {
@@ -424,23 +360,6 @@ class _Header extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'More',
-            onSelected: (v) => v == 'delete' ? onDelete() : onBlock(),
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: 'delete',
-                child: Text('Delete chat', style: TextStyle(color: Colors.red.shade700)),
-              ),
-              PopupMenuItem(
-                value: 'block',
-                child: Text(
-                  c.blockedByMe ? 'Unblock ${c.peerName}' : 'Block ${c.peerName}',
-                  style: TextStyle(color: c.blockedByMe ? null : Colors.red.shade700),
-                ),
-              ),
-            ],
           ),
         ],
       ),

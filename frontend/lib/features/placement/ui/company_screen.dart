@@ -54,7 +54,8 @@ class CompanyScreen extends ConsumerWidget {
                   if (saved == true) refreshCompany(ref, companyId);
                 },
               ),
-            if (isAdmin && companyAsync.hasValue)
+            // Moderators remove a company that withdrew, with everything under it.
+            if ((companyAsync.valueOrNull?.viewerCanManage ?? false) || (isAdmin && companyAsync.hasValue))
               IconButton(
                 tooltip: 'Delete company',
                 icon: const Icon(Icons.delete_outline_rounded),
@@ -101,7 +102,8 @@ class CompanyScreen extends ConsumerWidget {
       context: context,
       builder: (_) => AlertDialog(
         title: Text('Delete ${company.name}?'),
-        content: const Text('This also deletes its JDs, pre-placement talks, hiring records, interview experiences '
+        content: const Text('For a company that withdrew. This also removes its roles and JDs, every date on its '
+            'schedule (upcoming talks, tests and interviews too), hiring numbers, seniors, interview experiences '
             'and forum. It can\'t be undone.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
@@ -118,6 +120,8 @@ class CompanyScreen extends ConsumerWidget {
       await ref.read(placementRepositoryProvider).deleteCompany(company.id);
       ref.invalidate(companiesProvider);
       ref.invalidate(placementOverviewProvider);
+      ref.invalidate(upcomingPptsProvider);
+      ref.invalidate(scheduleProvider);
       if (context.mounted) context.go('/placements');
     } catch (e) {
       if (context.mounted) _snack(context, errorText(e));
@@ -260,6 +264,11 @@ class _OverviewTab extends ConsumerWidget {
                   ),
                   _Stat(label: 'Selected, all years', value: '${company.totalSelected}'),
                   _Stat(label: 'Interview experiences', value: '${company.interviewCount}'),
+                  if (company.ctcMin != null)
+                    _Stat(
+                      label: 'Full-time pay, ${company.ctcYear == null ? 'latest' : '${company.ctcYear! - 1}-${(company.ctcYear! % 100).toString().padLeft(2, '0')}'}',
+                      value: formatCtc(company.ctcMin, company.ctcMax),
+                    ),
                 ],
               ),
               if (company.description != null) ...[
@@ -282,7 +291,7 @@ class _OverviewTab extends ConsumerWidget {
         CompanySeniorsSection(company: company),
         const SizedBox(height: 16),
         _Section(
-          title: 'Job descriptions',
+          title: 'Roles & compensation',
           action: manage
               ? TextButton.icon(
                   onPressed: () => edit(JobDescriptionFormDialog(companyId: company.id)),
@@ -291,39 +300,21 @@ class _OverviewTab extends ConsumerWidget {
                 )
               : null,
           child: company.jobDescriptions.isEmpty
-              ? const _Empty('No job description posted yet.')
-              : Column(
-                  children: [
-                    for (final jd in company.jobDescriptions)
-                      ExpansionTile(
-                        tilePadding: EdgeInsets.zero,
-                        childrenPadding: const EdgeInsets.only(bottom: 12),
-                        expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                        title: Text(jd.roleTitle, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: jd.compensation == null ? null : Text(jd.compensation!),
-                        trailing: manage
-                            ? PopupMenuButton<String>(
-                                onSelected: (v) => v == 'edit'
-                                    ? edit(JobDescriptionFormDialog(companyId: company.id, jd: jd))
-                                    : remove('job description', () => repo.deleteJobDescription(jd.id)),
-                                itemBuilder: (_) => const [
-                                  PopupMenuItem(value: 'edit', child: Text('Edit')),
-                                  PopupMenuItem(value: 'delete', child: Text('Delete')),
-                                ],
-                              )
-                            : null,
-                        children: [
-                          SelectableText(jd.description ?? 'No details yet.'),
-                          if (jd.fileUrl != null)
-                            TextButton.icon(
-                              style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                              onPressed: () => _open(context, jd.fileUrl!),
-                              icon: const Icon(Icons.description_outlined, size: 16),
-                              label: const Text('Open the JD file'),
-                            ),
-                        ],
-                      ),
-                  ],
+              ? const _Empty('No roles posted yet.')
+              : _RolesBySeason(
+                  roles: company.jobDescriptions,
+                  menu: !manage
+                      ? null
+                      : (jd) => PopupMenuButton<String>(
+                            onSelected: (v) => v == 'edit'
+                                ? edit(JobDescriptionFormDialog(companyId: company.id, jd: jd))
+                                : remove('role', () => repo.deleteJobDescription(jd.id)),
+                            itemBuilder: (_) => const [
+                              PopupMenuItem(value: 'edit', child: Text('Edit')),
+                              PopupMenuItem(value: 'delete', child: Text('Delete')),
+                            ],
+                          ),
+                  onOpenFile: (url) => _open(context, url),
                 ),
         ),
         const SizedBox(height: 16),
@@ -659,6 +650,97 @@ class _InterviewCardState extends ConsumerState<_InterviewCard> {
           ],
         ),
       ),
+    );
+  }
+}
+
+
+/// A company's roles grouped by season (newest first): title, type, what it pays; tap for skills and the JD.
+class _RolesBySeason extends StatelessWidget {
+  final List<JobDescription> roles;
+  final Widget Function(JobDescription jd)? menu;
+  final ValueChanged<String> onOpenFile;
+
+  const _RolesBySeason({required this.roles, required this.menu, required this.onOpenFile});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final seasons = <int?, List<JobDescription>>{};
+    for (final r in roles) {
+      seasons.putIfAbsent(r.placementYear, () => []).add(r);
+    }
+    final order = seasons.keys.toList()..sort((a, b) => (b ?? 0).compareTo(a ?? 0));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final year in order) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 2),
+            child: Text(
+              year == null ? 'SEASON NOT SET' : '${year - 1}-${(year % 100).toString().padLeft(2, '0')} SEASON',
+              style: TextStyle(fontSize: 11, letterSpacing: 0.6, fontWeight: FontWeight.bold, color: theme.hintColor),
+            ),
+          ),
+          for (final jd in (seasons[year]!..sort((a, b) => (b.ctcMax ?? 0).compareTo(a.ctcMax ?? 0))))
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 12),
+              expandedCrossAxisAlignment: CrossAxisAlignment.start,
+              title: Row(
+                children: [
+                  Flexible(child: Text(jd.roleTitle, style: const TextStyle(fontWeight: FontWeight.w600))),
+                  if (jd.jobType != 'full_time') ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.secondaryContainer,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(jd.jobTypeLabel, style: const TextStyle(fontSize: 11)),
+                    ),
+                  ],
+                ],
+              ),
+              subtitle: jd.ctcMin != null
+                  ? Text(formatCtc(jd.ctcMin, jd.ctcMax) +
+                        (jd.baseAnnual != null && jd.baseAnnual != jd.ctcMax ? ' · base ${formatCtc(jd.baseAnnual, null)}' : ''),
+                      style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w700))
+                  : jd.baseAnnual != null
+                      // No CTC given ("refer JD"), but the base pay is known.
+                      ? Text('Base ${formatCtc(jd.baseAnnual, null)}',
+                          style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w700))
+                      : (jd.compensation == null
+                          ? null
+                          : Text(jd.compensation!, style: TextStyle(color: theme.hintColor, fontSize: 12))),
+              trailing: menu?.call(jd),
+              children: [
+                if (jd.compensation != null && jd.ctcMin != null)
+                  Text('As announced: ${jd.compensation}', style: TextStyle(fontSize: 12, color: theme.hintColor)),
+                if (jd.skills != null) ...[
+                  const SizedBox(height: 6),
+                  const Text('Skills', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  SelectableText(jd.skills!),
+                ],
+                if (jd.description != null) ...[
+                  const SizedBox(height: 6),
+                  const Text('Job description', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  SelectableText(jd.description!),
+                ],
+                if (jd.skills == null && jd.description == null && jd.fileUrl == null)
+                  Text('No details yet.', style: TextStyle(color: theme.hintColor)),
+                if (jd.fileUrl != null)
+                  TextButton.icon(
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                    onPressed: () => onOpenFile(jd.fileUrl!),
+                    icon: const Icon(Icons.description_outlined, size: 16),
+                    label: const Text('Open the JD file'),
+                  ),
+              ],
+            ),
+        ],
+      ],
     );
   }
 }

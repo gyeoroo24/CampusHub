@@ -88,9 +88,10 @@ async def record_strike(conn: asyncpg.Connection, *, report_id: UUID, listing_id
     already recorded a strike - resolve_report can't call this twice for the same report, but stays
     safe if it ever did."""
     strike_id = await conn.fetchval(
-        """INSERT INTO seller_strikes (seller_id, listing_id, report_id, severity, moderator_id, moderator_note)
-           VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (report_id) DO NOTHING RETURNING id""",
-        seller_id, listing_id, report_id, severity, moderator_id, note)
+        """INSERT INTO seller_strikes (seller_id, listing_id, report_id, severity, moderator_id, moderator_note,
+                                      listing_title)
+           VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (report_id) DO NOTHING RETURNING id""",
+        seller_id, listing_id, report_id, severity, moderator_id, note, listing_title)
     if strike_id is None:
         return False
     await conn.execute("UPDATE listings SET hidden_by_strike_id = $2 WHERE id = $1", listing_id, strike_id)
@@ -118,14 +119,41 @@ async def is_listing_suspended(conn: asyncpg.Connection, seller_id: UUID) -> boo
     return bool(await conn.fetchval("SELECT listing_suspended_at FROM users WHERE id = $1", seller_id))
 
 
+def _short(text: str, limit: int = 60) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
+
+
+async def _strike_listing(conn: asyncpg.Connection, strike_id: UUID) -> asyncpg.Record:
+    return await conn.fetchrow(
+        """SELECT s.seller_id, coalesce(l.title, s.listing_title, 'a deleted listing') AS title, u.name AS seller_name
+           FROM seller_strikes s LEFT JOIN listings l ON l.id = s.listing_id JOIN users u ON u.id = s.seller_id
+           WHERE s.id = $1""", strike_id)
+
+
+async def _buy_sell_moderators(conn: asyncpg.Connection) -> list[UUID]:
+    return [r["id"] for r in await conn.fetch(
+        """SELECT DISTINCT u.id FROM users u
+           LEFT JOIN moderator_assignments m ON m.user_id = u.id AND m.module = 'buy_sell' AND m.revoked_at IS NULL
+           WHERE u.is_active AND (u.base_role = 'admin' OR m.id IS NOT NULL)""")]
+
+
 async def file_appeal(conn: asyncpg.Connection, strike_id: UUID, seller_id: UUID, message: str) -> bool:
     """True if recorded. False if the strike doesn't exist, isn't this seller's, or already has an
-    appeal (one shot per strike)."""
+    appeal (one shot per strike). Buy & Sell moderators and the admin are told there's an appeal to review."""
     result = await conn.execute(
         """UPDATE seller_strikes SET appeal_message = $3, appeal_created_at = now()
            WHERE id = $1 AND seller_id = $2 AND appeal_message IS NULL""",
         strike_id, seller_id, message)
-    return result.split()[-1] != "0"
+    if result.split()[-1] == "0":
+        return False
+    item = await _strike_listing(conn, strike_id)
+    moderators = [m for m in await _buy_sell_moderators(conn) if m != seller_id]
+    await create_notifications(conn, moderators, "moderation_action", {
+        "message": f'{item["seller_name"]} contested the strike for "{_short(item["title"])}": '
+                   f'"{_short(message, 120)}". Review it in Moderation → Seller strikes.',
+        "strike_id": str(strike_id), "kind": "strike_appeal"})
+    return True
 
 
 async def overturn_strike(conn: asyncpg.Connection, strike_id: UUID, moderator_id: UUID,
@@ -150,7 +178,13 @@ async def overturn_strike(conn: asyncpg.Connection, strike_id: UUID, moderator_i
     seller_id = row["seller_id"]
     tag = (await seller_trust_tags(conn, {seller_id})).get(seller_id)
     if tag != "blocked":
-        await lift_suspension(conn, seller_id)
+        await lift_suspension(conn, seller_id, notify=False)
+    item = await _strike_listing(conn, strike_id)
+    await create_notifications(conn, [seller_id], "moderation_action", {
+        "message": f'A moderator overturned the strike for "{_short(item["title"])}": it no longer counts and '
+                   "the listing is visible again." + (f" Note: {note}" if note else "")
+                   + ("" if tag == "blocked" else " You can post listings."),
+        "strike_id": str(strike_id), "kind": "strike_overturned"})
     return seller_id
 
 
@@ -163,9 +197,21 @@ async def reject_appeal(conn: asyncpg.Connection, strike_id: UUID, moderator_id:
            WHERE id = $1 AND appeal_message IS NOT NULL AND appeal_resolved_at IS NULL
            RETURNING seller_id""",
         strike_id, moderator_id)
-    return row["seller_id"] if row else None
+    if row is None:
+        return None
+    item = await _strike_listing(conn, strike_id)
+    await create_notifications(conn, [row["seller_id"]], "moderation_action", {
+        "message": f'A moderator reviewed your appeal for "{_short(item["title"])}" and kept the strike. '
+                   "The listing stays hidden.",
+        "strike_id": str(strike_id), "kind": "strike_appeal_rejected"})
+    return row["seller_id"]
 
 
-async def lift_suspension(conn: asyncpg.Connection, seller_id: UUID) -> None:
-    await conn.execute(
-        "UPDATE users SET listing_suspended_at = NULL, listing_suspended_reason = NULL WHERE id = $1", seller_id)
+async def lift_suspension(conn: asyncpg.Connection, seller_id: UUID, notify: bool = True) -> None:
+    lifted = await conn.fetchval(
+        """UPDATE users SET listing_suspended_at = NULL, listing_suspended_reason = NULL
+           WHERE id = $1 AND listing_suspended_at IS NOT NULL RETURNING true""", seller_id)
+    if lifted and notify:
+        await create_notifications(conn, [seller_id], "moderation_action", {
+            "message": "A moderator lifted your posting suspension: you can post listings again.",
+            "kind": "suspension_lifted"})

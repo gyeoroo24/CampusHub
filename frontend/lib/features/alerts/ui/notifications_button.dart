@@ -68,6 +68,8 @@ class NotificationsDialog extends ConsumerStatefulWidget {
         return Icons.event_note_rounded;
       case 'mess_menu':
         return Icons.restaurant_menu_rounded;
+      case 'course_update':
+        return Icons.school_outlined;
       default:
         return Icons.notifications_none_rounded;
     }
@@ -93,6 +95,20 @@ class NotificationsDialog extends ConsumerStatefulWidget {
       Navigator.pop(context);
       await WebHistoryManager.instance.settled;
       router.go('/events/$eventId');
+      return;
+    }
+    final courseId = n.payload['course_id']?.toString();
+    if (n.type == 'course_update' && courseId != null) {
+      // A forum post or reply opens the thread; anything else opens the course.
+      final thread = n.payload['thread_id']?.toString();
+      if (thread != null) {
+        await showDialog(context: context, builder: (_) => ThreadDialog(threadId: thread));
+        return;
+      }
+      final router = GoRouter.of(context);
+      Navigator.pop(context);
+      await WebHistoryManager.instance.settled;
+      router.push('/courses/$courseId');
       return;
     }
     if (n.type == 'mess_menu') {
@@ -262,6 +278,7 @@ class _NotificationsDialogState extends ConsumerState<NotificationsDialog> {
                       n.foundReportId != null ||
                       n.type == 'chat_message' ||
                       n.type == 'mess_menu' ||
+                      n.type == 'course_update' ||
                       (n.type == 'forum_reply' && n.payload['thread_id'] != null) ||
                       (n.payload['event_id'] != null && n.payload['cancelled'] != true);
                   final picked = selected?.contains(n.id) ?? false;

@@ -88,7 +88,7 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
                           children: [
                             Text('Campus events',
                                 style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                            Text('Sports, culture, talks and more. Bookmark an event or follow a tag to get alerts.',
+                            Text('Sports, culture, talks and more, posted by the Events team. Bookmark an event or follow a tag to get alerts.',
                                 style: TextStyle(fontSize: 12, color: theme.hintColor)),
                           ],
                         ),
@@ -99,12 +99,15 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
                         icon: const Icon(Icons.restaurant_menu_rounded, size: 18),
                         label: const Text('Mess menu'),
                       ),
-                      const SizedBox(width: 8),
-                      FilledButton.icon(
-                        onPressed: () => _create(context, ref),
-                        icon: const Icon(Icons.add_rounded, size: 18),
-                        label: const Text('Add event'),
-                      ),
+                      // Only Events moderators and the admin add events.
+                      if (ref.watch(currentUserProvider)?.canModerateModule('events') ?? false) ...[
+                        const SizedBox(width: 8),
+                        FilledButton.icon(
+                          onPressed: () => _create(context, ref),
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                          label: const Text('Add event'),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 10),

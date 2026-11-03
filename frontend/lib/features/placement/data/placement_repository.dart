@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
@@ -7,8 +8,8 @@ import '../domain/placement_models.dart';
 /// Placement Hub: company pages, JDs, PPTs, hiring statistics, interview experiences, the company
 /// forum, and (moderators) the placement sheet import.
 abstract class IPlacementRepository {
-  /// [sort] is `name`, `most_hired` or `upcoming_ppt`.
-  Future<List<Company>> fetchCompanies({String? query, String sort = 'name', int limit = 50});
+  /// [sort] is `name`, `most_hired` or `upcoming_ppt`. [limit] null = every company (fetched 50 a page).
+  Future<List<Company>> fetchCompanies({String? query, String sort = 'name', int? limit});
 
   Future<Company> getCompany(String companyId);
 
@@ -39,7 +40,8 @@ abstract class IPlacementRepository {
 
   /// [removeFile] drops a JD file attached through the API (the app edits JDs as text).
   Future<void> saveJobDescription({String? jdId, required String companyId, required String roleTitle,
-      String? description, String? compensation, bool removeFile = false});
+      String? description, String? compensation, bool removeFile = false, int? placementYear,
+      String jobType = 'full_time', String? base, String? skills});
 
   Future<void> deleteJobDescription(String jdId);
 
@@ -54,7 +56,12 @@ abstract class IPlacementRepository {
   Future<CsvImportResult> importCompanies(String csv);
 
   /// Add placement dates from a CSV (Company, Type, Date, Time, Venue, Details).
-  Future<CsvImportResult> importSchedule(String csv);
+  /// [fileName] sets the round (interview, test, PPT) when the columns don't say it.
+  Future<CsvImportResult> importSchedule(String csv, {String? fileName});
+
+  /// Add roles with their compensation (Company, Position, Batch/Year, CTC, Base, Job type, Skills...).
+  /// [placementYear] is the season for rows without a Batch/Year column.
+  Future<CsvImportResult> importRoles(String csv, {int? placementYear});
 }
 
 List<Map<String, dynamic>> _items(dynamic data) =>
@@ -68,13 +75,21 @@ class ApiPlacementRepository implements IPlacementRepository {
   ApiPlacementRepository(this.apiClient);
 
   @override
-  Future<List<Company>> fetchCompanies({String? query, String sort = 'name', int limit = 50}) async {
-    final response = await apiClient.get(ApiEndpoints.companies, queryParameters: {
-      if (_blankToNull(query) != null) 'q': query!.trim(),
-      'sort': sort,
-      'limit': limit,
-    });
-    return _items(response.data).map(Company.fromJson).toList();
+  Future<List<Company>> fetchCompanies({String? query, String sort = 'name', int? limit}) async {
+    // The API returns at most 50 a page; the hub lists them all (there are hundreds), so keep asking.
+    final companies = <Company>[];
+    while (true) {
+      final want = limit == null ? 50 : min(50, limit - companies.length);
+      final response = await apiClient.get(ApiEndpoints.companies, queryParameters: {
+        if (_blankToNull(query) != null) 'q': query!.trim(),
+        'sort': sort,
+        'limit': want,
+        'offset': companies.length,
+      });
+      final data = response.data as Map<String, dynamic>;
+      companies.addAll(_items(data).map(Company.fromJson));
+      if (data['has_more'] != true || (limit != null && companies.length >= limit)) return companies;
+    }
   }
 
   @override
@@ -166,11 +181,16 @@ class ApiPlacementRepository implements IPlacementRepository {
 
   @override
   Future<void> saveJobDescription({String? jdId, required String companyId, required String roleTitle,
-      String? description, String? compensation, bool removeFile = false}) async {
+      String? description, String? compensation, bool removeFile = false, int? placementYear,
+      String jobType = 'full_time', String? base, String? skills}) async {
     final body = {
       'role_title': roleTitle,
       'description': _blankToNull(description),
       'compensation': _blankToNull(compensation),
+      'placement_year': placementYear,
+      'job_type': jobType,
+      'base': _blankToNull(base),
+      'skills': _blankToNull(skills),
       if (removeFile) 'file_s3_key': null,
     };
     if (jdId == null) {
@@ -220,8 +240,16 @@ class ApiPlacementRepository implements IPlacementRepository {
   }
 
   @override
-  Future<CsvImportResult> importSchedule(String csv) async {
-    final response = await apiClient.post(ApiEndpoints.placementScheduleImport, data: {'csv': csv});
+  Future<CsvImportResult> importSchedule(String csv, {String? fileName}) async {
+    final response = await apiClient.post(ApiEndpoints.placementScheduleImport,
+        data: {'csv': csv, if (fileName != null) 'file_name': fileName});
+    return CsvImportResult.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  @override
+  Future<CsvImportResult> importRoles(String csv, {int? placementYear}) async {
+    final response = await apiClient.post(ApiEndpoints.placementRolesImport,
+        data: {'csv': csv, if (placementYear != null) 'placement_year': placementYear});
     return CsvImportResult.fromJson(response.data as Map<String, dynamic>);
   }
 }
@@ -291,7 +319,7 @@ class MockPlacementRepository implements IPlacementRepository {
       );
 
   @override
-  Future<List<Company>> fetchCompanies({String? query, String sort = 'name', int limit = 50}) async {
+  Future<List<Company>> fetchCompanies({String? query, String sort = 'name', int? limit}) async {
     final q = (query ?? '').trim().toLowerCase();
     final list = _companies
         .where((c) => q.isEmpty || c.name.toLowerCase().contains(q) || (c.industry ?? '').toLowerCase().contains(q))
@@ -302,7 +330,7 @@ class MockPlacementRepository implements IPlacementRepository {
     } else {
       list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     }
-    return list;
+    return limit == null ? list : list.take(limit).toList();
   }
 
   @override
@@ -396,10 +424,12 @@ class MockPlacementRepository implements IPlacementRepository {
 
   @override
   Future<void> saveJobDescription({String? jdId, required String companyId, required String roleTitle,
-      String? description, String? compensation, bool removeFile = false}) async {
+      String? description, String? compensation, bool removeFile = false, int? placementYear,
+      String jobType = 'full_time', String? base, String? skills}) async {
     _jds.removeWhere((j) => j.id == jdId);
     _jds.add(JobDescription(id: jdId ?? 'jd_${DateTime.now().microsecondsSinceEpoch}', companyId: companyId,
-        roleTitle: roleTitle, description: _blankToNull(description), compensation: _blankToNull(compensation)));
+        roleTitle: roleTitle, description: _blankToNull(description), compensation: _blankToNull(compensation),
+        placementYear: placementYear, jobType: jobType, base: _blankToNull(base), skills: _blankToNull(skills)));
   }
 
   @override
@@ -437,5 +467,8 @@ class MockPlacementRepository implements IPlacementRepository {
   }
 
   @override
-  Future<CsvImportResult> importSchedule(String csv) => importCompanies(csv);
+  Future<CsvImportResult> importSchedule(String csv, {String? fileName}) => importCompanies(csv);
+
+  @override
+  Future<CsvImportResult> importRoles(String csv, {int? placementYear}) => importCompanies(csv);
 }

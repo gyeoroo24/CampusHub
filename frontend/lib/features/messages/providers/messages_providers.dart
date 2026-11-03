@@ -404,7 +404,6 @@ class ConversationController extends AutoDisposeFamilyNotifier<ConversationState
     state = state.copyWith(messages: Map.of(state.messages)..remove(messageId));
   }
 
-  Future<void> deleteChat() => _repo.deleteConversation(_id);
 
   Future<void> setBlocked(bool blocked) async {
     final c = state.conversation!;

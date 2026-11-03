@@ -1,6 +1,7 @@
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:async';
 import 'dart:html' as html;
+import 'dart:typed_data';
 import 'text_file_picker.dart';
 
 /// Larger than any sheet the API accepts (2 MB of text), with room for a byte-order mark.
@@ -25,9 +26,13 @@ Future<PickedTextFile?> pickTextFile(String accept) {
       return;
     }
     final reader = html.FileReader();
-    reader.onLoad.first.then((_) => completer.complete(PickedTextFile(file.name, '${reader.result}')));
+    reader.onLoad.first.then((_) {
+      final result = reader.result;
+      final bytes = result is ByteBuffer ? result.asUint8List() : result as Uint8List;
+      completer.complete(PickedTextFile(file.name, decodeText(bytes)));
+    });
     reader.onError.first.then((_) => completer.completeError(Exception("Couldn't read ${file.name}.")));
-    reader.readAsText(file, 'UTF-8');
+    reader.readAsArrayBuffer(file);
   });
   input.click();
   return completer.future;

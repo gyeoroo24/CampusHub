@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from .conftest import ADMIN, API, ASHA, KIRAN, MEERA, RAVI, grant, make_admin, sign_in, sql, upload
+from .conftest import ADMIN, API, ASHA, KIRAN, MEERA, RAVI, grant, make_admin, sign_in, sql, upload, post_event
 
 NOW = datetime.now(timezone.utc)
 
@@ -31,7 +31,7 @@ def _event(client, headers, tag_ids, **fields):
     start = NOW + timedelta(days=2)
     body = {"title": "Mess fest", "start_time": start.isoformat(),
             "end_time": (start + timedelta(hours=2)).isoformat(), "tag_ids": tag_ids} | fields
-    r = client.post(f"{API}/events", headers=headers, json=body)
+    r = post_event(client, headers, body)
     assert r.status_code == 201, r.text
     return r.json()
 

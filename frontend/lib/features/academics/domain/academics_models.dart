@@ -23,6 +23,10 @@ class Course {
   final int materialCount;
   final int feedbackCount;
 
+  /// The viewer follows the course (new materials, feedback and forum posts notify them).
+  final bool following;
+  final int followerCount;
+
   const Course({
     required this.id,
     required this.departmentId,
@@ -30,6 +34,8 @@ class Course {
     required this.name,
     this.materialCount = 0,
     this.feedbackCount = 0,
+    this.following = false,
+    this.followerCount = 0,
   });
 
   factory Course.fromJson(Map<String, dynamic> json) => Course(
@@ -39,6 +45,8 @@ class Course {
         name: json['name']?.toString() ?? '',
         materialCount: _int(json['material_count']),
         feedbackCount: _int(json['feedback_count']),
+        following: json['following'] == true,
+        followerCount: _int(json['follower_count']),
       );
 }
 

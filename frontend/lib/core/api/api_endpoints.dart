@@ -83,6 +83,9 @@ class ApiEndpoints {
   static String departmentCourses(String deptId) => '$version/departments/$deptId/courses';
   static String course(String id) => '$version/courses/$id';
   static String courseMaterials(String courseId) => '$version/courses/$courseId/materials';
+  static String courseForum(String courseId) => '$version/courses/$courseId/forum';
+  static String courseFollow(String courseId) => '$version/courses/$courseId/follow';
+  static String material(String id) => '$version/materials/$id';
   static String courseFeedback(String courseId) => '$version/courses/$courseId/feedback';
   static String courseSurvivalGuide(String courseId) => '$version/courses/$courseId/survival-guide';
   static String myCourseFeedback(String courseId) => '$version/courses/$courseId/feedback/mine';
@@ -145,6 +148,7 @@ class ApiEndpoints {
   static const String placementImports = '$version/placement/imports';
   static const String placementCompaniesImport = '$version/placement/companies/import';
   static const String placementScheduleImport = '$version/placement/schedule/import';
+  static const String placementRolesImport = '$version/placement/roles/import';
 
   // --- Forums ---
   static String forumThreads(String forumId) => '$version/forums/$forumId/threads';

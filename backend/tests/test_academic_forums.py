@@ -42,7 +42,7 @@ def test_department_moderator_limits(client, campus):
 
 
 def test_course_moderator_manages_only_own_course_materials(client, s3, campus):
-    """FR-13 + team decision: course moderators can also create materials."""
+    """FR-13: course moderators manage materials; others can't edit what they didn't share."""
     hpca, cloud = campus["hpca"]["id"], campus["cloud"]["id"]
     assert client.get(f"{API}/courses/{hpca}").json()["has_content"] is False  # FR-11 "no data yet"
     key = upload(client, s3, RAVI, "course_material", b"%PDF-1.4", "application/pdf", course_id=hpca)
@@ -50,11 +50,11 @@ def test_course_moderator_manages_only_own_course_materials(client, s3, campus):
                     json={"title": "Lecture 1", "material_type": "slides", "s3_key": key})
     assert r.status_code == 201 and r.json()["download_url"]
     assert client.get(f"{API}/courses/{hpca}").json()["has_content"] is True
-    # Ravi can't even get an upload ticket for another course
-    r = client.post(f"{API}/uploads", headers=RAVI, json={
+    # Rev 22: materials are a shared repository, so anyone signed in gets an upload ticket for any course.
+    r = client.post(f"{API}/uploads", headers=ASHA, json={
         "kind": "course_material", "content_type": "application/pdf", "size_bytes": 10,
         "checksum_sha256": "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=", "course_id": cloud})
-    assert r.status_code == 403
+    assert r.status_code == 201
     material_id = r_id = client.get(f"{API}/courses/{hpca}/materials").json()["items"][0]["id"]
     assert client.patch(f"{API}/materials/{material_id}", headers=ASHA, json={"title": "x"}).status_code == 403
     assert client.patch(f"{API}/materials/{r_id}", headers=DEPTMOD, json={"title": "Lecture 1 (v2)"}).status_code == 200
@@ -112,3 +112,98 @@ def test_deleting_course_removes_everything_under_it(client, s3, campus):
                            (SELECT count(*) FROM comments) AS comments, (SELECT count(*) FROM course_feedback) AS fb,
                            (SELECT count(*) FROM moderator_assignments WHERE course_id IS NOT NULL) AS grants""")[0]
     assert dict(counts) == {"forums": 0, "threads": 0, "comments": 0, "fb": 0, "grants": 0}
+
+
+# ---------------------------------------------------------------- rev 22: shared repository and follows
+def _zip(files: dict[str, bytes]) -> bytes:
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for name, data in files.items():
+            zf.writestr(name, data)
+    return buf.getvalue()
+
+
+def _share(client, s3, headers, course_id, content, content_type, **body):
+    key = upload(client, s3, headers, "course_material", content, content_type, course_id=course_id)
+    return client.post(f"{API}/courses/{course_id}/materials", headers=headers, json={"s3_key": key} | body)
+
+
+def test_anyone_shares_materials_and_followers_hear(client, s3, campus):
+    hpca = campus["hpca"]["id"]
+    assert client.put(f"{API}/courses/{hpca}/follow", headers=MEERA).json()["following"] is True
+    assert client.get(f"{API}/courses/{hpca}", headers=MEERA).json()["follower_count"] == 1
+    r = _share(client, s3, ASHA, hpca, b"%PDF-1.4 endsem 2025", "application/pdf",
+               title="Endsem 2025", tags=["pyq", "solutions"], description="With worked answers",
+               file_name="endsem-2025.pdf")
+    assert r.status_code == 201, r.text
+    m = r.json()
+    assert (m["tags"], m["material_type"], m["held"], m["can_edit"], m["file_name"]) == \
+        (["pyq", "solutions"], "exam_material", False, True, "endsem-2025.pdf")
+    alerts = [n["payload"] for n in client.get(f"{API}/me/notifications", headers=MEERA).json()["items"]
+              if n["type"] == "course_update"]
+    assert alerts[0]["message"] == "E0 243: new material “Endsem 2025”"
+    assert [x["id"] for x in client.get(f"{API}/courses/{hpca}/materials", params={"tag": "pyq"}).json()["items"]] == [m["id"]]
+    # The uploader edits their own; someone else can't; the course moderator can.
+    assert client.patch(f"{API}/materials/{m['id']}", headers=ASHA, json={"tags": ["quiz"]}).json()["tags"] == ["quiz"]
+    assert client.patch(f"{API}/materials/{m['id']}", headers=KIRAN, json={"title": "x"}).status_code == 403
+    assert client.delete(f"{API}/materials/{m['id']}", headers=RAVI).status_code == 204
+    # Feedback and forum posts reach followers too; never the person who posted.
+    client.post(f"{API}/courses/{hpca}/feedback", headers=KIRAN, json={"content": "Great course"})
+    forum = client.get(f"{API}/courses/{hpca}/forum").json()
+    client.post(f"{API}/forums/{forum['id']}/threads", headers=KIRAN, json={"title": "Midsem tips?", "content": "Any?"})
+    messages = [n["payload"]["message"] for n in client.get(f"{API}/me/notifications", headers=MEERA).json()["items"]
+                if n["type"] == "course_update"]
+    assert "E0 243: new feedback posted" in messages and "E0 243: new forum post “Midsem tips?”" in messages
+    assert not [n for n in client.get(f"{API}/me/notifications", headers=KIRAN).json()["items"]
+                if n["type"] == "course_update"]
+    assert client.delete(f"{API}/courses/{hpca}/follow", headers=MEERA).json()["following"] is False
+
+
+@pytest.mark.parametrize("content, content_type, name, why", [
+    (b"MZ\x90\x00 windows program", "application/pdf", "notes.pdf", "is a program"),
+    (b"<html>not a pdf", "application/pdf", "notes.pdf", "isn't really a PDF"),
+    (b"PK\x03\x04" + b"x" * 20, "application/zip", "x.zip", "damaged"),
+    (None, "application/zip", "apps.zip", "Android app"),
+    (None, "application/zip", "tools.zip", "programs or scripts"),
+    (b"%PDF-1.4", "application/pdf", "cheat.apk", ".apk files"),
+])
+def test_programs_and_disguised_files_are_refused(client, s3, campus, content, content_type, name, why):
+    if name == "apps.zip":
+        content = _zip({"AndroidManifest.xml": b"<manifest/>", "classes.dex": b"dex\n035"})
+    if name == "tools.zip":
+        content = _zip({"readme.txt": b"hi", "setup.exe": b"MZ..."})
+    r = _share(client, s3, ASHA, campus["hpca"]["id"], content, content_type, title="Notes", file_name=name)
+    assert r.status_code == 422 and why in r.text, r.text
+    assert client.get(f"{API}/courses/{campus['hpca']['id']}/materials").json()["items"] == []
+
+
+def test_suspicious_uploads_are_held_for_moderators(client, s3, campus):
+    hpca = campus["hpca"]["id"]
+    nested = _zip({"week1/slides.pdf": b"%PDF-1.4", "old.zip": b"PK\x03\x04"})
+    r = _share(client, s3, ASHA, hpca, nested, "application/zip", title="Leaked endsem paper, selling cheap")
+    assert r.status_code == 201 and r.json()["held"] is True
+    material = r.json()
+    # Hidden from others, visible to the uploader and the course's moderator.
+    assert client.get(f"{API}/courses/{hpca}/materials", headers=KIRAN).json()["items"] == []
+    assert len(client.get(f"{API}/courses/{hpca}/materials", headers=ASHA).json()["items"]) == 1
+    assert len(client.get(f"{API}/courses/{hpca}/materials", headers=RAVI).json()["items"]) == 1
+    report = sql("SELECT reason, module::text FROM reports WHERE course_material_id = $1::uuid", material["id"])[0]
+    assert report["module"] == "academic_help" and "archive inside the archive" in report["reason"]
+    assert "Leaked" in report["reason"] or "leaked" in report["reason"].lower()
+    # The moderator keeps it: it appears for everyone.
+    report_id = sql("SELECT id FROM reports WHERE course_material_id = $1::uuid", material["id"])[0]["id"]
+    r = client.post(f"{API}/reports/{report_id}/resolve", headers=RAVI, json={"action": "dismissed"})
+    assert r.status_code == 200, r.text
+    assert len(client.get(f"{API}/courses/{hpca}/materials", headers=KIRAN).json()["items"]) == 1
+
+
+def test_macro_documents_are_refused():
+    from app.material_check import Rejected, check_material
+    docm = _zip({"[Content_Types].xml": b"x", "word/document.xml": b"x", "word/vbaProject.bin": b"x"})
+    with pytest.raises(Rejected, match="macros"):
+        check_material(docm, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "a.docx")
+    ok = _zip({"[Content_Types].xml": b"x", "word/document.xml": b"x"})
+    assert check_material(ok, "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                          "a.docx").flags == []

@@ -6,7 +6,7 @@ String? _str(dynamic v) => v == null || '$v'.isEmpty ? null : '$v';
 DateTime? _date(dynamic v) => v == null ? null : DateTime.tryParse('$v')?.toLocal();
 
 /// What a forum belongs to. Each has exactly one forum, created on first visit.
-enum ForumScope { company, event }
+enum ForumScope { company, event, course }
 
 /// Thread order: newest first, or most upvoted.
 enum ForumSort {

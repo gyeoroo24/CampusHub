@@ -27,6 +27,7 @@ os.environ.update({
     "CAMPUSHUB_S3_BUCKET": BUCKET,
     "CAMPUSHUB_MATCH_MODE": "off",
     "CAMPUSHUB_MEAL_ALERTS_ON_REQUESTS": "false",
+    "CAMPUSHUB_SENTIMENT_BACKEND": "lexicon",   # test_sentiment_backends.py covers the model and Comprehend
     "CAMPUSHUB_AUTO_FLAG": "false",  # test_auto_flagging.py turns it on   # tests that need the matcher switch it on with a fake embedder
     "CAMPUSHUB_S3_REGION": "ap-south-1",
     "AWS_ACCESS_KEY_ID": "testing",
@@ -138,3 +139,20 @@ def category(client, headers, path, name) -> int:
     r = client.post(f"{API}/{path}/categories", headers=headers, json={"name": name})
     assert r.status_code in (200, 201), r.text
     return r.json()["id"]
+
+
+def post_event(client, headers, body):
+    """Create an event as `headers`' user. Only Events moderators may (rev 21), so the user holds the role
+    just for this call: they end up the event's organizer without staying a moderator, which keeps
+    organizer-versus-others checks meaningful."""
+    user_id = sign_in(client, headers)
+    is_moderator = sql("""SELECT EXISTS (SELECT 1 FROM moderator_assignments WHERE user_id = $1::uuid
+                          AND module = 'events' AND revoked_at IS NULL)""", user_id)[0][0]
+    if is_moderator or sql("SELECT base_role = 'admin' FROM users WHERE id = $1::uuid", user_id)[0][0]:
+        return client.post(f"{API}/events", headers=headers, json=body)
+    grant_id = sql("""INSERT INTO moderator_assignments (user_id, module, scope_type, granted_by)
+                      VALUES ($1::uuid, 'events', 'module', $1::uuid) RETURNING id""", user_id)[0][0]
+    try:
+        return client.post(f"{API}/events", headers=headers, json=body)
+    finally:
+        sql("UPDATE moderator_assignments SET revoked_at = now(), revoked_by = user_id WHERE id = $1", grant_id)

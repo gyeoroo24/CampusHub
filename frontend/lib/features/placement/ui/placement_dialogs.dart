@@ -160,12 +160,16 @@ class JobDescriptionFormDialog extends ConsumerStatefulWidget {
 class _JobDescriptionFormDialogState extends ConsumerState<JobDescriptionFormDialog> {
   late final _role = TextEditingController(text: widget.jd?.roleTitle);
   late final _compensation = TextEditingController(text: widget.jd?.compensation);
+  late final _base = TextEditingController(text: widget.jd?.base);
+  late final _skills = TextEditingController(text: widget.jd?.skills);
   late final _description = TextEditingController(text: widget.jd?.description);
+  late int? _year = widget.jd == null ? DateTime.now().year : widget.jd!.placementYear;
+  late String _jobType = widget.jd?.jobType ?? 'full_time';
   bool _removeFile = false;
 
   @override
   void dispose() {
-    for (final c in [_role, _compensation, _description]) {
+    for (final c in [_role, _compensation, _base, _skills, _description]) {
       c.dispose();
     }
     super.dispose();
@@ -174,7 +178,7 @@ class _JobDescriptionFormDialogState extends ConsumerState<JobDescriptionFormDia
   @override
   Widget build(BuildContext context) {
     return _FormDialog(
-      title: widget.jd == null ? 'Add a job description' : 'Edit job description',
+      title: widget.jd == null ? 'Add a role' : 'Edit role',
       width: 560,
       onSave: () async {
         await ref.read(placementRepositoryProvider).saveJobDescription(
@@ -184,12 +188,51 @@ class _JobDescriptionFormDialogState extends ConsumerState<JobDescriptionFormDia
               compensation: _compensation.text,
               description: _description.text,
               removeFile: _removeFile,
+              placementYear: _year,
+              jobType: _jobType,
+              base: _base.text,
+              skills: _skills.text,
             );
       },
       children: [
         TextFormField(controller: _role, decoration: _field('Role', hint: 'e.g. Software Engineer'),
             validator: _required, maxLength: 200),
-        TextFormField(controller: _compensation, decoration: _field('Compensation', hint: 'e.g. ₹32 LPA'), maxLength: 200),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<int?>(
+                initialValue: _year,
+                decoration: _field('Season'),
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('Not set')),
+                  for (var y = DateTime.now().year + 1; y >= DateTime.now().year - 6; y--)
+                    DropdownMenuItem(value: y, child: Text('${y - 1}-${(y % 100).toString().padLeft(2, '0')}')),
+                ],
+                onChanged: (v) => setState(() => _year = v),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                initialValue: _jobType,
+                decoration: _field('Type'),
+                items: [
+                  for (final e in JobDescription.jobTypeLabels.entries) DropdownMenuItem(value: e.key, child: Text(e.value)),
+                ],
+                onChanged: (v) => setState(() => _jobType = v ?? _jobType),
+              ),
+            ),
+          ],
+        ),
+        TextFormField(
+            controller: _compensation,
+            decoration: _field('Compensation (CTC)', hint: 'e.g. ₹32 LPA, 24,00,000, 12-15 LPA',
+                helper: 'Written as announced; the amount is read from it for the statistics'),
+            maxLength: 200),
+        TextFormField(controller: _base, decoration: _field('Base / fixed pay (optional)', hint: 'e.g. ₹18 LPA'),
+            maxLength: 200),
+        TextFormField(controller: _skills, decoration: _field('Skills (optional)', hint: 'e.g. Python, C++, ML'),
+            minLines: 1, maxLines: 4),
         TextFormField(controller: _description, decoration: _field('Job description', hint: 'Responsibilities, '
             'eligibility, process…'), minLines: 6, maxLines: 14),
         if (widget.jd?.fileUrl != null)
@@ -432,9 +475,30 @@ class _ImportSheetDialogState extends ConsumerState<ImportSheetDialog> {
   bool _busy = false;
   String? _error;
   ImportResult? _result;
+  CsvImportResult? _rolesResult;
+
+  /// What the sheet holds: selected students (hiring numbers), or roles with their compensation.
+  bool _roles = false;
+  bool _rolesChosen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _sheet.addListener(_detect);
+  }
+
+  /// Switches to "Roles & compensation" by itself when the header looks like it (CTC, position) and has no
+  /// student emails, unless the moderator already picked.
+  void _detect() {
+    if (_rolesChosen) return;
+    final head = _sheet.text.split(RegExp(r'\r?\n')).take(10).join(' ').toLowerCase();
+    final roles = RegExp(r'ctc|compensation|stipend|jobtitle|job title|position').hasMatch(head) && !head.contains('email');
+    if (roles != _roles) setState(() => _roles = roles);
+  }
 
   @override
   void dispose() {
+    _sheet.removeListener(_detect);
     _sheet.dispose();
     super.dispose();
   }
@@ -449,7 +513,15 @@ class _ImportSheetDialogState extends ConsumerState<ImportSheetDialog> {
       _error = null;
     });
     try {
-      final result = await ref.read(placementRepositoryProvider).importSheet(_year, _sheet.text);
+      final repo = ref.read(placementRepositoryProvider);
+      if (_roles) {
+        final result = await repo.importRoles(_sheet.text, placementYear: _year);
+        ref.invalidate(companiesProvider);
+        ref.invalidate(placementOverviewProvider);
+        if (mounted) setState(() => _rolesResult = result);
+        return;
+      }
+      final result = await repo.importSheet(_year, _sheet.text);
       ref.invalidate(companiesProvider);
       ref.invalidate(placementOverviewProvider);
       if (mounted) setState(() => _result = result);
@@ -464,6 +536,8 @@ class _ImportSheetDialogState extends ConsumerState<ImportSheetDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final result = _result;
+    final rolesResult = _rolesResult;
+    final done = result != null || rolesResult != null;
     return AlertDialog(
       title: const Text('Import a placement sheet'),
       content: SizedBox(
@@ -471,26 +545,46 @@ class _ImportSheetDialogState extends ConsumerState<ImportSheetDialog> {
         child: SingleChildScrollView(
           child: result != null
               ? _ImportSummary(result: result)
+              : rolesResult != null
+                  ? _CsvSummary(result: rolesResult)
               : Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    SegmentedButton<bool>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(value: false, icon: Icon(Icons.groups_outlined, size: 18), label: Text('Selected students')),
+                        ButtonSegment(value: true, icon: Icon(Icons.payments_outlined, size: 18), label: Text('Roles & compensation')),
+                      ],
+                      selected: {_roles},
+                      onSelectionChanged: _busy ? null : (v) => setState(() {
+                            _roles = v.first;
+                            _rolesChosen = true;
+                          }),
+                    ),
+                    const SizedBox(height: 10),
                     Text(
-                      'Choose a CSV file, or copy the rows from your spreadsheet (header row included) and paste them '
-                      'below. Columns: Company, Student email, Role, and optionally Slot, in any order. '
-                      'Each student is one record per season: importing an edited sheet again updates it.',
+                      _roles
+                          ? 'Roles each company offered and what they pay. Columns by name, in any order: Company and '
+                              'Position (or Job title) are needed; Batch or Year, Overall CTC, Base, Job type, Description '
+                              'and Skills are used when there. Compensation is kept as written and its amount read for the '
+                              'statistics. Contact and comment columns are never imported.'
+                          : 'Choose a CSV file, or copy the rows from your spreadsheet (header row included) and paste them '
+                              'below. Columns: Company, Student email, Role, and optionally Slot, in any order. '
+                              'Each student is one record per season: importing an edited sheet again updates it.',
                       style: TextStyle(fontSize: 12, color: theme.hintColor),
                     ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        const Text('Placement season'),
+                        Text(_roles ? 'Season (rows without a Batch/Year)' : 'Placement season'),
                         const SizedBox(width: 12),
                         DropdownButton<int>(
                           value: _year,
                           items: [
                             for (var y = DateTime.now().year + 1; y >= DateTime.now().year - 6; y--)
-                              DropdownMenuItem(value: y, child: Text('$y')),
+                              DropdownMenuItem(value: y, child: Text('${y - 1}-${(y % 100).toString().padLeft(2, '0')}')),
                           ],
                           onChanged: _busy ? null : (y) => setState(() => _year = y ?? _year),
                         ),
@@ -500,6 +594,10 @@ class _ImportSheetDialogState extends ConsumerState<ImportSheetDialog> {
                     _CsvSource(
                       controller: _sheet,
                       enabled: !_busy,
+                      onFile: (name) {
+                        final season = seasonFromFileName(name);
+                        if (season != null) setState(() => _year = season);
+                      },
                       hint: 'Slot\tCompany\tStudent email\tRole\n'
                           'Slot 2\tWalmart\tchandus@iisc.ac.in\tSoftware Engineer',
                       onChanged: () => setState(() => _error = null),
@@ -512,7 +610,7 @@ class _ImportSheetDialogState extends ConsumerState<ImportSheetDialog> {
                 ),
         ),
       ),
-      actions: result != null
+      actions: done
           ? [FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Done'))]
           : [
               TextButton(onPressed: _busy ? null : () => Navigator.pop(context, false), child: const Text('Cancel')),
@@ -589,7 +687,11 @@ class _CsvSource extends StatefulWidget {
   final String hint;
   final VoidCallback onChanged;
 
-  const _CsvSource({required this.controller, required this.enabled, required this.hint, required this.onChanged});
+  /// Called with the chosen file's name (to guess the season from it, say).
+  final ValueChanged<String>? onFile;
+
+  const _CsvSource(
+      {required this.controller, required this.enabled, required this.hint, required this.onChanged, this.onFile});
 
   @override
   State<_CsvSource> createState() => _CsvSourceState();
@@ -610,6 +712,7 @@ class _CsvSourceState extends State<_CsvSource> {
         _error = null;
       });
       widget.onChanged();
+      widget.onFile?.call(file.name);
     } catch (e) {
       if (mounted) setState(() => _error = errorText(e));
     }
@@ -702,6 +805,14 @@ class _CsvSourceState extends State<_CsvSource> {
   }
 }
 
+/// The season a file's name points to: "FT 2025-26" or "2025_26" is the 2026 season, "data 2026" is 2026.
+int? seasonFromFileName(String name) {
+  final range = RegExp(r'(20\d\d)\s*[-_–]\s*(\d\d)(?!\d)').firstMatch(name);
+  if (range != null) return 2000 + int.parse(range.group(2)!);
+  final year = RegExp(r'(?<!\d)(20\d\d)(?!\d)').firstMatch(name);
+  return year == null ? null : int.parse(year.group(1)!);
+}
+
 /// What a CSV import adds: companies, or dates on the placement schedule.
 enum CsvImportKind {
   companies('Add companies', 'Name,Industry,Website,About\nIBM,Software and hardware,https://www.ibm.com/careers,'),
@@ -732,6 +843,9 @@ class _CsvImportDialogState extends ConsumerState<CsvImportDialog> {
   String? _error;
   CsvImportResult? _result;
 
+  /// The chosen file's name: "slot 2 interview schedule.csv" tells the server the rows are interviews.
+  String? _fileName;
+
   @override
   void dispose() {
     _text.dispose();
@@ -751,7 +865,7 @@ class _CsvImportDialogState extends ConsumerState<CsvImportDialog> {
     try {
       final result = widget.kind == CsvImportKind.companies
           ? await repo.importCompanies(_text.text)
-          : await repo.importSchedule(_text.text);
+          : await repo.importSchedule(_text.text, fileName: _fileName);
       if (mounted) setState(() => _result = result);
     } catch (e) {
       if (mounted) setState(() => _error = errorText(e));
@@ -790,6 +904,7 @@ class _CsvImportDialogState extends ConsumerState<CsvImportDialog> {
                       enabled: !_busy,
                       hint: widget.kind.sample,
                       onChanged: () => setState(() => _error = null),
+                      onFile: (name) => _fileName = name,
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 8),

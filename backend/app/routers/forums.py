@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from ..auth import CurrentUser, current_user, optional_user
 from ..common import (Page, PageParams, UserRef, forbidden, like_pattern, make_page, not_found, page_params,
                       search_text, text)
+from ..course_updates import notify_course_followers
 from ..db import get_conn
 from ..notify import create_notifications, deliver_push
 from ..permissions import can_moderate_forum, close_reports, log_moderation
@@ -230,9 +231,10 @@ async def list_threads(forum_id: UUID,
 
 @router.post("/forums/{forum_id}/threads", response_model=ThreadDetail, status_code=201,
              summary="Start a thread with its opening post")
-async def create_thread(forum_id: UUID, body: ThreadCreate, user: CurrentUser = Depends(current_user),
-                        conn: asyncpg.Connection = Depends(get_conn)):
-    if not await conn.fetchval("SELECT EXISTS (SELECT 1 FROM forums WHERE id = $1)", forum_id):
+async def create_thread(forum_id: UUID, body: ThreadCreate, background: BackgroundTasks,
+                        user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
+    course_id = await conn.fetchval("SELECT course_id FROM forums WHERE id = $1", forum_id)
+    if course_id is None and not await conn.fetchval("SELECT EXISTS (SELECT 1 FROM forums WHERE id = $1)", forum_id):
         raise not_found("Forum")
     async with conn.transaction():
         thread_id = await conn.fetchval(
@@ -240,6 +242,9 @@ async def create_thread(forum_id: UUID, body: ThreadCreate, user: CurrentUser = 
             forum_id, user.id, body.title)
         await conn.execute("INSERT INTO comments (thread_id, user_id, content) VALUES ($1, $2, $3)",
                            thread_id, user.id, body.content)
+        if course_id:   # a course forum: tell the course's followers (rev 22)
+            await notify_course_followers(conn, background, course_id, user.id, f"new forum post “{body.title}”",
+                                          {"thread_id": str(thread_id), "forum_id": str(forum_id)})
     return await _thread_detail(conn, thread_id, user)
 
 
@@ -325,6 +330,11 @@ async def create_comment(thread_id: UUID, body: ReplyIn, background: BackgroundT
         payload = {"thread_id": str(thread_id), "comment_id": str(comment_id), "forum_id": str(thread["forum_id"]),
                    "message": f"{user.name} replied in “{thread['title']}”"}
         notified = await create_notifications(conn, [p["user_id"] for p in participants], "forum_reply", payload)
+        course_id = await conn.fetchval("SELECT course_id FROM forums WHERE id = $1", thread["forum_id"])
+        if course_id:   # a course forum: its followers hear too, unless they're already told above
+            await notify_course_followers(conn, background, course_id, user.id, f"new reply in “{thread['title']}”",
+                                          {"thread_id": str(thread_id), "forum_id": str(thread["forum_id"])},
+                                          skip=notified)
     background.add_task(deliver_push, notified, "forum_reply", payload)
     return await _comment_detail(conn, comment_id, user)
 

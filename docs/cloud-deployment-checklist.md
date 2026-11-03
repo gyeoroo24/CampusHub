@@ -23,6 +23,9 @@ Update this page whenever a new shortcut or cloud dependency is added.
    - `018_seniors_and_mess_menus` (adds a notification type outside the transaction; run as is)
    - `019_chat_hiding_and_any_email`
    - `020_mess_event_cards_and_tba_times`
+   - `021_role_compensation`
+   - `022_course_repository_and_follows` (adds a notification type outside the transaction; run as is)
+   - `023_permanent_buy_sell_deletes` (deletes listings and Wanted posts that were soft-deleted earlier; their photos stay in S3 until removed by hand or by a lifecycle rule)
 
    `010` merges older per-listing chats into one chat per person. Back up the `chat_*` tables
    first.
@@ -31,7 +34,11 @@ Update this page whenever a new shortcut or cloud dependency is added.
    its notifications (once a minute), so they work with no scheduler while people use CampusHub.
    For alerts when nobody has the app open (early breakfast), add a Lambda function from the API
    image with handler `app.jobs.meal_alerts_handler` and an EventBridge schedule `rate(5 minutes)`.
-3. **Sign-in must use Cognito:**
+3. **Course-feedback sentiment:** the API image ships the local RoBERTa model (fetched with the others).
+   To use Amazon Comprehend instead, set `CAMPUSHUB_SENTIMENT_BACKEND=comprehend` (and
+   `CAMPUSHUB_COMPREHEND_REGION` if not ap-south-1) and give the API role
+   `comprehend:BatchDetectSentiment`. No code change; see `docs/SLMs.md`.
+4. **Sign-in must use Cognito:**
    - Keep `CAMPUSHUB_AUTH_MODE=cognito` (the default). Dev sign-in (`X-Dev-User` with an emailed
      code) refuses to start inside Lambda, but on EC2 nothing stops it if the `.env` says `dev`.
    - Do not deploy any build where `backend/app/otp.py` accepts a fixed code. That file has a
@@ -40,20 +47,20 @@ Update this page whenever a new shortcut or cloud dependency is added.
      line used to claim. It makes `verify_otp()` accept the code for any email, unconditionally,
      with no dev-mode gate. Remove it before merging into `main` or building any deploy image.
    - Set `CAMPUSHUB_SMTP_*` if dev sign-in is ever used on a shared server.
-4. **The web app must renew Cognito tokens.**
+5. **The web app must renew Cognito tokens.**
    - Cognito ID tokens expire after about an hour, and the Flutter app does not yet use the
      refresh token to get a new one.
    - Without that, people are signed out every hour.
    - Store the refresh token with the access token (`SharedPrefsTokenStorage` already has a slot
      for it) and refresh it on 401 before giving up.
-5. **Build the web app for the live API:**
+6. **Build the web app for the live API:**
    - `flutter build web --release --dart-define=USE_MOCK=false --dart-define=API_BASE_URL=https://<api>`.
    - The default build is mock mode.
    - The admin "server connection" tab can override the API URL per browser. Hide it, or limit it
      to the admin, in production.
-6. **Configure CORS:** set `CAMPUSHUB_CORS_ALLOW_ORIGINS` to the web app's origin (S3 + CloudFront,
+7. **Configure CORS:** set `CAMPUSHUB_CORS_ALLOW_ORIGINS` to the web app's origin (S3 + CloudFront,
    Amplify or Vercel).
-7. **Ship the new Python dependency:** `cryptography` is now a direct dependency (the server
+8. **Ship the new Python dependency:** `cryptography` is now a direct dependency (the server
    creates messaging keys). It is in `requirements.txt` and builds for `linux/arm64`. Rebuild the
    Lambda image.
 

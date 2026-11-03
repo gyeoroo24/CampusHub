@@ -36,6 +36,7 @@ class ApiForumRepository implements IForumRepository {
     final path = switch (scope) {
       ForumScope.company => ApiEndpoints.companyForum(scopeId),
       ForumScope.event => ApiEndpoints.eventForum(scopeId),
+      ForumScope.course => ApiEndpoints.courseForum(scopeId),
     };
     final response = await apiClient.get(path);
     return '${(response.data as Map<String, dynamic>)['id']}';

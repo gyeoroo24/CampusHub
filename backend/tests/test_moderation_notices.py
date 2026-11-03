@@ -95,3 +95,41 @@ def test_role_changes_are_announced_to_the_person(client):
     meera_id = sign_in(client, MEERA)
     assert client.post(f"{API}/users/{meera_id}/make-admin", headers=ADMIN).status_code == 200
     assert "made you the CampusHub admin" in _notices(client, MEERA)[0]
+
+
+def test_appeals_reach_moderators_and_decisions_reach_the_seller(client):
+    _setup_moderator(client)
+    strikes = []
+    for title in ("Cannabis 10g", "Vodka bottle"):
+        listing = _listing(client, ASHA, title)
+        client.post(f"{API}/reports", headers=RAVI, json={"target_type": "listing", "target_id": listing["id"],
+                                                          "reason": "Illegal"})
+        assert client.delete(f"{API}/listings/{listing['id']}?reason=Prohibited&severity=non_severe",
+                             headers=MEERA).status_code == 204
+    strikes = client.get(f"{API}/me/seller-strikes", headers=ASHA).json()
+    first, second = sorted(strikes, key=lambda s: s["listing_title"])
+
+    # Contesting a strike tells the Buy & Sell moderators and the admin, not the seller or others.
+    assert client.post(f"{API}/me/seller-strikes/{first['id']}/appeal", headers=ASHA,
+                       json={"message": "It was a photo of a plant"}).status_code == 204
+    for moderator in (MEERA, ADMIN):
+        assert any('Asha contested the strike for "Cannabis 10g"' in n and "photo of a plant" in n
+                   for n in _notices(client, moderator))
+    assert not any("contested" in n for n in _notices(client, ASHA) + _notices(client, KIRAN))
+
+    # Overturning tells the seller.
+    assert client.post(f"{API}/seller-strikes/{first['id']}/overturn", headers=MEERA,
+                       json={"note": "Checked: it's a plant"}).status_code == 204
+    assert 'overturned the strike for "Cannabis 10g"' in _notices(client, ASHA)[0]
+    assert "Checked: it's a plant" in _notices(client, ASHA)[0]
+
+    # Rejecting an appeal tells the seller too.
+    client.post(f"{API}/me/seller-strikes/{second['id']}/appeal", headers=ASHA, json={"message": "Please"})
+    assert client.post(f"{API}/seller-strikes/{second['id']}/reject-appeal", headers=MEERA).status_code == 204
+    assert 'kept the strike' in _notices(client, ASHA)[0] and "Vodka bottle" in _notices(client, ASHA)[0]
+
+    # Lifting the suspension tells the seller they can post again.
+    asha_id = sign_in(client, ASHA)
+    sql("UPDATE users SET listing_suspended_at = now(), listing_suspended_reason = 'test' WHERE id = $1::uuid", asha_id)
+    assert client.post(f"{API}/users/{asha_id}/lift-listing-suspension", headers=MEERA).status_code == 204
+    assert "you can post listings again" in _notices(client, ASHA)[0]

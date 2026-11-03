@@ -5,7 +5,11 @@ import 'dart:typed_data';
 import 'file_picker.dart';
 
 const _types = {'pdf': 'application/pdf', 'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
-  'webp': 'image/webp', 'heic': 'image/heic'};
+  'webp': 'image/webp', 'heic': 'image/heic', 'zip': 'application/zip', 'txt': 'text/plain', 'csv': 'text/csv',
+  'md': 'text/markdown',
+  'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
 
 Future<PickedFile?> pickFile(String accept, int maxBytes) {
   final completer = Completer<PickedFile?>();
@@ -26,7 +30,8 @@ Future<PickedFile?> pickFile(String accept, int maxBytes) {
       return;
     }
     final ext = file.name.contains('.') ? file.name.split('.').last.toLowerCase() : '';
-    final type = file.type.isNotEmpty ? file.type : (_types[ext] ?? 'application/octet-stream');
+    // Our own table first: browsers disagree on some types (zip as application/x-zip-compressed, .md as nothing).
+    final type = _types[ext] ?? (file.type.isNotEmpty ? file.type : 'application/octet-stream');
     final reader = html.FileReader();
     reader.onLoad.first.then((_) {
       final result = reader.result;

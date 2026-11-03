@@ -136,7 +136,7 @@ const _manageActions = [
   ('date', Icons.event_available_rounded, 'Add placement dates',
       'Pre-placement talks, online tests and interviews, by hand or from a schedule file.'),
   ('sheet', Icons.table_view_rounded, 'Import placement sheet',
-      'Selected students per company, for the hiring statistics and senior contacts.'),
+      'Selected students (hiring numbers, seniors), or roles with their compensation and skills.'),
 ];
 
 class _ManageTab extends ConsumerWidget {
@@ -347,6 +347,7 @@ class _CompaniesTab extends ConsumerWidget {
                       DropdownMenuItem(value: 'name', child: Text('A–Z')),
                       DropdownMenuItem(value: 'most_hired', child: Text('Most hires')),
                       DropdownMenuItem(value: 'upcoming_ppt', child: Text('Coming up')),
+                      DropdownMenuItem(value: 'highest_pay', child: Text('Highest pay')),
                     ],
                     onChanged: (v) => ref.read(companySortProvider.notifier).state = v ?? 'name',
                   ),
@@ -527,9 +528,11 @@ class CompanyTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hires = company.latestYear == null
-        ? 'No hiring data yet'
-        : '${company.latestYearSelected} selected in ${company.latestYear}';
+    final pay = company.ctcMin == null ? null : formatCtc(company.ctcMin, company.ctcMax);
+    final hires = [
+      if (company.latestYear != null) '${company.latestYearSelected} selected in ${company.latestYear}',
+      if (pay != null) pay,
+    ].join(' · ');
     final next = company.nextDateAt;
     return Card(
       elevation: 0,
@@ -558,7 +561,9 @@ class CompanyTile extends StatelessWidget {
                       Text(company.industry!, maxLines: 1, overflow: TextOverflow.ellipsis,
                           style: TextStyle(fontSize: 12, color: theme.hintColor)),
                     const SizedBox(height: 6),
-                    Text(hires, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: theme.colorScheme.primary)),
+                    Text(hires.isEmpty ? 'No hiring data yet' : hires,
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: theme.colorScheme.primary)),
                     const Spacer(),
                     Row(
                       children: [
@@ -809,6 +814,66 @@ class _StatisticsTab extends ConsumerWidget {
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ErrorState(message: errorText(e), onRetry: () => ref.invalidate(placementOverviewProvider)),
           data: (overview) {
+            // Highest packages: full-time compensation by company in the latest season that has it.
+            final topPay = overview.topPaying.isEmpty ? 1 : overview.topPaying.first.ctcMax;
+            final paySection = overview.topPaying.isEmpty
+                ? null
+                : section(
+                    'Highest packages, ${overview.payYear! - 1}-${(overview.payYear! % 100).toString().padLeft(2, '0')}',
+                    'Full-time compensation (CTC) each company offered, lowest to highest role. Tap one to see its roles.',
+                    Column(
+                      children: [
+                        for (final c in overview.topPaying)
+                          InkWell(
+                            onTap: () => context.go('/placements/${c.companyId}'),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 5),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 160,
+                                    child: Text(c.companyName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                                  ),
+                                  Expanded(
+                                    child: LayoutBuilder(
+                                      builder: (context, box) {
+                                        final w = box.maxWidth - 8;
+                                        final left = w * c.ctcMin / topPay;
+                                        final right = w * c.ctcMax / topPay;
+                                        return Stack(children: [
+                                          Container(height: 16),
+                                          Positioned(
+                                            left: c.ctcMin == c.ctcMax ? 0 : left,
+                                            width: (c.ctcMin == c.ctcMax ? right : right - left).clamp(4, w),
+                                            top: 0,
+                                            bottom: 0,
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                color: Colors.teal.withValues(alpha: 0.75),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                            ),
+                                          ),
+                                        ]);
+                                      },
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 120,
+                                    child: Text(formatCtc(c.ctcMin, c.ctcMax),
+                                        textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+            if (overview.seasons.isEmpty && paySection != null) {
+              return _centered(ListView(padding: const EdgeInsets.all(16), children: [paySection]));
+            }
             if (overview.seasons.isEmpty) {
               return Center(
                 child: Padding(
@@ -920,6 +985,12 @@ class _StatisticsTab extends ConsumerWidget {
                                       child: Text('${c.studentsSelected}',
                                           textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold)),
                                     ),
+                                    SizedBox(
+                                      width: 110,
+                                      child: Text(c.ctcMin == null ? '' : formatCtc(c.ctcMin, c.ctcMax),
+                                          textAlign: TextAlign.right,
+                                          style: TextStyle(fontSize: 12, color: theme.hintColor)),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -927,6 +998,7 @@ class _StatisticsTab extends ConsumerWidget {
                         ],
                       ),
                     ),
+                  ?paySection,
                   section(
                     'Every season',
                     'Students selected and companies that hired.',

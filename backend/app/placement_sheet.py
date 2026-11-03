@@ -22,9 +22,11 @@ _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 # Accepted header names (lower case, spaces squashed) for each column.
 HEADERS = {
     "slot": {"slot", "slot no", "slot number"},
-    "company": {"company", "company name", "organisation", "organization", "employer"},
-    "email": {"student email", "email", "email id", "e-mail", "mail", "iisc email", "student email id"},
-    "role": {"role", "role title", "profile", "designation", "position", "job role"},
+    "company": {"company", "company name", "organisation", "organization", "employer", "selected company",
+                "company selected", "recruiter"},
+    "email": {"student email", "email", "email id", "e-mail", "mail", "iisc email", "student email id",
+              "iisc email id", "iisc mail id", "mail id", "email address", "iisc email address"},
+    "role": {"role", "role title", "profile", "designation", "position", "job role", "job title"},
 }
 REQUIRED = ("company", "email", "role")
 
@@ -78,7 +80,8 @@ def find_header(lines: list[str], headers: dict[str, set[str]], required: tuple[
     Returns (line index, column index by name, header cells), or None if none of them fits."""
     candidates = [i for i, line in enumerate(lines) if line.strip()][:HEADER_SEARCH_LINES]
     for i in candidates:
-        cells = next(csv.reader([lines[i]], delimiter=_delimiter(lines[i])), [])
+        # A header cell can hold a line break ("Date⏎[MM/DD/YYYY]"): read the row as CSV, not the line.
+        cells = next(csv.reader(io.StringIO("\n".join(lines[i:i + 5])), delimiter=_delimiter(lines[i])), [])
         header = [normalize(_squash(h).lower()) for h in cells]
         columns = match_columns(header, headers)
         if all(name in columns for name in required):
@@ -100,6 +103,7 @@ def parse_sheet(text: str) -> tuple[list[SheetRow], list[RejectedRow]]:
         columns = match_columns(header, HEADERS)
     reader = csv.reader(io.StringIO("\n".join(lines[first:])), delimiter=_delimiter(lines[first]))
     next(reader)
+    end = reader.line_num   # the header's last line in the reader (a header cell may span lines)
     missing = [name for name in REQUIRED if name not in columns]
     if missing:
         raise SheetError("The header row needs these columns: Company, Student email and Role (Slot is optional). "
@@ -108,8 +112,9 @@ def parse_sheet(text: str) -> tuple[list[SheetRow], list[RejectedRow]]:
     accepted: list[SheetRow] = []
     rejected: list[RejectedRow] = []
     seen: dict[str, int] = {}
-    for offset, cells in enumerate(reader):
-        line = first + 2 + offset
+    for cells in reader:
+        # A quoted cell can span lines: report the line the row starts on, as the spreadsheet shows it.
+        line, end = first + end + 1, reader.line_num
         if not any(c.strip() for c in cells):
             continue
         if len(accepted) + len(rejected) >= MAX_ROWS:

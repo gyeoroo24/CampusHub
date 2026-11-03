@@ -21,7 +21,7 @@ from ..auth import CurrentUser, current_user, optional_user
 from ..common import (MAX_INT_ID, CategoryId, CategoryRef, Contact, Page, PageParams, UserRef, forbidden, make_page,
                       not_found, page_params, search_text, set_clause, text)
 from ..db import get_conn
-from ..permissions import close_reports, is_module_moderator, log_moderation
+from ..permissions import is_module_moderator, log_moderation
 from .listings import _SELECT as LISTING_SELECT
 from .listings import ListingSummary
 from .listings import _summary as listing_summary
@@ -223,9 +223,8 @@ async def delete_wanted(post_id: UUID, reason: str | None = Query(None, max_leng
     if not is_owner and not await is_module_moderator(conn, user, "buy_sell"):
         raise forbidden("Only the author or a Buy & Sell moderator can remove this post.")
     async with conn.transaction():
-        await conn.execute("UPDATE wanted_posts SET deleted_at = now(), deleted_by = $2 WHERE id = $1",
-                           post_id, user.id)
-        await close_reports(conn, "wanted_post", [post_id], user.id, reason)
+        # Permanent: its reports go with it (ON DELETE CASCADE).
+        await conn.execute("DELETE FROM wanted_posts WHERE id = $1", post_id)
         if not is_owner:
             await log_moderation(conn, user.id, "remove_wanted_post", "wanted_post", post_id, reason)
     return Response(status_code=204)

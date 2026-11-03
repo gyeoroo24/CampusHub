@@ -36,9 +36,11 @@ SCHEDULE_HEADERS = {
     "mode": {"mode"},
     "status": {"status", "schedule status"},
     "remarks": {"remarks", "remark", "comments", "comment"},
+    "shortlist": {"shortlist released", "shortlist", "shortlist status"},
 }
-# Placement-office sheets name columns after the round: "Test Date", "Interview Venue", "PPT Timings".
-# The prefix is dropped to find the column, and it sets the type of every row that has no Type cell.
+# Placement-office sheets name columns after the round: "Test Date", "Interview Venue", "PPT Timings", or
+# "Venue of Interview", "Mode of Test". The round is dropped to find the column, and it sets the type of every
+# row that has no Type cell. Without one, the file's name decides ("slot 2 interview schedule.csv").
 _ROUND_PREFIXES = {"test": "oa", "oa": "oa", "online test": "oa", "interview": "interview",
                    "ppt": "ppt", "talk": "ppt"}
 _EMPTY = {"na", "n/a", "-", "--", "nil", "none"}
@@ -70,16 +72,34 @@ class ScheduleRow:
     time_tbd: bool = False      # a date without a time: stored at 09:00 India time, shown as "time TBA"
 
 
+def _header_round(header: str) -> tuple[str, str | None]:
+    """("venue", "interview") for "Venue of Interview" or "Interview Venue"; a note in brackets
+    ("Date [MM/DD/YYYY]") and a trailing "?" are dropped first."""
+    header = " ".join(re.sub(r"\[[^\]]*\]|\([^)]*\)|\?", " ", header).split())
+    for name in sorted(_ROUND_PREFIXES, key=len, reverse=True):
+        if header.startswith(name + " ") and len(header) > len(name) + 1:
+            return header[len(name) + 1:], _ROUND_PREFIXES[name]
+        if header.endswith(" of " + name) and len(header) > len(name) + 4:
+            return header[:-len(name) - 4], _ROUND_PREFIXES[name]
+    return header, None
+
+
 def _strip_round(header: str) -> str:
-    for prefix in sorted(_ROUND_PREFIXES, key=len, reverse=True):
-        if header.startswith(prefix + " ") and len(header) > len(prefix) + 1:
-            return header[len(prefix) + 1:]
-    return header
+    return _header_round(header)[0]
 
 
 def _round_kind(header: list[str]) -> str | None:
-    """The type a sheet's column names imply ("Test Date" -> oa), if they all agree."""
-    kinds = {kind for h in header for prefix, kind in _ROUND_PREFIXES.items() if h.startswith(prefix + " ")}
+    """The type a sheet's column names imply ("Test Date", "Venue of Interview"), if they all agree."""
+    kinds = {kind for h in header if (kind := _header_round(h)[1])}
+    return kinds.pop() if len(kinds) == 1 else None
+
+
+def kind_from_file_name(file_name: str | None) -> str | None:
+    """"slot 2 interview schedule.csv" -> interview, "Test schedule" -> oa, "PPT dates" -> ppt."""
+    words = set(re.findall(r"[a-z]+", (file_name or "").lower()))
+    kinds = {kind for word, kind in (("interview", "interview"), ("interviews", "interview"), ("test", "oa"),
+                                     ("tests", "oa"), ("oa", "oa"), ("assessment", "oa"), ("ppt", "ppt"),
+                                     ("ppts", "ppt"), ("talk", "ppt"), ("talks", "ppt")) if word in words}
     return kinds.pop() if len(kinds) == 1 else None
 
 
@@ -93,13 +113,14 @@ def _rows(text: str, headers: dict[str, set[str]], required: tuple[str, ...], wh
         raise SheetError(f"Couldn't find the header row. It needs a {', '.join(m.capitalize() for m in required)} "
                          "column within the first 10 lines.")
     first, columns, _ = found
-    raw_header = [_squash(h).lower() for h in next(csv.reader([lines[first]], delimiter=_delimiter(lines[first])))]
     reader = csv.reader(io.StringIO("\n".join(lines[first:])), delimiter=_delimiter(lines[first]))
-    next(reader)
+    raw_header = [_squash(h).lower() for h in next(reader)]
     rows = []
-    for offset, cells in enumerate(reader):
+    end = reader.line_num   # the header may span lines ("Date⏎[MM/DD/YYYY]")
+    for cells in reader:
+        line, end = first + end + 1, reader.line_num   # where the row starts, even if a cell spans lines
         if any(c.strip() for c in cells):
-            rows.append((first + 2 + offset, cells))
+            rows.append((line, cells))
     if not rows:
         raise SheetError(f"The file has a header but no {what} rows.")
     if len(rows) > MAX_ROWS:
@@ -144,15 +165,18 @@ def parse_companies(text: str) -> tuple[list[CompanyRow], list[RejectedRow]]:
 # Where a date with no time goes. 09:00 keeps the day right in every timezone and sorts sensibly.
 _NO_TIME = time(9, 0)
 
-_DATE_FORMATS = ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y", "%d %b %Y", "%d %B %Y", "%b %d %Y", "%B %d %Y")
+_DATE_FORMATS = ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y", "%d %b %Y", "%d %B %Y", "%b %d %Y", "%B %d %Y",
+                 "%d-%b-%y", "%d-%b-%Y", "%d %b %y", "%d/%m/%y")
+_MONTH_FIRST = {"%d-%m-%Y": "%m-%d-%Y", "%d/%m/%Y": "%m/%d/%Y", "%d.%m.%Y": "%m.%d.%Y", "%d/%m/%y": "%m/%d/%y"}
 _TIME_FORMATS = ("%H:%M", "%H.%M", "%I:%M %p", "%I:%M%p", "%I %p", "%I%p", "%H:%M:%S")
 
 
-def _parse_date(value: str) -> date | None:
+def _parse_date(value: str, month_first: bool = False) -> date | None:
     value = value.replace(",", " ")
     value = re.sub(r"(\d)(st|nd|rd|th)\b", r"\1", value)
     value = " ".join(value.split())
     for fmt in _DATE_FORMATS:
+        fmt = _MONTH_FIRST.get(fmt, fmt) if month_first else fmt
         try:
             return datetime.strptime(value, fmt).date()
         except ValueError:
@@ -173,7 +197,18 @@ def _parse_time(value: str) -> time | None:
     return None
 
 
-def _parse_when(when: str, day: str, at: str) -> datetime | None | str:
+def _month_first(header: list[str], dates: list[str]) -> bool:
+    """Whether numeric dates are month/day ("10/5/2026" = 5 Oct): the header says so ("Date [MM/DD/YYYY]"),
+    or a date only reads that way ("9/28/2026"). Otherwise day/month, as written in India."""
+    if any(re.search(r"mm\W?dd", h) for h in header):
+        return True
+    if any(re.search(r"dd\W?mm", h) for h in header):
+        return False
+    pairs = [(int(m.group(1)), int(m.group(2))) for d in dates if (m := re.match(r"\s*(\d{1,2})[/.-](\d{1,2})[/.-]\d", d))]
+    return any(b > 12 for _, b in pairs) and not any(a > 12 for a, _ in pairs)
+
+
+def _parse_when(when: str, day: str, at: str, month_first: bool = False) -> datetime | None | str:
     """The moment in IST, None when no date is given, or an error message. A date without a time
     comes back at _NO_TIME (09:00); parse_schedule marks those rows time_tbd."""
     if when:
@@ -190,7 +225,7 @@ def _parse_when(when: str, day: str, at: str) -> datetime | None | str:
             day = when
     if not day:
         return "Time is given without a date." if at else None
-    d = _parse_date(day)
+    d = _parse_date(day, month_first)
     if d is None:
         return f"Couldn't read the date “{day}”. Use 2026-11-20 or 20/11/2026."
     t = _NO_TIME
@@ -202,9 +237,12 @@ def _parse_when(when: str, day: str, at: str) -> datetime | None | str:
     return datetime.combine(d, t, tzinfo=IST)
 
 
-def parse_schedule(text: str) -> tuple[list[ScheduleRow], list[RejectedRow]]:
+def parse_schedule(text: str, file_name: str | None = None) -> tuple[list[ScheduleRow], list[RejectedRow]]:
+    """[file_name] sets the type when neither a Type column nor the column names give it."""
     columns, header, rows = _rows(text, SCHEDULE_HEADERS, ("company",), "schedule", _strip_round)
-    default_kind = _round_kind(header) or "ppt"
+    default_kind = _round_kind(header) or kind_from_file_name(file_name) or "ppt"
+    month_first = _month_first(header, [_cell(columns, cells, "date") or _cell(columns, cells, "when")
+                                        for _, cells in rows])
     accepted: list[ScheduleRow] = []
     rejected: list[RejectedRow] = []
     for line, cells in rows:
@@ -219,12 +257,26 @@ def parse_schedule(text: str) -> tuple[list[ScheduleRow], list[RejectedRow]]:
         if m:
             company, round_name = m.group(1).strip(), m.group(2).strip()
             notes.append(round_name)
-        for name, label in (("mode", "Mode"), ("status", "Status"), ("remarks", None), ("details", None)):
+        at = _cell(columns, cells, "time")
+        if at and _parse_time(at) is None:
+            # "No test", "TBD", "2PM (24 hr window)": not a time to put on the calendar. The date stands with
+            # the time to be announced, and the text is kept in the details.
+            notes.append(f"Time: {at}")
+            at = ""
+        day = _cell(columns, cells, "date")
+        if day and not re.search(r"\d", day):
+            # "CANCELLED", "TBD" where the date goes: kept as information, with no date.
+            notes.append(f"Date: {day}")
+            day = ""
+        for name, label in (("mode", "Mode"), ("status", "Status"), ("shortlist", "Shortlist released"),
+                            ("remarks", None), ("details", None)):
             value = _cell(columns, cells, name)
             if value and value.lower() not in _EMPTY:
                 notes.append(f"{label}: {value}" if label else value)
         details = " · ".join(notes)
-        when = _parse_when(_cell(columns, cells, "when"), _cell(columns, cells, "date"), _cell(columns, cells, "time"))
+        # "10/16/2026 & 10/17/2026": the same round on two days is two dates.
+        days = [d for d in re.split(r"\s*(?:&|;|\band\b)\s*", day) if d] or [""]
+        when_cell = _cell(columns, cells, "when")
         reason = None
         if not company:
             reason = "Company is empty."
@@ -232,20 +284,20 @@ def parse_schedule(text: str) -> tuple[list[ScheduleRow], list[RejectedRow]]:
             reason = "Company name is longer than 120 characters."
         elif kind_text and kind_text not in KINDS:
             reason = f"Type “{kind_text}” isn't one of PPT, OA, Interview or Other."
-        elif isinstance(when, str):
-            reason = when
         elif len(venue) > 200:
             reason = "Venue is longer than 200 characters."
         elif len(details) > 5000:
             reason = "Details are longer than 5000 characters."
-        elif when is None and not venue and not details:
+        whens = [] if reason else [_parse_when(when_cell, d, at, month_first) for d in days]
+        if not reason:
+            reason = next((w for w in whens if isinstance(w, str)), None)
+        if not reason and whens == [None] and not venue and not details:
             reason = "Give at least the date, venue or details."
         if reason:
             rejected.append(RejectedRow(line, reason))
             continue
-        when_cell = _cell(columns, cells, "when")
-        tbd = (isinstance(when, datetime) and not _cell(columns, cells, "time")
-               and not re.search(r"\d[:.]\d\d|\d\s*[ap]\.?m|T\d", when_cell, re.IGNORECASE))
-        accepted.append(ScheduleRow(line, company, KINDS.get(kind_text, default_kind), when, venue or None, details or None,
-                                    time_tbd=tbd))
+        tbd = not at and not re.search(r"\d[:.]\d\d|\d\s*[ap]\.?m|T\d", when_cell, re.IGNORECASE)
+        for when in whens:
+            accepted.append(ScheduleRow(line, company, KINDS.get(kind_text, default_kind), when, venue or None,
+                                        details or None, time_tbd=tbd and isinstance(when, datetime)))
     return accepted, rejected

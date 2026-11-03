@@ -1984,8 +1984,14 @@ class _SellerStrikeCardState extends ConsumerState<_SellerStrikeCard> {
 
   Future<void> _openListing() async {
     final messenger = ScaffoldMessenger.of(context);
+    final listingId = widget.strike.listingId;
+    if (listingId == null) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('The seller deleted this listing.'), behavior: SnackBarBehavior.floating));
+      return;
+    }
     try {
-      final item = await ref.read(buySellRepositoryProvider).getListingById(widget.strike.listingId);
+      final item = await ref.read(buySellRepositoryProvider).getListingById(listingId);
       if (!mounted) return;
       if (item == null) throw Exception('This listing could not be found.');
       await showDialog(context: context, builder: (_) => BuySellDetailDialog(item: item));

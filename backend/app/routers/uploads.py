@@ -10,7 +10,7 @@ from ..auth import CurrentUser, current_user
 from ..common import forbidden
 from ..config import get_settings
 from ..db import get_conn
-from ..permissions import can_manage_course, is_module_moderator
+from ..permissions import is_module_moderator
 from ..storage import MB, PENDING_TAG, UPLOAD_KINDS, check_sha256_b64, new_object_key, presign_put
 
 router = APIRouter(prefix="/uploads", tags=["Uploads"])
@@ -47,8 +47,9 @@ async def create_upload(body: UploadRequest, user: CurrentUser = Depends(current
     if body.kind == "course_material":
         if body.course_id is None:
             raise HTTPException(422, "course_id is required for course materials.")
-        if not await can_manage_course(conn, user, body.course_id):
-            raise forbidden("Only moderators of this course or its department can upload materials.")
+        # Anyone signed in shares materials (rev 22); the file is checked when it's attached.
+        if not await conn.fetchval("SELECT EXISTS (SELECT 1 FROM courses WHERE id = $1)", body.course_id):
+            raise HTTPException(404, "Course not found.")
     if body.kind == "job_description" and not await is_module_moderator(conn, user, "placement_hub"):
         raise forbidden("Only Placement Hub moderators can upload job descriptions.")
     if body.kind == "mess_menu" and not await is_module_moderator(conn, user, "events"):

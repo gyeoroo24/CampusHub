@@ -2,10 +2,11 @@
 
   guest   browse events by tag and time (Past / Present / Upcoming, worked out from the clock, FR-19);
           bookmarks stay on the device (the app imports them after sign-in)
-  user    create events (optionally with a poster image); edit/delete their own; bookmark events and
-          listings; follow tags; discuss an event in its forum (GET /events/{id}/forum in forums.py)
+  user    bookmark events and listings; follow tags; discuss an event in its forum
+          (GET /events/{id}/forum in forums.py)
   events moderator / admin
-          edit/remove any event; manage the tag list; remove posts in event forums
+          create events (optionally with a poster image; rev 21: only they can), edit/remove any event;
+          manage the tag list; remove posts in event forums
 
 Alerts (FR-20, FR-22):
   followed_tag_event        a new event carries a tag you follow (or a tag you follow is added to one)
@@ -354,9 +355,11 @@ async def get_event(event_id: UUID, viewer: CurrentUser | None = Depends(optiona
 
 
 @router.post("/events", response_model=Event, status_code=201,
-             summary="Create an event; followers of its tags are alerted")
+             summary="Create an event (Events moderator or admin); followers of its tags are alerted")
 async def create_event(body: EventCreate, background: BackgroundTasks, user: CurrentUser = Depends(current_user),
                        conn: asyncpg.Connection = Depends(get_conn)):
+    if not await _is_moderator(conn, user):
+        raise forbidden("Only Events moderators can add events. Ask one to post yours.")
     tag_ids = await _check_tags(conn, body.tag_ids)
     if body.poster_s3_key:
         await verify_own_uploads([body.poster_s3_key], "event_poster", user.id)

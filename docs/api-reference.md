@@ -89,7 +89,7 @@ Only step 3 moves the file itself, so that's the step to show progress on.
 | `kind` | Allowed types | Max size | Max per post |
 | --- | --- | --- | --- |
 | `listing_photo`, `lost_report_photo`, `found_report_photo` | JPEG, PNG, WebP, HEIC | 10 MB | 10 photos |
-| `course_material` | PDF, PPTX, DOCX, ZIP, TXT, images | 50 MB | 1 file per material |
+| `course_material` (anyone signed in, rev 22) | PDF, DOCX, PPTX, XLSX, TXT, CSV, Markdown, ZIP, images | 100 MB | 1 file per material; opened and checked when attached (see Academic Help) |
 | `job_description` (Placement Hub moderators only) | PDF, DOCX, TXT | 20 MB | 1 file per JD (`file_s3_key`) |
 | `event_poster` | JPEG, PNG, WebP, HEIC | 10 MB | 1 poster per event (`poster_s3_key`) |
 | `mess_menu` (Events moderators only) | PDF, JPEG, PNG, WebP, HEIC | 20 MB | 1 file per menu (`file_s3_key`) |
@@ -146,7 +146,7 @@ Guests can browse and search listings. Sellers create, edit and mark their own l
 | PATCH | `/listings/{id}` | owner, admin | Edit `title`, `description`, `price`, `category_id`, `location` |
 | PATCH | `/listings/{id}/status` | owner, admin | Set `status`: `available`, `reserved` or `sold` |
 | PUT | `/listings/{id}/photos` | owner, admin | Replace the photo list: `photo_keys` in the new order |
-| DELETE | `/listings/{id}` | owner, Buy & Sell moderator, admin | Remove. Moderators can add `?reason=` |
+| DELETE | `/listings/{id}` | owner, Buy & Sell moderator, admin | Remove for good: the listing, its photos, watches and reports are deleted from the database and storage (rev 23), so it also leaves the moderation queue and history. Moderators can add `?reason=`. One exception: a moderator removing a listing that has an open report hides it with a strike instead (the seller can appeal); the seller can still delete it afterwards. Strikes and chats about a deleted listing keep its title (`listing_id` becomes null on the strike) |
 
 **Fields to design with:**
 
@@ -204,7 +204,7 @@ A buyer says what they need ("Need a cycle, budget ₹3,000") instead of waiting
 | GET | `/wanted/{id}/matches` | guest | Up to 10 available listings that match the post, best first (listing cards) |
 | PATCH | `/wanted/{id}` | owner, admin | Edit `title`, `description`, `category_id`, `max_price` |
 | PATCH | `/wanted/{id}/status` | owner, admin | Set `status`: `open`, `fulfilled` (got it) or `closed` (no longer needed) |
-| DELETE | `/wanted/{id}` | owner, Buy & Sell moderator, admin | Remove. Moderators can add `?reason=` |
+| DELETE | `/wanted/{id}` | owner, Buy & Sell moderator, admin | Remove for good, with its reports (rev 23). Moderators can add `?reason=`. Resolving a report with `remove_content` also deletes the post |
 
 **Fields to design with:**
 
@@ -247,19 +247,20 @@ Company pages for placement prep (FR-15, FR-16, FR-17): what the company does, i
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
-| GET | `/companies` | guest | Browse companies. Filters: `q` (name or industry), `industry`. `sort`: `name` (default), `most_hired` (latest season's hires), `upcoming_ppt` (soonest date of any kind first) |
+| GET | `/companies` | guest | Browse companies. Filters: `q` (name or industry), `industry`. `sort`: `name` (default), `most_hired` (latest season's hires), `upcoming_ppt` (soonest date of any kind first), `highest_pay` |
 | GET | `/companies/{id}` | guest | The company page: details, `job_descriptions`, `ppts`, headline numbers, `viewer_can_manage` |
 | POST | `/companies` | placement moderator, admin | Add one: `name`, `industry`, `website` (must start with `https://` or `http://`), `description`. A name that differs only in case or spacing is a duplicate (409) |
 | PATCH | `/companies/{id}` | placement moderator, admin | Edit any of those fields |
-| DELETE | `/companies/{id}` | admin | Delete it **with** its JDs, PPTs, hiring records, interview experiences and forum |
-| POST | `/companies/{id}/jds` | placement moderator, admin | Add a JD: `role_title`, `description` (the JD text), `compensation` (free text, e.g. "₹32 LPA"), optional `file_s3_key` (upload kind `job_description`: PDF, DOCX or TXT, up to 20 MB) |
+| DELETE | `/companies/{id}` | placement moderator, admin | For a company that withdrew: deletes it **with** its roles and JD files, every date on its schedule (upcoming ones too), hiring records, seniors, interview experiences and forum, and closes open reports about them. Optional `?reason=` |
+| POST | `/companies/{id}/jds` | placement moderator, admin | Add a role: `role_title`, `placement_year` (the season, e.g. 2026 for 2025-26), `job_type` (`full_time`, `internship`, `ppo`, `other`), `compensation` (as announced, e.g. "₹32 LPA"; the amount is read into `ctc_min`/`ctc_max`), `base`, `skills`, `description` (the JD text), optional `file_s3_key` (upload kind `job_description`: PDF, DOCX or TXT, up to 20 MB). One role per company, title, season and type (409 for a second) |
+| POST | `/placement/roles/import` | placement moderator, admin | `{"csv", "placement_year"}`: add or update roles with their compensation. Columns by name: Company and Position / Job title (required), Batch or Year ("2023 - 24" is the 2024 season; `placement_year` for files without one), Overall CTC, Base, Job type, Description, Skills. Contact and comment columns are never imported. See [placement-csv-formats.md](placement-csv-formats.md) |
 | PATCH | `/jds/{id}` | placement moderator, admin | Edit; `file_s3_key: null` removes the file |
 | DELETE | `/jds/{id}` | placement moderator, admin | Delete a JD |
 | GET | `/placement/ppts` | guest | The placement schedule across companies. `when`: `upcoming` (default, soonest first), `past`, `all`; `kind` (repeatable): `ppt`, `oa`, `interview`, `other` |
 | POST | `/companies/{id}/ppts` | placement moderator, admin | Add a date: `kind` (`ppt` pre-placement talk (default), `oa` online test, `interview`, `other`), `details`, `venue`, `scheduled_at` (leave out until announced). At least one of the last three is needed |
 | PATCH / DELETE | `/ppts/{id}` | placement moderator, admin | Edit or delete a date |
 | GET | `/companies/{id}/hiring-stats` | guest | Students selected per year and role, newest year first |
-| GET | `/placement/stats` | guest | Seasons at a glance: hires and companies per year (`years`, default 5) and the top recruiters of the latest season (or `year`) |
+| GET | `/placement/stats` | guest | Seasons at a glance: hires and companies per year (`years`, default 5), the top recruiters of the latest season (or `year`) with their compensation range, and `pay_year` / `top_paying`: companies by full-time compensation in the latest season that has it |
 | GET | `/interviews` | guest | Interview experiences, newest first. Filters: `company_id`, `q`, `role`, `placement_year`, `mine=true` (signed in) |
 | POST | `/companies/{id}/interviews` | user | Share one: `role_title`, `content`, `placement_year`, `is_anonymous` |
 | GET | `/interviews/{id}` | guest | One interview experience |
@@ -269,7 +270,7 @@ Company pages for placement prep (FR-15, FR-16, FR-17): what the company does, i
 | POST | `/placement/imports` | placement moderator, admin | Import a placement sheet (FR-17): `placement_year` and `sheet` (see below) |
 | GET | `/placement/imports` | placement moderator, admin | Past imports, newest first, with their counts |
 | POST | `/placement/companies/import` | placement moderator, admin | `{"csv": "..."}`: add or update companies. Columns `Name` (required), `Industry`, `Website`, `About`. An existing company (same name) gets the cells you filled in |
-| POST | `/placement/schedule/import` | placement moderator, admin | `{"csv": "..."}`: add dates. Columns `Company` (required), `Type` (PPT, OA, Interview, Other), `Date`, `Time` (or one date-and-time column; India time unless a timezone is given), `Venue`, `Details`. Placement office sheets work too: `Test Date`, `Test Timings` ("02 00 PM - 03 00 PM" starts at 2 pm), `Test Venue`, `Mode`, `Status` and `Remarks` (added to the details); a "Test …" sheet makes every row an online test, and "Accenture [Mock Assessment]" is company Accenture with "Mock Assessment" in the details. New companies are created; the same company, type and time again updates the entry |
+| POST | `/placement/schedule/import` | placement moderator, admin | `{"csv": "...", "file_name": "slot 2 interview schedule.csv"}`: add dates. Columns `Company` (required), `Type` (PPT, OA, Interview, Other), `Date`, `Time` (or one date-and-time column; India time unless a timezone is given), `Venue`, `Details`. Placement office sheets work too: `Test Date`, `Test Timings` ("02 00 PM - 03 00 PM" starts at 2 pm), `Test Venue`, `Mode`, `Status` and `Remarks` (added to the details); a "Test …" sheet (or "Venue of Interview", or `file_name` containing interview / test / PPT) sets the type of every row; headers with a line break or a note ("Date [MM/DD/YYYY]") work, and month-first dates are read month-first; "No test" in Timings or "CANCELLED" in Date go into the details; "16/10 & 17/10" adds two dates; and "Accenture [Mock Assessment]" is company Accenture with "Mock Assessment" in the details. New companies are created; the same company, type and time again updates the entry |
 | GET | `/companies/{id}/seniors` | user | Seniors to contact: students from the placement sheets of the company's last two seasons, plus seniors moderators added. Guests get 401 |
 | POST | `/companies/{id}/seniors` | placement moderator, admin | Add one (e.g. an off-campus offer): `name`, `email`, `phone`, `role_title`, `placement_year`, `offer_type` (`on_campus`, `off_campus`, `ppo`, `internship`), `note` |
 | PATCH / DELETE | `/seniors/{id}` | placement moderator, admin | Edit or remove a senior a moderator added |
@@ -279,9 +280,9 @@ Company pages for placement prep (FR-15, FR-16, FR-17): what the company does, i
 
 | Object | Fields |
 | --- | --- |
-| Company card (in lists) | `id`, `name`, `industry`, `description`, `role_count`, `interview_count`, `next_ppt_at`, `next_date_at`, `next_date_kind`, `latest_year`, `latest_year_selected`, `total_selected` |
+| Company card (in lists) | `id`, `name`, `industry`, `description`, `role_count`, `interview_count`, `next_ppt_at`, `next_date_at`, `next_date_kind`, `latest_year`, `latest_year_selected`, `total_selected`, `ctc_year` / `ctc_min` / `ctc_max` (full-time compensation range in the latest season with pay data) |
 | Company page | Everything on the card, plus `website`, `job_descriptions`, `ppts`, `viewer_can_manage`, `created_at`, `updated_at` |
-| JD | `id`, `company_id`, `role_title`, `description`, `compensation`, `file_s3_key`, `file_url` (short-lived link, `null` without a file) |
+| Role (JD) | `id`, `company_id`, `role_title`, `placement_year`, `job_type`, `compensation` (as announced), `ctc_min` / `ctc_max` (rupees a year read from it; `null` when it has no amount), `base`, `base_annual`, `skills`, `description`, `file_s3_key`, `file_url` (short-lived link, `null` without a file) |
 | Schedule date (PPT) | `id`, `company_id`, `company_name`, `kind`, `details`, `venue`, `scheduled_at`, `time_tbd` (only the day is known: show "Time TBA"), `when` (`upcoming`, `past`, `unscheduled`) |
 | CSV import result | `rows_total`, `rows_created`, `rows_updated`, `rows_rejected`, `companies_created`, `rejected_rows`: [`line`, `reason`], and for schedules `kinds` (rows per type) and `past_rows`. Formats accepted: [placement-csv-formats.md](placement-csv-formats.md) |
 | Senior | `id`, `source` (`placement_sheet` or `added`), `name`, `email`, `phone` (if they gave one), `user_id` (their CampusHub account, `null` if none: offer chat only when set), `role_title`, `placement_year`, `offer_type`, `slot`, `note`, `hidden` (only moderators see hidden ones) |
@@ -306,7 +307,7 @@ A campus events timeline (FR-18, FR-19, FR-20): sports, culture, talks, food and
 | PATCH / DELETE | `/event-tags/{id}` | events moderator, admin | Rename or delete a tag |
 | GET | `/events` | guest | The timeline. Filters: `when` (repeatable `present`, `upcoming`, `past`; default present + upcoming), `tag_id` (repeatable; events with any of them), `q` (title, description, place), `from_time` / `to_time`, `organizer_id`, `bookmarked=true` (signed in) |
 | GET | `/events/{id}` | guest | One event |
-| POST | `/events` | user | Post one: `title`, `start_time`, `end_time` (with a timezone), `tag_ids` (1–5), `location`, `description`, optional `poster_s3_key` (upload kind `event_poster`: JPEG, PNG, WebP or HEIC, up to 10 MB) |
+| POST | `/events` | events moderator, admin | Post one (rev 21: students can't add events): `title`, `start_time`, `end_time` (with a timezone), `tag_ids` (1–5), `location`, `description`, optional `poster_s3_key` (upload kind `event_poster`: JPEG, PNG, WebP or HEIC, up to 10 MB) |
 | PATCH | `/events/{id}` | organizer, events moderator, admin | Edit any field, including `tag_ids`; `poster_s3_key: null` removes the poster |
 | DELETE | `/events/{id}` | organizer, events moderator, admin | Cancel (remove) it |
 | GET | `/me/followed-tags` | user | Tags I follow |
@@ -338,7 +339,7 @@ Each mess posts its menu for a month or so: what breakfast, lunch, snacks and di
 | PATCH / DELETE | `/messes/{id}` | events moderator, admin | Rename or change meal times; delete with its menus and followers |
 | PUT | `/messes/{id}/follow` | user | `{"meals": ["lunch", "dinner"]}`: the meals to be alerted about; `[]` unfollows |
 | GET | `/messes/{id}/menus` | guest | Current and upcoming menus, then the last few past ones (`past`, default 3) |
-| POST | `/messes/{id}/menus` | events moderator, admin | Post a menu: `valid_from`, `valid_to` (at most about 3 months), `file_s3_key` (upload kind `mess_menu`: the PDF or photo) and/or `items` (`weekday` 1 = Monday … 7, `meal`, `items`), `notes`. The file alone is enough; typed-in meals put the dishes into the alerts. Menus of one mess can't overlap (409) |
+| POST | `/messes/{id}/menus` | events moderator, admin | Post a menu: `valid_from`, `valid_to` (at most about 3 months), `file_s3_key` (upload kind `mess_menu`: the PDF or photo) and/or `items` (`weekday` 1 = Monday … 7, `meal`, `items`), `notes`. The file alone is enough; typed-in meals put the dishes into the alerts. Menus of one mess can't overlap (409), except that a menu with meals replaces an overlapping menu that has only a file |
 | POST | `/mess-menus/extract` | events moderator, admin | `{"file_s3_key"}` of an uploaded menu (kind `mess_menu`): reads the meals out of it (OCR) to prefill the form. Returns `mess_name`, `month`, `items`, `notes`, `warnings`. Saves nothing; takes a few seconds |
 | POST | `/mess-menus` | events moderator, admin | Post a menu by `mess_name` (same body as above): an unknown name adds the mess (optional `meal_times`) |
 | GET / PATCH / DELETE | `/mess-menus/{id}` | guest / events moderator, admin | One menu; edit (`items` replaces every cell, `file_s3_key: null` removes the file); remove |
@@ -366,10 +367,12 @@ The screens go department → course → materials and feedback. Each course and
 | GET | `/courses/{id}` | guest | One course |
 | PATCH | `/courses/{id}` | admin, department moderator | Edit `code`, `name` |
 | DELETE | `/courses/{id}` | admin, department moderator | Delete it and everything under it |
-| GET | `/courses/{id}/materials` | guest | Materials, newest first. Filter: `material_type` |
-| POST | `/courses/{id}/materials` | course moderator (that course), department moderator, admin | Add one: `title`, `material_type`, `s3_key` |
-| PATCH | `/materials/{id}` | same | Edit `title`, `material_type` |
-| DELETE | `/materials/{id}` | same | Remove. Optional `?reason=` |
+| GET | `/courses/{id}/materials` | guest | The course's shared repository, newest first. Filters: `tag`, `q` (title/description), `material_type`. Held files show only to their uploader and the course's moderators |
+| POST | `/courses/{id}/materials` | user (rev 22: anyone signed in) | Share a file: `s3_key` (upload kind `course_material` with this `course_id`), `title`, `tags` (up to 5 of `pyq`, `quiz`, `assignment`, `notes`, `slides`, `lab`, `solutions`, `cheat_sheet`, `textbook`, `project`, `other`), `description`, `file_name`. The file is opened and checked: programs, apps (APK), scripts, macro documents, ZIP bombs and files whose contents don't match their type are refused (422, the file is deleted); password-protected or nested archives, PDFs with scripts, "leaked paper"/selling wording and upload floods are **held** (`held: true`) and flagged to the course's moderators. Followers are told when it's visible |
+| PATCH | `/materials/{id}` | uploader, course/department moderator, admin | Edit `title`, `tags`, `description` |
+| DELETE | `/materials/{id}` | uploader, course/department moderator, admin | Remove. Optional `?reason=` |
+| PUT / DELETE | `/courses/{id}/follow` | user | Follow / stop following a course: new materials, feedback and forum posts there notify you (`course_update`). Returns the course with `following` and `follower_count` |
+| GET | `/courses/{id}/forum` | guest | The course's forum (threads and replies use the Forums endpoints) |
 | GET | `/courses/{id}/feedback` | guest | Feedback, newest first. Author names are shown only to signed-in viewers, and never for anonymous feedback |
 | GET | `/courses/{id}/feedback/mine` | user | My review of this course; 404 if I haven't written one |
 | POST | `/courses/{id}/feedback` | user | Post a review: `content`, `is_anonymous` (default false). One review per person per course: a second one returns 409 "You've already reviewed this course. Edit your feedback instead." |
@@ -470,6 +473,7 @@ Any signed-in user can flag content. Moderators work through a queue limited to 
 - **The queue has no preview.** Show the item by fetching it with `target_type` and `target_id`, e.g. `GET /listings/{target_id}`.
 - **Resolving one report closes every open report on that item.** With `remove_content: true` it also removes the item in the same step. If another moderator resolved it first, you get 409. Removing an item with its DELETE endpoint also closes its reports.
 - **Limits:** reason 1–1,000 characters, resolution note up to 1,000.
+- **Seller strikes (rev 22 notices):** an appeal tells the Buy & Sell moderators and the admin (`moderation_action`, `kind: strike_appeal`); overturning, rejecting an appeal and lifting a suspension each tell the seller.
 
 ## Messages (encrypted, not yet end-to-end)
 
@@ -534,6 +538,7 @@ A notification has `id`, `type`, `payload`, `is_read` and `created_at`. Every `p
 | `chat_message` | A new message, offer or offer answer, or a buyer wants to chat before you've set up messaging | `conversation_id` | The conversation |
 | `followed_tag_event` | A new event carries a tag you follow | `event_id`, `tags` | The event |
 | `bookmarked_event_update` | An event you bookmarked changed or was cancelled | `event_id`, `cancelled` | The event (nothing when cancelled) |
+| `course_update` | Something new in a course you follow: a material, feedback, a forum post or reply | `course_id`, `course_code`, and `material_id`, `feedback_id` or `thread_id` | The course (a forum item opens its thread) |
 | `mess_menu` | A meal you follow starts in 30 minutes | `mess_id`, `mess`, `meal`, `day`, `menu_id` | The mess menu |
 
 - **Unread badge:** call with `unread_only=true` and check whether `items` is empty. There's no unread-count endpoint.
