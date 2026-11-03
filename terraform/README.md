@@ -97,9 +97,10 @@ terraform/
     ├── database/              # RDS PostgreSQL, subnet group, parameter group (TLS 1.2+), SSM credentials
     ├── storage/               # S3 frontend static bucket + S3 user media upload bucket, versioning, CORS
     ├── auth/                  # Cognito User Pool, Client, and 4-role user groups (Guest/User/Mod/Admin)
-    ├── compute/               # 5 Lambda microservices in VPC with IAM least-privilege policies
-    │   └── lambda_src/        # Starter Python/FastAPI Lambda handler
-    ├── api_gateway/           # HTTP API (v2), Cognito JWT authorizer, routes, 50 req/s rate limits
+    ├── compute/               # 5 Lambda functions (all built from backend/app, zip-packaged by
+    │                          # build_lambda_zip.sh at apply time) in VPC, IAM least-privilege policies
+    ├── api_gateway/           # HTTP API (v2); per-prefix routes to the 5 Lambdas, plus a catch-all;
+    │                          # auth is enforced by the app itself, not a gateway-level authorizer
     ├── cdn/                   # CloudFront CDN with S3 OAC, API Gateway reverse proxy origin, SPA rewrites
     ├── waf/                   # Optional AWS WAFv2 WebACL with OWASP rules and IP rate limiting
     └── monitoring/            # AWS Budgets $5 free-tier limit, SNS alerts, CloudWatch metric alarms

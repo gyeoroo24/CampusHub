@@ -32,3 +32,8 @@ output "db_password_ssm_param" {
   description = "SSM Parameter Store name containing the master DB password"
   value       = aws_ssm_parameter.db_password.name
 }
+
+output "db_secret_arn" {
+  description = "Secrets Manager secret ARN holding {username, password} for the API Lambda"
+  value       = aws_secretsmanager_secret.db_credentials.arn
+}

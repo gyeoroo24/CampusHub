@@ -55,6 +55,14 @@ resource "aws_iam_policy" "lambda_app_permissions" {
         Resource = "arn:aws:ssm:*:*:parameter/campushub/${var.environment}/*"
       },
       {
+        Sid    = "SecretsManagerDbCredentialsAccess"
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = var.db_secret_arn
+      },
+      {
         Sid    = "KMSDecryptAccess"
         Effect = "Allow"
         Action = [

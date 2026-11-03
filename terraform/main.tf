@@ -47,18 +47,20 @@ module "auth" {
 module "compute" {
   source = "./modules/compute"
 
-  environment           = var.environment
-  project_name          = var.project_name
-  lambda_subnet_ids     = module.networking.lambda_subnet_ids
-  app_security_group_id = module.networking.app_security_group_id
-  db_host               = module.database.db_address
-  db_name               = module.database.db_name
-  db_user               = module.database.db_username
-  db_password_ssm_param = module.database.db_password_ssm_param
-  media_bucket_id       = module.storage.media_bucket_id
-  media_bucket_arn      = module.storage.media_bucket_arn
-  cognito_user_pool_id  = module.auth.user_pool_id
-  lambda_memory_size    = var.lambda_memory_size
+  environment            = var.environment
+  project_name           = var.project_name
+  aws_region             = var.aws_region
+  lambda_subnet_ids      = module.networking.lambda_subnet_ids
+  app_security_group_id  = module.networking.app_security_group_id
+  db_host                = module.database.db_address
+  db_name                = module.database.db_name
+  db_user                = module.database.db_username
+  db_secret_arn          = module.database.db_secret_arn
+  media_bucket_id        = module.storage.media_bucket_id
+  media_bucket_arn       = module.storage.media_bucket_arn
+  cognito_user_pool_id   = module.auth.user_pool_id
+  cognito_app_client_id  = module.auth.user_pool_client_id
+  lambda_memory_size     = var.lambda_memory_size
 }
 
 # 6. API GATEWAY TIER (HTTP API v2, Cognito JWT Authorizer, Routes, Throttling)

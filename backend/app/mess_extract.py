@@ -19,7 +19,13 @@ Nothing here is posted: the moderator checks every cell in the app, fixes what w
 
 Without ruled lines (a photo of a handwritten board, say) or without Tesseract installed, it returns
 what it can and says so; the moderator types or pastes the meals instead.
+
+numpy and Pillow are optional at import time (not every deployment ships them, e.g. a size-constrained
+Lambda zip): if they're missing, extract_menu() degrades the same way it already does for a missing
+Tesseract, instead of crashing the whole app at startup.
 """
+from __future__ import annotations
+
 import io
 import re
 import shutil
@@ -29,8 +35,15 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date
 
-import numpy as np
-from PIL import Image, ImageOps
+try:
+    import numpy as np
+    from PIL import Image, ImageOps
+    _IMAGING_AVAILABLE = True
+except ImportError:
+    np = None  # type: ignore[assignment]
+    Image = None  # type: ignore[assignment]
+    ImageOps = None  # type: ignore[assignment]
+    _IMAGING_AVAILABLE = False
 
 MEALS = ("breakfast", "lunch", "snacks", "dinner")
 WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
@@ -241,6 +254,10 @@ def _title_hints(text: str, out: Extracted) -> None:
 
 def extract_menu(data: bytes, content_type: str) -> Extracted:
     out = Extracted()
+    if not _IMAGING_AVAILABLE:
+        out.warnings.append("Reading menus from files isn't set up on this server. "
+                            "Type or paste the meals instead.")
+        return out
     if not ocr_available():
         out.warnings.append("Reading menus from files isn't set up on this server (Tesseract is missing). "
                             "Type or paste the meals instead.")

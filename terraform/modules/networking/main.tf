@@ -110,3 +110,35 @@ resource "aws_vpc_endpoint" "kms" {
     Name = "campushub-${var.environment}-kms-endpoint"
   }
 }
+
+# VPC Interface Endpoint for AWS Secrets Manager (the API Lambda reads the DB credentials secret)
+resource "aws_vpc_endpoint" "secretsmanager" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.secretsmanager"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.lambda[*].id
+  security_group_ids  = [aws_security_group.vpce_sg.id]
+  private_dns_enabled = true
+
+  tags = {
+    Name = "campushub-${var.environment}-secretsmanager-endpoint"
+  }
+}
+
+# VPC Interface Endpoint for Cognito Identity Provider. The API verifies Cognito ID tokens itself
+# (app/auth.py) by fetching https://cognito-idp.<region>.amazonaws.com/<pool-id>/.well-known/jwks.json
+# directly - a plain HTTPS call, not an AWS SDK call - but private DNS on this endpoint still
+# resolves that hostname to it from inside the VPC, so Lambda never needs public internet access
+# (no NAT Gateway) just to validate a sign-in token.
+resource "aws_vpc_endpoint" "cognito_idp" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.cognito-idp"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.lambda[*].id
+  security_group_ids  = [aws_security_group.vpce_sg.id]
+  private_dns_enabled = true
+
+  tags = {
+    Name = "campushub-${var.environment}-cognito-idp-endpoint"
+  }
+}

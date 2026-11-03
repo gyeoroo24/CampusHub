@@ -100,3 +100,24 @@ resource "aws_ssm_parameter" "db_password" {
   type        = "SecureString"
   value       = random_password.db_password.result
 }
+
+# The API reads its DB credentials from Secrets Manager, not SSM: CAMPUSHUB_DATABASE_SECRET_ARN
+# points at this secret, in the {"username": ..., "password": ...} shape app/config.py expects.
+# (The SSM parameters above are kept for anything else that still reads them.)
+resource "aws_secretsmanager_secret" "db_credentials" {
+  name                    = "/campushub/${var.environment}/db/credentials"
+  description             = "PostgreSQL master credentials, read by the API Lambda at startup"
+  recovery_window_in_days = 0
+
+  tags = {
+    Name = "campushub-${var.environment}-db-credentials"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "db_credentials" {
+  secret_id = aws_secretsmanager_secret.db_credentials.id
+  secret_string = jsonencode({
+    username = var.db_username
+    password = random_password.db_password.result
+  })
+}

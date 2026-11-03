@@ -25,9 +25,9 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
-# Ignore packaged lambda archives
+# Ignore packaged lambda archives and the build staging directory build_lambda_zip.sh fills
 *.zip
-**/lambda_src/*.zip
+**/compute/build/
 
 # OS and IDE files
 .DS_Store

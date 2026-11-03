@@ -35,8 +35,8 @@ variable "db_user" {
   type        = string
 }
 
-variable "db_password_ssm_param" {
-  description = "SSM Parameter Store name for RDS password"
+variable "db_secret_arn" {
+  description = "Secrets Manager secret ARN holding {username, password} for the DB (CAMPUSHUB_DATABASE_SECRET_ARN)"
   type        = string
 }
 
@@ -52,6 +52,16 @@ variable "media_bucket_arn" {
 
 variable "cognito_user_pool_id" {
   description = "Cognito User Pool ID"
+  type        = string
+}
+
+variable "cognito_app_client_id" {
+  description = "Cognito User Pool App Client ID (CAMPUSHUB_COGNITO_APP_CLIENT_ID)"
+  type        = string
+}
+
+variable "aws_region" {
+  description = "AWS region (used for CAMPUSHUB_COGNITO_REGION / CAMPUSHUB_S3_REGION)"
   type        = string
 }
 
