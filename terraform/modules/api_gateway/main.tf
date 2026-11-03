@@ -71,16 +71,16 @@ locals {
     v1_uploads_sub   = { route = "ANY /api/v1/uploads/{proxy+}", service = "community_events", auth = false }
 
     # Buy & Sell
-    v1_bs_categories = { route = "GET /api/v1/buy-sell/{proxy+}", service = "buy_sell", auth = false }
-    v1_bs_cat_post   = { route = "POST /api/v1/buy-sell/{proxy+}", service = "buy_sell", auth = false }
+    v1_bs_base       = { route = "ANY /api/v1/buy-sell", service = "buy_sell", auth = false }
+    v1_bs_sub        = { route = "ANY /api/v1/buy-sell/{proxy+}", service = "buy_sell", auth = false }
     v1_listings_base = { route = "ANY /api/v1/listings", service = "buy_sell", auth = false }
     v1_listings_sub  = { route = "ANY /api/v1/listings/{proxy+}", service = "buy_sell", auth = false }
     v1_wanted_base   = { route = "ANY /api/v1/wanted", service = "buy_sell", auth = false }
     v1_wanted_sub    = { route = "ANY /api/v1/wanted/{proxy+}", service = "buy_sell", auth = false }
 
     # Lost & Found
-    v1_lf_categories = { route = "GET /api/v1/lost-found/{proxy+}", service = "lost_found", auth = false }
-    v1_lf_cat_post   = { route = "POST /api/v1/lost-found/{proxy+}", service = "lost_found", auth = false }
+    v1_lf_base       = { route = "ANY /api/v1/lost-found", service = "lost_found", auth = false }
+    v1_lf_sub        = { route = "ANY /api/v1/lost-found/{proxy+}", service = "lost_found", auth = false }
     v1_lost_base     = { route = "ANY /api/v1/lost-reports", service = "lost_found", auth = false }
     v1_lost_sub      = { route = "ANY /api/v1/lost-reports/{proxy+}", service = "lost_found", auth = false }
 
@@ -93,6 +93,7 @@ locals {
     v1_dept_sub      = { route = "ANY /api/v1/departments/{proxy+}", service = "academic_hub", auth = false }
     v1_courses_base  = { route = "ANY /api/v1/courses", service = "academic_hub", auth = false }
     v1_courses_sub   = { route = "ANY /api/v1/courses/{proxy+}", service = "academic_hub", auth = false }
+    v1_materials_sub = { route = "ANY /api/v1/materials/{proxy+}", service = "academic_hub", auth = false }
     v1_feedback_sub  = { route = "ANY /api/v1/feedback/{proxy+}", service = "academic_hub", auth = false }
 
     # Community, Events, Profile, Auth & Landing Page Services
@@ -100,9 +101,18 @@ locals {
     v1_campus_svc_s  = { route = "ANY /api/v1/campus-services/{proxy+}", service = "community_events", auth = false }
     v1_events_base   = { route = "ANY /api/v1/events", service = "community_events", auth = false }
     v1_events_sub    = { route = "ANY /api/v1/events/{proxy+}", service = "community_events", auth = false }
+    v1_event_tags_b  = { route = "ANY /api/v1/event-tags", service = "community_events", auth = false }
+    v1_event_tags_s  = { route = "ANY /api/v1/event-tags/{proxy+}", service = "community_events", auth = false }
+    v1_event_upd_s   = { route = "ANY /api/v1/event-updates/{proxy+}", service = "community_events", auth = false }
     v1_me_base       = { route = "ANY /api/v1/me", service = "community_events", auth = false }
     v1_me_sub        = { route = "ANY /api/v1/me/{proxy+}", service = "community_events", auth = false }
     v1_auth_sub      = { route = "ANY /api/v1/auth/{proxy+}", service = "community_events", auth = false }
+    v1_messes_b      = { route = "ANY /api/v1/messes", service = "community_events", auth = false }
+    v1_messes_s      = { route = "ANY /api/v1/messes/{proxy+}", service = "community_events", auth = false }
+    v1_mess_menus_b  = { route = "ANY /api/v1/mess-menus", service = "community_events", auth = false }
+    v1_mess_menus_s  = { route = "ANY /api/v1/mess-menus/{proxy+}", service = "community_events", auth = false }
+    v1_seller_st_b   = { route = "ANY /api/v1/seller-strikes", service = "community_events", auth = false }
+    v1_seller_st_s   = { route = "ANY /api/v1/seller-strikes/{proxy+}", service = "community_events", auth = false }
 
     # Messaging & Secure Chat
     v1_chat_base     = { route = "ANY /api/v1/chat", service = "community_events", auth = false }
@@ -113,12 +123,26 @@ locals {
     v1_moderators_s  = { route = "ANY /api/v1/moderators/{proxy+}", service = "community_events", auth = false }
     v1_reports_b     = { route = "ANY /api/v1/reports", service = "community_events", auth = false }
     v1_reports_s     = { route = "ANY /api/v1/reports/{proxy+}", service = "community_events", auth = false }
+    v1_users_base    = { route = "ANY /api/v1/users", service = "community_events", auth = false }
     v1_users_sub     = { route = "ANY /api/v1/users/{proxy+}", service = "community_events", auth = false }
+
+    # Forums
+    v1_forums_s      = { route = "ANY /api/v1/forums/{proxy+}", service = "community_events", auth = false }
+    v1_threads_s     = { route = "ANY /api/v1/threads/{proxy+}", service = "community_events", auth = false }
+    v1_comments_s    = { route = "ANY /api/v1/comments/{proxy+}", service = "community_events", auth = false }
 
     # Placement Hub
     v1_placement_sub = { route = "ANY /api/v1/placement/{proxy+}", service = "placement_hub", auth = false }
     v1_companies_b   = { route = "ANY /api/v1/companies", service = "placement_hub", auth = false }
     v1_companies_s   = { route = "ANY /api/v1/companies/{proxy+}", service = "placement_hub", auth = false }
+    v1_seniors_s     = { route = "ANY /api/v1/seniors/{proxy+}", service = "placement_hub", auth = false }
+    v1_jds_s         = { route = "ANY /api/v1/jds/{proxy+}", service = "placement_hub", auth = false }
+    v1_ppts_s        = { route = "ANY /api/v1/ppts/{proxy+}", service = "placement_hub", auth = false }
+    v1_interviews_b  = { route = "ANY /api/v1/interviews", service = "placement_hub", auth = false }
+    v1_interviews_s  = { route = "ANY /api/v1/interviews/{proxy+}", service = "placement_hub", auth = false }
+
+    # Universal /api/v1 Catch-all fallback
+    v1_catchall      = { route = "ANY /api/v1/{proxy+}", service = "community_events", auth = false }
   }
 }
 

@@ -1,10 +1,95 @@
 -- ============================================================================
--- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 12
+-- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 24
 -- DS252 Introduction to Cloud Computing — Team "Order of Phoenix"
 --
 -- Permission modules (FR-2, NFR-6): buy_sell, lost_found, academic_help,
--- placement_hub. Community Events is a feature, not a permission module:
--- it has no module moderators (creator + admins manage events).
+-- placement_hub, events (rev 17: Community Events moderators).
+--
+-- Changes from rev. 23 (event updates, 3 Nov 2026):
+--   1. event_updates: official notices on an event (delays, venue/time changes) from its organizer or
+--      an events moderator/admin. Shown on the event page instead of its discussion forum, which stays
+--      in the schema (unused by the app) rather than being dropped.
+--   Upgrade: db/migrations/024_event_updates.sql.
+--
+-- Changes from rev. 21 (course repository, 3 Nov 2026):
+--   1. Course materials are a shared repository: anyone signed in uploads (up to 100 MB). New columns
+--      tags, description, file_name, size_bytes, content_type, and held_for_review_at (a file that
+--      looks wrong is hidden until a course moderator decides; app/material_check.py).
+--   2. course_follows and notification type course_update: following a course alerts you to new
+--      materials, feedback and forum posts.
+--   Upgrade: db/migrations/022_course_repository_and_follows.sql.
+--
+-- Changes from rev. 20 (role compensation, 3 Nov 2026):
+--   1. job_descriptions.placement_year, job_type, ctc_min / ctc_max (rupees a year, read from the
+--      compensation text), base_text / base_annual, skills: a company's roles per season with what they
+--      pay, imported from "roles and compensation" files (app/placement_roles.py) or typed in.
+--   Upgrade: db/migrations/021_role_compensation.sql.
+--
+-- Changes from rev. 19 (mess cards and schedule times, 3 Nov 2026):
+--   1. messes.event_id: every mess has a Food/Mess event card (its meal times and dishes), created
+--      and updated with its menus.
+--   2. ppt_info.time_tbd: a date imported without a time shows "time to be announced".
+--   Upgrade: db/migrations/020_mess_event_cards_and_tba_times.sql.
+--
+-- Changes from rev. 18 (chat and placement follow-ups, 2 Nov 2026):
+--   1. chat_conversations.user_a_cleared_seq / user_b_cleared_seq: "delete chat" hides a chat from
+--      one person only; chat_message_hides: "delete for me" on one message.
+--   2. placement_records.student_email takes any email address (counted in the hiring numbers;
+--      only IISc addresses are listed as seniors to contact).
+--   Upgrade: db/migrations/019_chat_hiding_and_any_email.sql.
+--
+-- Changes from rev. 17 (senior contacts and mess menus, 2 Nov 2026):
+--   1. company_seniors: people to contact about a company (off-campus offers and others moderators
+--      add); placement_records.contact_hidden takes a sheet student off a company's contact list.
+--   2. Mess menus: messes (with meal times), mess_menus (a month's menu, optionally with the
+--      PDF/image), mess_menu_items (what each meal has on each weekday), mess_follows (meal alerts)
+--      and mess_alerts_sent; notification type mess_menu.
+--   3. Forum posts start at 0 votes: the author's automatic upvote from rev 17 is gone.
+--   Upgrade: db/migrations/018_seniors_and_mess_menus.sql.
+--
+-- Changes from rev. 16 (Placement Hub and Events follow-ups, 2 Nov 2026):
+--   1. module_name 'events': Community Events moderators remove any event and moderate event forums.
+--   2. Events have forums: forum_scope_type 'event', forums.event_id.
+--   3. Reddit-style forums: thread_votes and comment_votes (+1 / -1 per person), and
+--      comments.parent_id for replies to a reply (NULL = top-level reply).
+--   4. ppt_info.kind: the placement schedule holds pre-placement talks, online tests (OA),
+--      interviews and other dates, not only talks.
+--   5. events.poster_s3_key: an optional poster image (upload kind event_poster).
+--   Upgrade: db/migrations/017_forums_events_moderation.sql.
+--
+-- Changes from rev. 15 (Placement Hub and Community Events APIs, 1-2 Nov 2026; built in
+--   parallel with revs 13-15 and first numbered rev 13):
+--   1. companies.website / industry; job_descriptions.description / compensation (the JD as text,
+--      the file stays optional); ppt_info.venue.
+--   2. interview_experiences.is_anonymous and placement_year (which season the interview was for).
+--   Upgrade: db/migrations/016_placement_and_events.sql.
+--
+-- Changes from rev. 14 (automatic flagging and price watch, 2 Nov 2026):
+--   1. reports.source ('user' or 'system') and reporter_id nullable for system flags (future
+--      plan §1.6); one open system flag per item (uq_reports_one_open_system).
+--   2. listings.held_for_review_at: an automatically flagged listing held back until a moderator
+--      decides; listings.negotiable (future plan §2.3).
+--   3. listing_watches and notification type listing_watch: price changes / marked negotiable.
+--   Upgrade: db/migrations/015_auto_flags_and_price_watch.sql.
+--
+-- Changes from rev. 13 (reversible listing hide + appeal review, 1 Nov 2026):
+--   1. listings.hidden_by_strike_id: a report-driven removal (future plan §1.5) now hides the
+--      listing instead of soft-deleting it — visible only to the seller and a Buy & Sell
+--      moderator/admin until the strike is overturned (restores it) or the appeal is rejected
+--      (stays hidden). A direct DELETE /listings/{id} is unaffected and still permanent.
+--   2. seller_strikes.appeal_resolved_at/by: lets a moderator explicitly reject an appeal
+--      (distinct from overturning it), so it drops out of the "needs review" queue either way.
+--   Upgrade: db/migrations/014_reversible_listing_hide.sql.
+--
+-- Changes from rev. 12 (seller trust score, 1 Nov 2026):
+--   1. seller_strikes: one row per moderator-confirmed listing removal (future plan §1.5) —
+--      never from a raw report. severity (severe/non_severe) sets the "Negative Seller" /
+--      "Blocked Seller" thresholds (app/seller_trust.py). A seller may appeal a strike
+--      (appeal_message); a moderator may overturn one (excluded), which drops it from the count.
+--   2. users.listing_suspended_at / listing_suspended_reason: set once a seller crosses the
+--      "Blocked Seller" threshold, enforced on listing creation; cleared by a moderator or by
+--      overturning the strike that caused it.
+--   Upgrade: db/migrations/013_seller_trust.sql.
 --
 -- Changes from rev. 5 ("Taking it further" features, 24 Oct 2026):
 --   1. saved_searches: a saved Buy & Sell or Lost & Found search; new
@@ -84,24 +169,27 @@ CREATE EXTENSION IF NOT EXISTS citext;    -- case-insensitive text for emails (s
 -- ENUM TYPES
 -- ============================================================================
 CREATE TYPE user_role            AS ENUM ('signed_in', 'admin');   -- "moderator" is derived from moderator_assignments
-CREATE TYPE module_name          AS ENUM ('buy_sell', 'lost_found', 'academic_help', 'placement_hub');
+CREATE TYPE module_name          AS ENUM ('buy_sell', 'lost_found', 'academic_help', 'placement_hub', 'events');
 CREATE TYPE mod_scope_type       AS ENUM ('module', 'department', 'course');
 CREATE TYPE listing_status       AS ENUM ('available', 'reserved', 'sold');
 CREATE TYPE lost_found_status    AS ENUM ('open', 'matched', 'closed');  -- 'matched' unused since rev 11
 CREATE TYPE material_type        AS ENUM ('notes', 'slides', 'past_assignment', 'exam_material', 'other');
-CREATE TYPE forum_scope_type     AS ENUM ('course', 'department', 'company');
+CREATE TYPE forum_scope_type     AS ENUM ('course', 'department', 'company', 'event');
 CREATE TYPE bookmark_target_type AS ENUM ('listing', 'event');
 CREATE TYPE notification_type    AS ENUM ('lost_found_match', 'forum_reply', 'listing_status_change',
                                           'bookmarked_event_update', 'followed_tag_event', 'moderation_action',
-                                          'saved_search_match', 'wanted_post_match', 'chat_message');
+                                          'saved_search_match', 'wanted_post_match', 'chat_message',
+                                          'listing_watch', 'mess_menu', 'course_update');
 CREATE TYPE report_target_type   AS ENUM ('listing', 'lost_report', 'found_report', 'course_material',
                                           'course_feedback', 'thread', 'comment', 'interview_experience',
                                           'wanted_post');
 CREATE TYPE wanted_status        AS ENUM ('open', 'fulfilled', 'closed');
 CREATE TYPE campus_service_category AS ENUM ('health', 'wellbeing', 'grievance', 'safety', 'other');
 CREATE TYPE report_status        AS ENUM ('open', 'actioned', 'dismissed');
+CREATE TYPE report_source        AS ENUM ('user', 'system');   -- system: automatic flag (§1.6)
 CREATE TYPE device_platform      AS ENUM ('android', 'ios', 'web', 'desktop');
 CREATE TYPE chat_message_kind    AS ENUM ('text', 'offer');
+CREATE TYPE seller_strike_severity AS ENUM ('severe', 'non_severe');  -- future plan §1.5
 CREATE TYPE chat_offer_status    AS ENUM ('pending', 'accepted', 'declined', 'withdrawn', 'superseded');
 CREATE TYPE chat_topic_kind      AS ENUM ('listing', 'lost_report', 'found_report');
 
@@ -161,6 +249,11 @@ CREATE TABLE users (
     programme       TEXT,                                    -- e.g. 'M.Tech CSA'
     graduation_year SMALLINT CHECK (graduation_year BETWEEN 1950 AND 2100),
     is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Seller trust score (future plan §1.5): set once seller_strikes crosses the "Blocked Seller"
+    -- threshold (app/seller_trust.py). Checked on listing creation; cleared by a moderator/admin
+    -- or automatically when overturning the strike that caused it.
+    listing_suspended_at     TIMESTAMPTZ,
+    listing_suspended_reason TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -275,6 +368,10 @@ CREATE TABLE listings (
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at         TIMESTAMPTZ,                        -- soft delete, FR-10
     deleted_by         UUID REFERENCES users(id),          -- owner or moderator who removed it
+    held_for_review_at TIMESTAMPTZ,                         -- auto-flagged as prohibited: hidden until a moderator decides
+    negotiable         BOOLEAN NOT NULL DEFAULT FALSE,      -- "Negotiable" badge (future plan §2.3)
+    -- hidden_by_strike_id (reversible, report-driven removal) is added below, near
+    -- seller_strikes, to avoid a circular forward reference.
     CONSTRAINT listings_deleted_pair_chk CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))
 );
 CREATE INDEX idx_listings_filter ON listings(category_id, price) WHERE deleted_at IS NULL;   -- FR-6
@@ -462,6 +559,14 @@ CREATE TABLE course_materials (
     title             TEXT NOT NULL,
     material_type     material_type NOT NULL DEFAULT 'other',
     file_s3_key       TEXT NOT NULL,
+    -- rev 22: the shared repository. Tags say what it is (pyq, quiz, notes, ...); held_for_review_at hides
+    -- a file the upload check found suspicious until a course moderator decides.
+    tags              TEXT[] NOT NULL DEFAULT '{}' CHECK (cardinality(tags) <= 5),
+    description       TEXT CHECK (char_length(description) <= 2000),
+    file_name         TEXT,
+    size_bytes        BIGINT,
+    content_type      TEXT,
+    held_for_review_at TIMESTAMPTZ,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at        TIMESTAMPTZ,
@@ -469,6 +574,15 @@ CREATE TABLE course_materials (
     CONSTRAINT materials_deleted_pair_chk CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))
 );
 CREATE INDEX idx_materials_course ON course_materials(course_id) WHERE deleted_at IS NULL;   -- FR-11
+
+-- rev 22: following a course: new materials, feedback and forum posts there notify you.
+CREATE TABLE course_follows (
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    course_id  UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, course_id)
+);
+CREATE INDEX idx_course_follows_course ON course_follows(course_id);
 
 CREATE TABLE course_feedback (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -495,6 +609,8 @@ CREATE TABLE companies (
     name        TEXT NOT NULL CHECK (char_length(btrim(name)) >= 1),
     name_key    TEXT GENERATED ALWAYS AS (lower(regexp_replace(btrim(name), '\s+', ' ', 'g'))) STORED UNIQUE,
     description TEXT,
+    website     TEXT,                          -- rev 16
+    industry    TEXT,                          -- rev 16, e.g. 'Software', 'Finance', 'Semiconductors'
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -504,19 +620,37 @@ CREATE TABLE job_descriptions (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id      UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     role_title      TEXT NOT NULL,
+    description     TEXT,                      -- rev 16: the JD as text
+    compensation    TEXT,                      -- rev 16: as announced, e.g. '₹32 LPA'
     jd_s3_key       TEXT,                      -- optional JD file
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- rev 21: the season and what the role pays. ctc_min/ctc_max are rupees a year read from
+    -- `compensation` (equal unless it's a range); NULL when it says "refer JD" and the like.
+    placement_year  SMALLINT CHECK (placement_year BETWEEN 2000 AND 2100),
+    job_type        TEXT NOT NULL DEFAULT 'full_time' CHECK (job_type IN ('full_time', 'internship', 'ppo', 'other')),
+    ctc_min         BIGINT CHECK (ctc_min > 0),
+    ctc_max         BIGINT CHECK (ctc_max >= ctc_min),
+    base_text       TEXT,
+    base_annual     BIGINT CHECK (base_annual > 0),
+    skills          TEXT
 );
+-- One role per company, title, season and type: re-importing a file updates instead of duplicating.
+CREATE UNIQUE INDEX uq_job_role_season
+    ON job_descriptions (company_id, lower(role_title), coalesce(placement_year, 0), job_type);
 CREATE INDEX idx_jd_company ON job_descriptions(company_id);
 
 CREATE TABLE ppt_info (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id   UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    kind         TEXT NOT NULL DEFAULT 'ppt'   -- rev 17: ppt, oa (online test), interview, other
+                 CHECK (kind IN ('ppt', 'oa', 'interview', 'other')),
     details      TEXT,
+    venue        TEXT,                         -- rev 16
     scheduled_at TIMESTAMPTZ,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    time_tbd     BOOLEAN NOT NULL DEFAULT FALSE  -- rev 20: imported without a time (shown as TBA)
 );
 CREATE INDEX idx_ppt_company ON ppt_info(company_id);
 
@@ -526,6 +660,8 @@ CREATE TABLE interview_experiences (
     author_id  UUID NOT NULL REFERENCES users(id),
     role_title TEXT,
     content    TEXT NOT NULL,
+    is_anonymous   BOOLEAN NOT NULL DEFAULT FALSE,   -- rev 16: name hidden from everyone but the author
+    placement_year SMALLINT CHECK (placement_year BETWEEN 2000 AND 2100),   -- rev 16
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at TIMESTAMPTZ,
@@ -569,8 +705,10 @@ CREATE TABLE placement_bulk_imports (
 --         role_title = EXCLUDED.role_title, import_id = EXCLUDED.import_id
 --   RETURNING (xmax = 0) AS was_created;   -- true = created, false = updated
 -- student_email is plain data, not a users FK: most placed students never
--- sign up. These are individual students' outcomes, so the API should only
--- expose the hiring_stats aggregates below, never raw rows.
+-- sign up. Guests only see the hiring_stats aggregates below. Since rev 18,
+-- signed-in students also see the last two seasons' rows as "seniors to
+-- contact" on the company's page (name, role, season and how to reach them),
+-- unless a moderator hid the row (contact_hidden).
 CREATE TABLE placement_records (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     import_id      UUID REFERENCES placement_bulk_imports(id) ON DELETE SET NULL,
@@ -578,7 +716,10 @@ CREATE TABLE placement_records (
     slot           TEXT,                                  -- e.g. 'Slot 2'
     company_id     UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     role_title     TEXT NOT NULL CHECK (char_length(btrim(role_title)) >= 1),
-    student_email  iisc_email NOT NULL,                   -- malformed emails rejected (FR-17)
+    student_email  citext NOT NULL                        -- rev 19: any email; malformed ones rejected (FR-17)
+                   CONSTRAINT placement_records_email_chk
+                   CHECK (student_email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'),
+    contact_hidden BOOLEAN NOT NULL DEFAULT FALSE,        -- rev 18: not listed as a senior to contact
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (placement_year, student_email)
@@ -594,6 +735,25 @@ SELECT company_id,
        count(*) AS students_selected
 FROM placement_records
 GROUP BY company_id, placement_year, role_title;
+
+-- rev 18: seniors to contact about a company who aren't on a placement sheet: off-campus offers,
+-- PPOs, alumni. Added and edited by Placement Hub moderators; shown to signed-in students.
+CREATE TABLE company_seniors (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id     UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    name           TEXT NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 120),
+    email          TEXT NOT NULL CHECK (email ~* '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'),
+    phone          TEXT CHECK (phone ~ '^\+?[0-9]{10,15}$'),
+    role_title     TEXT CHECK (char_length(role_title) <= 200),
+    placement_year SMALLINT NOT NULL CHECK (placement_year BETWEEN 2000 AND 2100),
+    offer_type     TEXT NOT NULL DEFAULT 'off_campus'
+                   CHECK (offer_type IN ('on_campus', 'off_campus', 'ppo', 'internship')),
+    note           TEXT CHECK (char_length(note) <= 500),
+    added_by       UUID NOT NULL REFERENCES users(id),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (company_id, email, placement_year)
+);
 
 -- ============================================================================
 -- SHARED — FORUMS  (FR-14; course/department forums for Academic Help,
@@ -612,12 +772,9 @@ CREATE TABLE forums (
     course_id     UUID UNIQUE REFERENCES courses(id)     ON DELETE CASCADE,
     department_id UUID UNIQUE REFERENCES departments(id) ON DELETE CASCADE,
     company_id    UUID UNIQUE REFERENCES companies(id)   ON DELETE CASCADE,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    -- exactly one owner, matching scope_type; UNIQUE on each id = one forum per course/department/company
-    CONSTRAINT forum_scope_shape_chk CHECK (
-        (scope_type = 'course'     AND course_id IS NOT NULL     AND department_id IS NULL AND company_id IS NULL) OR
-        (scope_type = 'department' AND department_id IS NOT NULL AND course_id IS NULL     AND company_id IS NULL) OR
-        (scope_type = 'company'    AND company_id IS NOT NULL    AND course_id IS NULL     AND department_id IS NULL))
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    -- event_id and forum_scope_shape_chk (exactly one owner, matching scope_type) are added after
+    -- the events table below; UNIQUE on each id = one forum per course/department/company/event
 );
 
 CREATE TABLE threads (
@@ -645,6 +802,7 @@ CREATE TABLE comments (
     seq        BIGINT GENERATED ALWAYS AS IDENTITY,
     thread_id  UUID NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
     user_id    UUID NOT NULL REFERENCES users(id),
+    parent_id  UUID REFERENCES comments(id) ON DELETE CASCADE,  -- rev 17: reply to a reply; NULL = top level
     content    TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -654,6 +812,24 @@ CREATE TABLE comments (
 );
 CREATE INDEX idx_comments_thread_seq ON comments(thread_id, seq);   -- not partial: show removed ones as "[removed]"
 CREATE INDEX idx_comments_user       ON comments(user_id);          -- "my comments"; reply-notification recipients
+CREATE INDEX idx_comments_parent     ON comments(parent_id) WHERE parent_id IS NOT NULL;
+
+-- rev 17: Reddit-style votes. One vote per person per thread / comment: +1 up, -1 down;
+-- taking a vote back deletes the row. A thread's score is the sum of its thread_votes.
+CREATE TABLE thread_votes (
+    thread_id  UUID NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    value      SMALLINT NOT NULL CHECK (value IN (-1, 1)),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (thread_id, user_id)
+);
+CREATE TABLE comment_votes (
+    comment_id UUID NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    value      SMALLINT NOT NULL CHECK (value IN (-1, 1)),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (comment_id, user_id)
+);
 
 -- Removing a thread removes its comments: when a thread is soft-deleted,
 -- its still-visible comments are soft-deleted with the same time and actor.
@@ -676,7 +852,8 @@ CREATE TRIGGER trg_threads_cascade_soft_delete
 --   course forum      -> that course's course moderator, or a department
 --                        moderator of the course's department;
 --   department forum  -> that department's department moderator;
---   company forum     -> a placement_hub moderator.
+--   company forum     -> a placement_hub moderator;
+--   event forum       -> an events moderator (rev 17).
 -- The API checks: author_id = :user OR can_moderate_forum(:user, forum_id)
 --   UPDATE threads SET deleted_at = now(), deleted_by = :user
 --   WHERE id = :tid AND deleted_at IS NULL
@@ -696,7 +873,8 @@ LANGUAGE sql STABLE AS $$
                        AND (m.course_id = f.course_id OR m.department_id = c.department_id))
                    OR (f.scope_type = 'department' AND m.module = 'academic_help'
                        AND m.department_id = f.department_id)
-                   OR (f.scope_type = 'company'    AND m.module = 'placement_hub')));
+                   OR (f.scope_type = 'company'    AND m.module = 'placement_hub')
+                   OR (f.scope_type = 'event'      AND m.module = 'events')));
 $$;
 
 -- ============================================================================
@@ -717,7 +895,8 @@ $$;
 -- ============================================================================
 CREATE TABLE reports (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    reporter_id             UUID NOT NULL REFERENCES users(id),
+    reporter_id             UUID REFERENCES users(id),                -- NULL for automatic flags
+    source                  report_source NOT NULL DEFAULT 'user',
     module                  module_name NOT NULL,
     target_type             report_target_type NOT NULL,
     listing_id              UUID REFERENCES listings(id)              ON DELETE CASCADE,
@@ -754,13 +933,14 @@ CREATE TABLE reports (
         WHEN 'interview_experience' THEN interview_experience_id IS NOT NULL
         WHEN 'wanted_post'          THEN wanted_post_id IS NOT NULL END),
     -- module must fit the target (thread/comment: academic_help for course/department
-    -- forums, placement_hub for company forums — the API sets it from the forum)
+    -- forums, placement_hub for company forums, events for event forums — the API sets it from the forum)
     CONSTRAINT reports_module_chk CHECK (
         (target_type IN ('listing', 'wanted_post')            AND module = 'buy_sell') OR
         (target_type IN ('lost_report', 'found_report')       AND module = 'lost_found') OR
         (target_type IN ('course_material', 'course_feedback') AND module = 'academic_help') OR
         (target_type = 'interview_experience'                 AND module = 'placement_hub') OR
-        (target_type IN ('thread', 'comment')                 AND module IN ('academic_help', 'placement_hub'))),
+        (target_type IN ('thread', 'comment')                 AND module IN ('academic_help', 'placement_hub', 'events'))),
+    CONSTRAINT reports_source_chk CHECK ((source = 'user') = (reporter_id IS NOT NULL)),
     -- open reports have no handler; handled ones always record who and when
     CONSTRAINT reports_handled_chk CHECK (
         (status = 'open' AND handled_by IS NULL AND handled_at IS NULL) OR
@@ -769,6 +949,8 @@ CREATE TABLE reports (
 -- One open report per user per item (stops one person flagging a post 50 times);
 -- the same user may report again after an earlier report was handled.
 CREATE UNIQUE INDEX uq_reports_one_open ON reports(reporter_id, target_type, target_id) WHERE status = 'open';
+CREATE UNIQUE INDEX uq_reports_one_open_system ON reports(target_type, target_id)
+    WHERE status = 'open' AND source = 'system';
 CREATE INDEX idx_reports_queue  ON reports(module, created_at) WHERE status = 'open';
 CREATE INDEX idx_reports_target ON reports(target_type, target_id);
 
@@ -788,9 +970,60 @@ CREATE TABLE moderation_log (
 );
 
 -- ============================================================================
+-- BUY & SELL — SELLER TRUST SCORE (future plan §1.5)
+-- One row per moderator-confirmed listing removal against a seller. Never created from a raw
+-- report — only from POST /reports/{id}/resolve with remove_content=true on a listing. Rows are
+-- never deleted (tamper-proof history); a moderator who overturns one sets excluded=true instead,
+-- which drops it from the seller's "Negative Seller" / "Blocked Seller" tag (app/seller_trust.py).
+-- ============================================================================
+CREATE TABLE seller_strikes (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    seller_id      UUID NOT NULL REFERENCES users(id),
+    -- Both null once the seller deletes the listing (deletes are permanent, rev 23); the title stays.
+    listing_id     UUID REFERENCES listings(id) ON DELETE SET NULL,
+    listing_title  TEXT,
+    report_id      UUID UNIQUE REFERENCES reports(id) ON DELETE SET NULL,  -- one strike per resolved report
+    severity       seller_strike_severity NOT NULL,
+    moderator_id   UUID NOT NULL REFERENCES users(id),
+    moderator_note TEXT,
+    -- The seller's one-shot appeal (future plan §1.5.2's "lightweight appeal"); a moderator
+    -- resolves it by overturning the strike (restores the listing) or rejecting the appeal
+    -- (appeal_resolved_at/by set, excluded stays false, listing stays hidden).
+    appeal_message     TEXT,
+    appeal_created_at  TIMESTAMPTZ,
+    appeal_resolved_at TIMESTAMPTZ,
+    appeal_resolved_by UUID REFERENCES users(id),
+    excluded          BOOLEAN NOT NULL DEFAULT FALSE,
+    excluded_by       UUID REFERENCES users(id),
+    excluded_at       TIMESTAMPTZ,
+    excluded_note     TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_seller_strikes_seller ON seller_strikes(seller_id);
+-- The moderator queue: strikes with an appeal nobody has resolved yet.
+CREATE INDEX idx_seller_strikes_pending_appeal ON seller_strikes(appeal_created_at)
+    WHERE appeal_message IS NOT NULL AND appeal_resolved_at IS NULL;
+
+-- listings.hidden_by_strike_id forward-references this table, so it's added here (not in
+-- CREATE TABLE listings above) to avoid a circular definition - listings referencing a strike
+-- that itself references the listing it strikes.
+ALTER TABLE listings ADD COLUMN hidden_by_strike_id UUID REFERENCES seller_strikes(id);
+CREATE INDEX idx_listings_hidden ON listings(hidden_by_strike_id) WHERE hidden_by_strike_id IS NOT NULL;
+CREATE INDEX idx_listings_held ON listings(held_for_review_at) WHERE held_for_review_at IS NOT NULL;
+
+-- Price watch (future plan §2.3): told when the price changes or the listing is marked negotiable.
+CREATE TABLE listing_watches (
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    listing_id UUID NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, listing_id)
+);
+CREATE INDEX idx_listing_watches_listing ON listing_watches(listing_id);
+
+-- ============================================================================
 -- PHASE 2 — COMMUNITY / CULTURE EVENTS  (FR-18, FR-19, FR-20, FR-21, FR-22)
--- Not a permission module: the creator edits/deletes their event; admins
--- can edit/delete any event.
+-- The creator edits/deletes their event; admins can edit/delete any event, and
+-- events moderators (rev 17) can remove any event.
 -- ============================================================================
 CREATE TABLE event_tags (
     id         SERIAL PRIMARY KEY,
@@ -806,6 +1039,7 @@ CREATE TABLE events (
     location    TEXT,
     start_time  TIMESTAMPTZ NOT NULL,
     end_time    TIMESTAMPTZ NOT NULL,
+    poster_s3_key TEXT,                                 -- rev 17: optional poster image
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),     -- FR-20: detect "event updated"
     deleted_at  TIMESTAMPTZ,
@@ -819,6 +1053,15 @@ CREATE TABLE events (
 --        ELSE 'past' END
 CREATE INDEX idx_events_time ON events(start_time, end_time) WHERE deleted_at IS NULL;
 
+-- rev 17: every event has a discussion forum too (forums is defined before events).
+ALTER TABLE forums ADD COLUMN event_id UUID UNIQUE REFERENCES events(id) ON DELETE CASCADE;
+ALTER TABLE forums ADD CONSTRAINT forum_scope_shape_chk CHECK (
+    num_nonnulls(course_id, department_id, company_id, event_id) = 1 AND CASE scope_type
+        WHEN 'course'     THEN course_id IS NOT NULL
+        WHEN 'department' THEN department_id IS NOT NULL
+        WHEN 'company'    THEN company_id IS NOT NULL
+        WHEN 'event'      THEN event_id IS NOT NULL END);
+
 CREATE TABLE event_tag_map (
     event_id   UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     tag_id     INT NOT NULL REFERENCES event_tags(id) ON DELETE CASCADE,
@@ -826,6 +1069,21 @@ CREATE TABLE event_tag_map (
     PRIMARY KEY (event_id, tag_id)
 );
 CREATE INDEX idx_event_tag_map_tag ON event_tag_map(tag_id, event_id);   -- FR-18 filter by tag
+
+-- rev 24: official notices on an event (delays, venue changes) from its organizer or an events
+-- moderator/admin, shown on the event page instead of its (still-present, unused) discussion forum.
+CREATE TABLE event_updates (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id   UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    author_id  UUID NOT NULL REFERENCES users(id),
+    kind       TEXT NOT NULL DEFAULT 'info' CHECK (kind IN ('info', 'time', 'venue', 'time_venue')),
+    message    TEXT NOT NULL CHECK (char_length(btrim(message)) BETWEEN 1 AND 1000),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_at TIMESTAMPTZ,
+    deleted_by UUID REFERENCES users(id),
+    CONSTRAINT event_updates_deleted_pair_chk CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))
+);
+CREATE INDEX idx_event_updates_event ON event_updates(event_id, created_at DESC) WHERE deleted_at IS NULL;
 
 -- FR-20 "followed-tag": a user follows a tag (e.g. Photography) and is
 -- notified about new or updated events carrying it. Separate from bookmarks,
@@ -837,6 +1095,58 @@ CREATE TABLE tag_follows (
     PRIMARY KEY (user_id, tag_id)
 );
 CREATE INDEX idx_tag_follows_tag ON tag_follows(tag_id);   -- "who follows this tag?" for notification fan-out
+
+-- rev 18: mess menus. A mess posts its menu for a month (or so): what each meal has on each
+-- weekday, repeating every week, plus the PDF/image it came from. People who follow a mess get an
+-- alert shortly before each meal they chose, with that day's dishes (app/mess_alerts.py, run every
+-- few minutes; mess_alerts_sent makes it send each meal once). Events moderators and admins manage menus.
+CREATE TABLE messes (
+    id           SERIAL PRIMARY KEY,
+    name         TEXT UNIQUE NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 60),   -- 'C Mess'
+    breakfast_at TIME NOT NULL DEFAULT '07:30',      -- India time
+    lunch_at     TIME NOT NULL DEFAULT '12:30',
+    snacks_at    TIME NOT NULL DEFAULT '16:45',
+    dinner_at    TIME NOT NULL DEFAULT '19:30',
+    event_id     UUID REFERENCES events(id) ON DELETE SET NULL,   -- rev 20: its Food/Mess event card
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE mess_menus (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    mess_id     INT NOT NULL REFERENCES messes(id) ON DELETE CASCADE,
+    valid_from  DATE NOT NULL,
+    valid_to    DATE NOT NULL,                       -- menus of one mess don't overlap (checked by the API)
+    file_s3_key TEXT,                                -- upload kind mess_menu: the menu as a PDF or image
+    notes       TEXT CHECK (char_length(notes) <= 2000),
+    created_by  UUID NOT NULL REFERENCES users(id),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (valid_to >= valid_from AND valid_to - valid_from <= 92)
+);
+CREATE INDEX idx_mess_menus_mess ON mess_menus(mess_id, valid_from);
+CREATE TABLE mess_menu_items (
+    menu_id UUID NOT NULL REFERENCES mess_menus(id) ON DELETE CASCADE,
+    weekday SMALLINT NOT NULL CHECK (weekday BETWEEN 1 AND 7),     -- ISO: 1 = Monday
+    meal    TEXT NOT NULL CHECK (meal IN ('breakfast', 'lunch', 'snacks', 'dinner')),
+    items   TEXT NOT NULL CHECK (char_length(btrim(items)) BETWEEN 1 AND 1000),
+    PRIMARY KEY (menu_id, weekday, meal)
+);
+CREATE TABLE mess_follows (
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    mess_id    INT NOT NULL REFERENCES messes(id) ON DELETE CASCADE,
+    meals      TEXT[] NOT NULL CHECK (cardinality(meals) >= 1
+                   AND meals <@ ARRAY['breakfast', 'lunch', 'snacks', 'dinner']),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, mess_id)
+);
+CREATE INDEX idx_mess_follows_mess ON mess_follows(mess_id);
+CREATE TABLE mess_alerts_sent (
+    mess_id    INT NOT NULL REFERENCES messes(id) ON DELETE CASCADE,
+    day        DATE NOT NULL,
+    meal       TEXT NOT NULL,
+    recipients INT NOT NULL,
+    sent_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (mess_id, day, meal)
+);
 
 -- ============================================================================
 -- PHASE 2 — BOOKMARKS  (FR-20; signed-in only — guest bookmarks stay on-device)
@@ -942,6 +1252,9 @@ CREATE TABLE chat_conversations (
     last_seq             BIGINT NOT NULL DEFAULT 0,
     user_a_last_read_seq BIGINT NOT NULL DEFAULT 0,
     user_b_last_read_seq BIGINT NOT NULL DEFAULT 0,
+    -- rev 19: "delete chat" for one person: their view starts after this seq; nothing is erased
+    user_a_cleared_seq   BIGINT NOT NULL DEFAULT 0,
+    user_b_cleared_seq   BIGINT NOT NULL DEFAULT 0,
     last_message_at      TIMESTAMPTZ,
     created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT chat_pair_ordered CHECK (user_a < user_b),
@@ -953,7 +1266,10 @@ CREATE TABLE chat_topics (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conversation_id UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
     kind            chat_topic_kind NOT NULL,
-    listing_id      UUID REFERENCES listings(id),
+    -- No foreign key: a deleted listing is gone (rev 23) but the chat keeps its title and seller.
+    listing_id      UUID,
+    listing_title   TEXT,
+    listing_seller_id UUID REFERENCES users(id),
     lost_report_id  UUID REFERENCES lost_reports(id),
     found_report_id UUID REFERENCES found_reports(id),
     started_by      UUID NOT NULL REFERENCES users(id),
@@ -998,6 +1314,14 @@ CREATE INDEX idx_chat_messages_changes ON chat_messages(conversation_id, changed
 CREATE INDEX idx_chat_messages_sender  ON chat_messages(sender_id, sent_at DESC);         -- send rate limit
 CREATE UNIQUE INDEX uq_chat_one_pending_offer ON chat_messages(topic_id) WHERE offer_status = 'pending';
 CREATE INDEX idx_chat_messages_topic ON chat_messages(topic_id, seq);
+
+-- rev 19: "delete for me" on one message; the other person still sees it.
+CREATE TABLE chat_message_hides (
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    message_id UUID NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, message_id)
+);
 
 CREATE TABLE chat_blocks (
     blocker_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

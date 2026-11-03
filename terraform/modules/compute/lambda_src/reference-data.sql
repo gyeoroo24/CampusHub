@@ -98,11 +98,26 @@ BEGIN
 
     INSERT INTO users (cognito_sub, email, name, base_role, department_id, programme, graduation_year) VALUES
         ('dev|dinkylakhani@iisc.ac.in', 'dinkylakhani@iisc.ac.in', 'Dinky Lakhani', 'admin', cds_id, 'M.Tech CDS', 2026),
+        ('dev|jaswant@iisc.ac.in', 'jaswant@iisc.ac.in', 'Jaswant', 'signed_in', cds_id, 'M.Tech CDS', 2026),
         ('dev|ananyarao@iisc.ac.in', 'ananyarao@iisc.ac.in', 'Ananya Rao', 'signed_in', cds_id, 'M.Tech CDS', 2026),
         ('dev|rohansharma@iisc.ac.in', 'rohansharma@iisc.ac.in', 'Rohan Sharma', 'signed_in', cds_id, 'PhD CDS', 2027),
         ('dev|priyaiyer@iisc.ac.in', 'priyaiyer@iisc.ac.in', 'Priya Iyer', 'signed_in', cds_id, 'M.Tech Research', 2026),
         ('dev|arjunnair@iisc.ac.in', 'arjunnair@iisc.ac.in', 'Arjun Nair', 'signed_in', cds_id, 'M.Tech CDS', 2026)
     ON CONFLICT (email) DO UPDATE SET base_role = EXCLUDED.base_role;
+
+    -- Moderator Grants across all modules
+    INSERT INTO moderator_assignments (user_id, module, scope_type, department_id, granted_by)
+    SELECT u.id, m.mod::module_name, m.scope::mod_scope_type, m.dept_id, u.id
+    FROM users u
+    CROSS JOIN (VALUES 
+        ('buy_sell', 'module', NULL::uuid),
+        ('lost_found', 'module', NULL::uuid),
+        ('placement_hub', 'module', NULL::uuid),
+        ('events', 'module', NULL::uuid),
+        ('academic_help', 'department', cds_id)
+    ) AS m(mod, scope, dept_id)
+    WHERE u.email IN ('dinkylakhani@iisc.ac.in', 'jaswant@iisc.ac.in')
+    ON CONFLICT DO NOTHING;
 END $$;
 
 -- 5. Buy & Sell Categories
@@ -235,3 +250,8 @@ INSERT INTO companies (name, description) VALUES
     ('Uber', 'Mobility and logistics technology platform operating global ride-hailing and food delivery networks.')
 ON CONFLICT (name_key) DO NOTHING;
 
+
+-- 11. Community Events Tags (FR-18)
+INSERT INTO event_tags (name)
+VALUES ('Sports'), ('Food/Mess'), ('Nature'), ('Photography'), ('Culture'), ('Music'), ('Tech Talks'), ('Workshops')
+ON CONFLICT (name) DO NOTHING;

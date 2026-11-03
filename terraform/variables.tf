@@ -34,7 +34,7 @@ variable "enable_waf" {
 variable "multi_az_db" {
   description = "Set to true for Multi-AZ PostgreSQL RDS (Note: Free Tier covers 750 hrs/month of Single-AZ only. Keep false for Free Tier)"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "db_engine_version" {
