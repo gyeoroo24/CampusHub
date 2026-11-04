@@ -5,9 +5,9 @@ variable "aws_region" {
 }
 
 variable "environment" {
-  description = "Environment name (dev, staging, prod)"
+  description = "Environment name (dev, baseline, staging, prod)"
   type        = string
-  default     = "dev"
+  default     = "baseline"
 }
 
 variable "project_name" {
@@ -125,4 +125,37 @@ variable "throttling_burst_limit" {
   description = "API Gateway burst capacity limit (PRD Section 8.4 Risk 1)"
   type        = number
   default     = 100
+}
+
+# ==========================================
+# Baseline EC2 Architecture Variables
+# ==========================================
+variable "ec2_instance_type" {
+  description = "EC2 instance type for Baseline compute (t4g.micro for Graviton ARM64 or t3.micro for x86_64, both Free Tier eligible)"
+  type        = string
+  default     = "t4g.micro"
+}
+
+variable "origin_verify_header" {
+  description = "Custom secret header value sent by CloudFront to verify traffic authenticity at origin"
+  type        = string
+  default     = "CampusHub-Origin-Auth-Baseline"
+}
+
+variable "asg_min_size" {
+  description = "Minimum instances in EC2 Auto Scaling Group"
+  type        = number
+  default     = 1
+}
+
+variable "asg_max_size" {
+  description = "Maximum instances in EC2 Auto Scaling Group"
+  type        = number
+  default     = 2
+}
+
+variable "asg_desired_capacity" {
+  description = "Desired instances in EC2 Auto Scaling Group"
+  type        = number
+  default     = 1
 }

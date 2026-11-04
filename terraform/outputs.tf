@@ -1,10 +1,10 @@
 # ==========================================
-# CampusHub Infrastructure Outputs
+# CampusHub Infrastructure Outputs (Baseline EC2)
 # ==========================================
 
 output "app_url" {
-  description = "The CloudFront URL to access the CampusHub Web Application (or API Gateway URL if CDN is disabled)"
-  value       = var.enable_cloudfront ? "https://${module.cdn[0].cloudfront_domain_name}" : module.api_gateway.api_endpoint
+  description = "The CloudFront URL to access the CampusHub Web Application"
+  value       = var.enable_cloudfront ? "https://${module.cdn[0].cloudfront_domain_name}" : "http://${module.compute_ec2.alb_dns_name}"
 }
 
 output "frontend_url" {
@@ -18,8 +18,18 @@ output "cloudfront_domain_name" {
 }
 
 output "api_endpoint" {
-  description = "The Direct API Gateway HTTP API Endpoint URL"
-  value       = module.api_gateway.api_endpoint
+  description = "API Endpoint URL (fronted by CloudFront /api or direct ALB)"
+  value       = var.enable_cloudfront ? "https://${module.cdn[0].cloudfront_domain_name}/api" : "http://${module.compute_ec2.alb_dns_name}/api"
+}
+
+output "alb_dns_name" {
+  description = "Application Load Balancer direct DNS name"
+  value       = module.compute_ec2.alb_dns_name
+}
+
+output "asg_name" {
+  description = "EC2 Auto Scaling Group Name"
+  value       = module.compute_ec2.asg_name
 }
 
 output "cognito_hosted_ui_domain" {
@@ -67,17 +77,7 @@ output "database_password_ssm_parameter" {
   value       = module.database.db_password_ssm_param
 }
 
-output "lambda_functions" {
-  description = "Names of the 5 Deployed Microservice Lambda Functions"
-  value       = module.compute.lambda_function_names
-}
-
 output "cost_guardrail_budget" {
   description = "AWS Budgets Free Tier Guardrail Monitor"
   value       = module.monitoring.budget_name
-}
-
-output "data_tools_function_name" {
-  description = "Snapshot Lambda: export and restore the database (scripts/snapshot_export.sh, snapshot_restore.sh)"
-  value       = module.data_tools.data_tools_function_name
 }

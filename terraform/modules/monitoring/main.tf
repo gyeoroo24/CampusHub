@@ -83,6 +83,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
 
 # CloudWatch Metric Alarm for API Gateway 5XX Errors
 resource "aws_cloudwatch_metric_alarm" "api_5xx_errors" {
+  count               = var.api_id != "" ? 1 : 0
   alarm_name          = "${var.project_name}-${var.environment}-api-5xx-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -96,5 +97,24 @@ resource "aws_cloudwatch_metric_alarm" "api_5xx_errors" {
 
   dimensions = {
     ApiId = var.api_id
+  }
+}
+
+# CloudWatch Metric Alarm for Application Load Balancer 5XX Errors (Baseline)
+resource "aws_cloudwatch_metric_alarm" "alb_5xx_errors" {
+  count               = var.alb_arn_suffix != "" ? 1 : 0
+  alarm_name          = "${var.project_name}-${var.environment}-alb-5xx-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "HTTPCode_Target_5XX_Count"
+  namespace           = "AWS/ApplicationELB"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 5
+  alarm_description   = "ALB 5XX target errors detected on CampusHub backend"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+
+  dimensions = {
+    LoadBalancer = var.alb_arn_suffix
   }
 }

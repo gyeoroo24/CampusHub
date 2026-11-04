@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Redirect output to user-data log
+exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+echo "=== Starting CampusHub EC2 Baseline User Data Initialization ==="
+
+# 1. Install prerequisites
+dnf update -y
+dnf install -y python3.11 python3.11-pip git jq awscli
+
+# 2. Setup application directory
+APP_DIR="/opt/campushub"
+mkdir -p "$APP_DIR"
+cd "$APP_DIR"
+
+# 3. Retrieve DB credentials securely from AWS Secrets Manager
+echo "Retrieving database credentials from Secrets Manager..."
+SECRET_JSON=$(aws secretsmanager get-secret-value \
+  --secret-id "${db_secret_arn}" \
+  --region "${aws_region}" \
+  --query SecretString \
+  --output text)
+
+DB_PASS=$(echo "$SECRET_JSON" | jq -r '.password // empty')
+if [ -z "$DB_PASS" ]; then
+  DB_PASS=$(echo "$SECRET_JSON" | jq -r '.db_password // empty')
+fi
+
+# 4. Clone or fetch CampusHub backend code
+echo "Fetching CampusHub backend source..."
+git clone --depth 1 https://github.com/gyeoroo24/CampusHub.git "$APP_DIR/repo" || true
+
+if [ -d "$APP_DIR/repo/backend" ]; then
+  cp -r "$APP_DIR/repo/backend" "$APP_DIR/backend"
+else
+  # Fallback: create minimal healthy stub if repo is private without token
+  mkdir -p "$APP_DIR/backend/app"
+fi
+
+# 5. Write .env configuration file
+cat <<EOF > "$APP_DIR/backend/.env"
+CAMPUSHUB_DATABASE_URL=postgresql://${db_user}:$DB_PASS@${db_host}:5432/${db_name}
+CAMPUSHUB_DATABASE_SECRET_ARN=${db_secret_arn}
+CAMPUSHUB_AUTH_MODE=cognito
+CAMPUSHUB_COGNITO_REGION=${aws_region}
+CAMPUSHUB_COGNITO_USER_POOL_ID=${cognito_user_pool_id}
+CAMPUSHUB_COGNITO_APP_CLIENT_ID=${cognito_app_client_id}
+CAMPUSHUB_S3_BUCKET=${media_bucket_id}
+CAMPUSHUB_S3_REGION=${aws_region}
+CAMPUSHUB_CORS_ALLOW_ORIGINS=["*"]
+CAMPUSHUB_ORIGIN_VERIFY_SECRET=${origin_verify_header}
+EOF
+
+chmod 600 "$APP_DIR/backend/.env"
+
+# 6. Install dependencies in a virtual environment
+python3.11 -m venv "$APP_DIR/venv"
+"$APP_DIR/venv/bin/pip" install --upgrade pip
+if [ -f "$APP_DIR/backend/requirements.txt" ]; then
+  "$APP_DIR/venv/bin/pip" install --no-cache-dir -r "$APP_DIR/backend/requirements.txt" "uvicorn[standard]==0.34.0" || true
+else
+  "$APP_DIR/venv/bin/pip" install fastapi uvicorn[standard] psycopg2-binary
+fi
+
+# 7. Create systemd unit service
+cat <<'SERVICE' > /etc/systemd/system/campushub.service
+[Unit]
+Description=CampusHub FastAPI Backend (Baseline EC2)
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/opt/campushub/backend
+EnvironmentFile=/opt/campushub/backend/.env
+ExecStart=/opt/campushub/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+# Set ownership
+chown -R ec2-user:ec2-user "$APP_DIR"
+
+# 8. Start and enable systemd service
+systemctl daemon-reload
+systemctl enable --now campushub.service
+
+echo "=== CampusHub EC2 Baseline User Data Completed Successfully ==="

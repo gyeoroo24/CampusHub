@@ -45,45 +45,34 @@ module "auth" {
   additional_callback_urls = var.additional_callback_urls
 }
 
-# 5. BACKEND APP TIER (5 Serverless FastAPI Lambda Microservices in VPC)
-module "compute" {
-  source = "./modules/compute"
+# 5. BASELINE COMPUTE TIER (EC2 Auto Scaling Group running unified FastAPI container behind ALB)
+module "compute_ec2" {
+  source = "./modules/compute_ec2"
 
-  environment                  = var.environment
-  project_name                 = var.project_name
-  aws_region                   = var.aws_region
-  lambda_subnet_ids            = module.networking.lambda_subnet_ids
-  app_security_group_id        = module.networking.app_security_group_id
-  db_host                      = module.database.db_address
-  db_name                      = module.database.db_name
-  db_user                      = module.database.db_username
-  db_secret_arn                = module.database.db_secret_arn
-  media_bucket_id              = module.storage.media_bucket_id
-  media_bucket_arn             = module.storage.media_bucket_arn
-  cognito_user_pool_id         = module.auth.user_pool_id
-  cognito_app_client_id        = module.auth.user_pool_client_id
-  lambda_memory_size           = var.lambda_memory_size
-  tesseract_layer_zip          = var.tesseract_layer_zip
-  ml_layer_zip                 = var.ml_layer_zip
-  community_events_memory_size = var.community_events_memory_size
+  environment           = var.environment
+  project_name          = var.project_name
+  aws_region            = var.aws_region
+  vpc_id                = module.networking.vpc_id
+  public_subnet_ids     = module.networking.public_subnet_ids
+  app_subnet_ids        = module.networking.app_subnet_ids
+  app_security_group_id = module.networking.app_security_group_id
+  alb_security_group_id = module.networking.alb_security_group_id
+  instance_type         = var.ec2_instance_type
+  db_host               = module.database.db_address
+  db_name               = module.database.db_name
+  db_user               = module.database.db_username
+  db_secret_arn         = module.database.db_secret_arn
+  media_bucket_id       = module.storage.media_bucket_id
+  media_bucket_arn      = module.storage.media_bucket_arn
+  cognito_user_pool_id  = module.auth.user_pool_id
+  cognito_app_client_id = module.auth.user_pool_client_id
+  origin_verify_header  = var.origin_verify_header
+  asg_min_size          = var.asg_min_size
+  asg_max_size          = var.asg_max_size
+  asg_desired_capacity  = var.asg_desired_capacity
 }
 
-# 6. API GATEWAY TIER (HTTP API v2, Cognito JWT Authorizer, Routes, Throttling)
-module "api_gateway" {
-  source = "./modules/api_gateway"
-
-  environment                 = var.environment
-  project_name                = var.project_name
-  cognito_user_pool_id        = module.auth.user_pool_id
-  cognito_user_pool_client_id = module.auth.user_pool_client_id
-  cognito_user_pool_endpoint  = module.auth.user_pool_endpoint
-  lambda_invoke_arns          = module.compute.lambda_invoke_arns
-  lambda_function_names       = module.compute.lambda_function_names
-  throttling_rate_limit       = var.throttling_rate_limit
-  throttling_burst_limit      = var.throttling_burst_limit
-}
-
-# 7. OPTIONAL EDGE SECURITY TIER (AWS WAFv2 - Toggleable to preserve Free Tier)
+# 6. OPTIONAL EDGE SECURITY TIER (AWS WAFv2 - Toggleable to preserve Free Tier)
 module "waf" {
   count  = var.enable_waf ? 1 : 0
   source = "./modules/waf"
@@ -96,7 +85,7 @@ module "waf" {
   project_name = var.project_name
 }
 
-# 8. EDGE & CONTENT DELIVERY TIER (CloudFront CDN with OAC & Multi-Origin Routing)
+# 7. EDGE & CONTENT DELIVERY TIER (CloudFront CDN with OAC & Multi-Origin Routing)
 module "cdn" {
   count  = var.enable_cloudfront ? 1 : 0
   source = "./modules/cdn"
@@ -106,7 +95,9 @@ module "cdn" {
   frontend_bucket_id                   = module.storage.frontend_bucket_id
   frontend_bucket_arn                  = module.storage.frontend_bucket_arn
   frontend_bucket_regional_domain_name = module.storage.frontend_bucket_regional_domain_name
-  api_endpoint                         = module.api_gateway.api_endpoint
+  api_endpoint                         = module.compute_ec2.alb_dns_name
+  origin_protocol_policy               = "http-only"
+  origin_verify_header                 = var.origin_verify_header
   web_acl_arn                          = var.enable_waf ? module.waf[0].web_acl_arn : ""
 }
 
@@ -136,30 +127,15 @@ resource "aws_s3_bucket_policy" "frontend_cloudfront_oac" {
   })
 }
 
-# 9. MONITORING, TELEMETRY & COST CONTROL TIER (CloudWatch, Budgets, SNS)
+# 8. MONITORING, TELEMETRY & COST CONTROL TIER (CloudWatch, Budgets, SNS)
 module "monitoring" {
   source = "./modules/monitoring"
 
-  environment           = var.environment
-  project_name          = var.project_name
-  alert_email           = var.alert_email
-  monthly_budget_usd    = var.monthly_budget_usd
-  api_id                = module.api_gateway.api_id
-  db_instance_id        = module.database.db_instance_id
-  lambda_function_names = module.compute.lambda_function_names
-}
-
-# 10. DATA TOOLS: database snapshot export/restore, run inside the VPC (see modules/data_tools)
-module "data_tools" {
-  source = "./modules/data_tools"
-
-  environment           = var.environment
-  project_name          = var.project_name
-  lambda_subnet_ids     = module.networking.lambda_subnet_ids
-  app_security_group_id = module.networking.app_security_group_id
-  db_host               = module.database.db_address
-  db_name               = module.database.db_name
-  db_secret_arn         = module.database.db_secret_arn
-  media_bucket_id       = module.storage.media_bucket_id
-  media_bucket_arn      = module.storage.media_bucket_arn
+  environment        = var.environment
+  project_name       = var.project_name
+  alert_email        = var.alert_email
+  monthly_budget_usd = var.monthly_budget_usd
+  db_instance_id     = module.database.db_instance_id
+  alb_arn_suffix     = module.compute_ec2.alb_arn_suffix
+  asg_name           = module.compute_ec2.asg_name
 }

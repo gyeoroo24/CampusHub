@@ -8,6 +8,16 @@ output "vpc_cidr_block" {
   value       = aws_vpc.main.cidr_block
 }
 
+output "public_subnet_ids" {
+  description = "List of IDs of public subnets for ALB"
+  value       = aws_subnet.public[*].id
+}
+
+output "app_subnet_ids" {
+  description = "List of IDs of subnets for EC2 App tier"
+  value       = aws_subnet.lambda[*].id
+}
+
 output "lambda_subnet_ids" {
   description = "List of IDs of private subnets for Lambda functions"
   value       = aws_subnet.lambda[*].id
@@ -18,8 +28,13 @@ output "database_subnet_ids" {
   value       = aws_subnet.database[*].id
 }
 
+output "alb_security_group_id" {
+  description = "Security Group ID for Application Load Balancer"
+  value       = aws_security_group.alb_sg.id
+}
+
 output "app_security_group_id" {
-  description = "Security Group ID for Lambda Application tier"
+  description = "Security Group ID for Application tier"
   value       = aws_security_group.app_sg.id
 }
 

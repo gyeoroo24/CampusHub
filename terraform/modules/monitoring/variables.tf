@@ -23,8 +23,9 @@ variable "monthly_budget_usd" {
 }
 
 variable "api_id" {
-  description = "API Gateway HTTP API ID"
+  description = "API Gateway HTTP API ID (Optional in baseline)"
   type        = string
+  default     = ""
 }
 
 variable "db_instance_id" {
@@ -33,6 +34,19 @@ variable "db_instance_id" {
 }
 
 variable "lambda_function_names" {
-  description = "Map of Lambda function names"
+  description = "Map of Lambda function names (Empty in baseline)"
   type        = map(string)
+  default     = {}
+}
+
+variable "alb_arn_suffix" {
+  description = "Application Load Balancer ARN Suffix for alarms"
+  type        = string
+  default     = ""
+}
+
+variable "asg_name" {
+  description = "Auto Scaling Group name for alarms"
+  type        = string
+  default     = ""
 }

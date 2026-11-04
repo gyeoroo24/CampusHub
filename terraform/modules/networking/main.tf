@@ -9,7 +9,52 @@ resource "aws_vpc" "main" {
   }
 }
 
-# Private Subnets for Lambda Functions (App Tier)
+# Internet Gateway for Public Ingress (ALB) and Free Egress (No NAT Gateway charge)
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "campushub-${var.environment}-igw"
+  }
+}
+
+# Public Subnets across 3 AZs for Application Load Balancer
+resource "aws_subnet" "public" {
+  count             = length(var.public_subnet_cidrs)
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = var.public_subnet_cidrs[count.index]
+  availability_zone = var.availability_zones[count.index]
+
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "campushub-${var.environment}-public-subnet-${var.availability_zones[count.index]}"
+    Tier = "PublicTier"
+  }
+}
+
+# Route Table for Public Subnets
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
+
+  tags = {
+    Name = "campushub-${var.environment}-public-rt"
+  }
+}
+
+# Route Table Association for Public Subnets
+resource "aws_route_table_association" "public" {
+  count          = length(aws_subnet.public)
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public.id
+}
+
+# Subnets for App Tier (EC2 Instances in Baseline / Lambda in Serverless)
 resource "aws_subnet" "lambda" {
   count             = length(var.lambda_subnet_cidrs)
   vpc_id            = aws_vpc.main.id
@@ -19,7 +64,7 @@ resource "aws_subnet" "lambda" {
   map_public_ip_on_launch = false
 
   tags = {
-    Name = "campushub-${var.environment}-lambda-private-subnet-${var.availability_zones[count.index]}"
+    Name = "campushub-${var.environment}-app-subnet-${var.availability_zones[count.index]}"
     Tier = "AppTier"
   }
 }
@@ -39,12 +84,17 @@ resource "aws_subnet" "database" {
   }
 }
 
-# Route Table for Private Lambda Subnets
+# Route Table for App Subnets (Routes to IGW for zero-cost outbound to Cognito/packages; inbound locked by SG)
 resource "aws_route_table" "lambda" {
   vpc_id = aws_vpc.main.id
 
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
+
   tags = {
-    Name = "campushub-${var.environment}-lambda-rt"
+    Name = "campushub-${var.environment}-app-rt"
   }
 }
 
@@ -76,7 +126,7 @@ resource "aws_vpc_endpoint" "s3" {
   vpc_id            = aws_vpc.main.id
   service_name      = "com.amazonaws.${var.aws_region}.s3"
   vpc_endpoint_type = "Gateway"
-  route_table_ids   = [aws_route_table.lambda.id]
+  route_table_ids   = [aws_route_table.lambda.id, aws_route_table.public.id]
 
   tags = {
     Name = "campushub-${var.environment}-s3-gateway-endpoint"

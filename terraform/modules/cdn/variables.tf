@@ -41,3 +41,15 @@ variable "price_class" {
   type        = string
   default     = "PriceClass_200"
 }
+
+variable "origin_protocol_policy" {
+  description = "Origin protocol policy for backend API origin (http-only for ALB, https-only for API Gateway)"
+  type        = string
+  default     = "http-only"
+}
+
+variable "origin_verify_header" {
+  description = "Optional secret header value to send to backend origin"
+  type        = string
+  default     = "CampusHub-Origin-Auth-Baseline"
+}

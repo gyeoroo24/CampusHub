@@ -49,17 +49,25 @@ resource "aws_cloudfront_distribution" "distribution" {
   }
 
   # ==========================================
-  # Origin 2: API Gateway HTTP API (/api/*)
+  # Origin 2: Backend API (/api/*) - ALB or API Gateway
   # ==========================================
   origin {
     domain_name = local.api_gateway_domain
-    origin_id   = "APIGateway-Origin"
+    origin_id   = "Backend-API-Origin"
 
     custom_origin_config {
       http_port              = 80
       https_port             = 443
-      origin_protocol_policy = "https-only"
+      origin_protocol_policy = var.origin_protocol_policy
       origin_ssl_protocols   = ["TLSv1.2"]
+    }
+
+    dynamic "custom_header" {
+      for_each = var.origin_verify_header != "" ? [var.origin_verify_header] : []
+      content {
+        name  = "X-Origin-Verify"
+        value = custom_header.value
+      }
     }
   }
 
@@ -80,10 +88,10 @@ resource "aws_cloudfront_distribution" "distribution" {
     }
   }
 
-  # Ordered Cache Behavior -> Routes /api/* traffic directly to API Gateway
+  # Ordered Cache Behavior -> Routes /api/* traffic directly to Backend (ALB / EC2 / API Gateway)
   ordered_cache_behavior {
     path_pattern           = "/api/*"
-    target_origin_id       = "APIGateway-Origin"
+    target_origin_id       = "Backend-API-Origin"
     viewer_protocol_policy = "https-only"
     allowed_methods        = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
     cached_methods         = ["GET", "HEAD"]
