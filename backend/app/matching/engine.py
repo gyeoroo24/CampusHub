@@ -181,7 +181,7 @@ Push = tuple[list[UUID], dict]
 async def match_report(conn: asyncpg.Connection, kind: Kind, report_id: UUID, embedder: Embedder) -> list[Push]:
     """Recompute this report's matches. Returns the pushes to deliver for new strong matches."""
     me = await conn.fetchrow(
-        f"""SELECT id, reporter_id, description, category_id, {kind.when} AS at, status::text AS status,
+        f"""SELECT id, reporter_id, concat_ws('. ', title, description) AS description, category_id, {kind.when} AS at, status::text AS status,
                    deleted_at, match_rev FROM {kind.table} WHERE id = $1""", report_id)
     if me is None:
         return []
@@ -196,7 +196,7 @@ async def match_report(conn: asyncpg.Connection, kind: Kind, report_id: UUID, em
     time_rule = (f"c.{other.when} >= $2::timestamptz - interval '1 day'" if kind is LOST
                  else f"c.{other.when} <= $2::timestamptz + interval '1 day'")
     candidates = await conn.fetch(
-        f"""SELECT c.id, c.description, c.category_id FROM {other.table} c
+        f"""SELECT c.id, concat_ws('. ', c.title, c.description) AS description, c.category_id FROM {other.table} c
             WHERE c.status = 'open' AND c.deleted_at IS NULL AND c.reporter_id <> $1 AND {time_rule}
             ORDER BY c.created_at DESC LIMIT {MAX_CANDIDATES}""", me["reporter_id"], me["at"])
 

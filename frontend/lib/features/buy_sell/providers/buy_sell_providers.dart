@@ -189,7 +189,7 @@ class BuySellPaginationNotifier extends StateNotifier<PaginatedFeedState<Listing
 
   /// One page from the server with the current filters. Category chips hold names, so the name is
   /// turned into the server's category id; a preset chip with no server category matches nothing.
-  Future<PaginatedResponse<ListingItem>?> _fetch(int offset) async {
+  Future<PaginatedResponse<ListingItem>?> _fetch(int offset, {int limit = _pageSize}) async {
     final repo = _ref.read(buySellRepositoryProvider);
     final filter = _ref.read(buySellFilterProvider);
     int? categoryId;
@@ -209,9 +209,26 @@ class BuySellPaginationNotifier extends StateNotifier<PaginatedFeedState<Listing
       maxPrice: filter.maxPrice,
       statusList: statusList,
       sortOption: filter.sortOption,
-      limit: _pageSize,
+      limit: limit,
       offset: offset,
     );
+  }
+
+  /// Reloads the listings already on screen without a spinner, so status changes made elsewhere (an offer
+  /// accepted in Messages reserves the listing) show when the feed is opened again. Keeps the same number
+  /// of items, up to 50 (the API's page limit). Failures are ignored: the old list stays.
+  Future<void> refreshQuietly() async {
+    if (state.isLoadingInitial || state.isLoadingMore) return;
+    final count = state.items.length.clamp(_pageSize, 50);
+    try {
+      final paged = await _fetch(0, limit: count);
+      if (state.isLoadingInitial || state.isLoadingMore) return;
+      state = PaginatedFeedState(
+        items: paged?.items ?? const [],
+        hasMore: paged?.hasMore ?? false,
+        offset: paged?.items.length ?? 0,
+      );
+    } catch (_) {}
   }
 
   Future<void> loadInitial() async {

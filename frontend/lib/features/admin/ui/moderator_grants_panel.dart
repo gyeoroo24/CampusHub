@@ -17,12 +17,13 @@ const moduleLabels = {
   'events': 'Events',
 };
 
-/// The modules an admin can appoint moderators for. Academic Help has no section in the app, so it
-/// isn't offered (older Academic Help grants still show in the list and can be removed).
-const _appointableModules = ['buy_sell', 'lost_found', 'placement_hub', 'events'];
+/// The modules an admin can appoint moderators for. Academic Help is appointed per department or per
+/// course, so the admin also picks the scope (see _level).
+const _appointableModules = ['buy_sell', 'lost_found', 'academic_help', 'placement_hub', 'events'];
 
 /// Grant and revoke moderator roles (FR-3), by the rules the API enforces:
-/// - the admin grants module-wide roles for Buy & Sell, Lost & Found, Placement Hub and Events;
+/// - the admin grants module-wide roles for Buy & Sell, Lost & Found, Placement Hub and Events, and
+///   department or course roles for Academic Help;
 /// - a department moderator grants and revokes course moderators for courses in their department.
 /// The person must have signed in to CampusHub once, so their account exists.
 class ModeratorGrantsPanel extends ConsumerStatefulWidget {
@@ -189,6 +190,8 @@ class _ModeratorGrantsPanelState extends ConsumerState<ModeratorGrantsPanel> {
                               ? 'Buy & Sell, Lost & Found, Placement Hub and Events moderators cover the whole module: '
                                   'they handle its reports and can remove anyone\'s posts there. Placement Hub moderators '
                                   'also add companies, dates and placement sheets; Events moderators manage event tags. '
+                                  'Academic Help moderators cover one department (all its courses) or one course: they can '
+                                  'remove its materials, feedback and forum posts. Removing these creates no seller strike. '
                                   'The person must have signed in to CampusHub once.'
                               : 'As a department moderator you can appoint moderators for courses in your department. '
                                   'The person must have signed in to CampusHub once.',

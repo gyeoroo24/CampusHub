@@ -18,7 +18,7 @@ from .db import close_pool
 from .errors import install_error_handlers
 from .jobs import meal_alert_loop
 from .routers import (academic, auth_otp, campus_services, categories, chat, events, forums, listings, lost_found,
-                      mess, moderators, notifications, placement, reports, saved_searches, seller_trust, survival_guide,
+                      mess, moderators, my_posts, notifications, placement, reports, saved_searches, seller_trust, survival_guide,
                       uploads, users, wanted)
 
 logging.basicConfig(level=logging.INFO)
@@ -96,7 +96,8 @@ def create_app() -> FastAPI:
     # always gets 401. Routes that need the user reuse the same (cached) result.
     checked = [Depends(optional_user)]
     for module in (users, moderators, uploads, categories, listings, wanted, academic, survival_guide, forums, reports,
-                   notifications, saved_searches, campus_services, auth_otp, chat, seller_trust, placement, events, mess):
+                   notifications, saved_searches, campus_services, auth_otp, chat, seller_trust, placement, events, mess,
+                   my_posts):
         app.include_router(module.router, prefix=settings.api_prefix, dependencies=checked)
     app.include_router(listings.watch_router, prefix=settings.api_prefix, dependencies=checked)
     app.include_router(lost_found.lost_router, prefix=settings.api_prefix, dependencies=checked)

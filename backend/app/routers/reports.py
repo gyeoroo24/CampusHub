@@ -58,8 +58,8 @@ FORUM_MODULE = {"course": "academic_help", "department": "academic_help", "compa
 # target_type -> (table, owner column, SQL for a short title, what to call it in a notification)
 OWNED: dict[str, tuple[str, str, str, str]] = {
     "listing": ("listings", "seller_id", "title", "listing"),
-    "lost_report": ("lost_reports", "reporter_id", "left(description, 100)", "lost item report"),
-    "found_report": ("found_reports", "reporter_id", "left(description, 100)", "found item report"),
+    "lost_report": ("lost_reports", "reporter_id", "left(coalesce(title, description), 100)", "lost item report"),
+    "found_report": ("found_reports", "reporter_id", "left(coalesce(title, description), 100)", "found item report"),
     "course_material": ("course_materials", "uploaded_by", "title", "course material"),
     "course_feedback": ("course_feedback", "author_id", "left(content, 100)", "course review"),
     "thread": ("threads", "author_id", "title", "forum thread"),

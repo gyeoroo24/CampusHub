@@ -6,6 +6,7 @@ import '../../../../core/utils/validators.dart';
 import '../../../../core/storage/token_storage.dart';
 import '../../admin/data/admin_repository.dart';
 import '../domain/account_status.dart';
+import 'cognito_hosted_ui.dart';
 import '../domain/user.dart';
 
 abstract class IAuthRepository {
@@ -266,18 +267,37 @@ class MockAuthRepository implements IAuthRepository {
 class ApiAuthRepository implements IAuthRepository {
   final ApiClient apiClient;
   final ITokenStorage tokenStorage;
+  final CognitoHostedUi? cognito;
   final _controller = StreamController<User?>.broadcast();
   User? _cachedUser;
   bool _initialized = false;
+  bool _retriedAfterRefresh = false;
 
   ApiAuthRepository({
     required this.apiClient,
     required this.tokenStorage,
+    this.cognito,
   });
 
   Future<void> _init() async {
     if (_initialized) return;
     _initialized = true;
+
+    final hosted = cognito;
+    if (hosted != null) {
+      try {
+        // Back from the Hosted UI: swap the one-time code for tokens.
+        final tokens = await hosted.completeSignIn(CognitoHostedUi.launchUri ?? Uri.base);
+        if (tokens != null) {
+          await tokenStorage.saveTokens(accessToken: tokens.idToken, refreshToken: tokens.refreshToken);
+          // Load the profile now: this may be the only caller in the session, and nothing else
+          // would ask the server who the user is.
+          await getCurrentUser();
+        }
+      } catch (_) {
+        // A rejected code leaves the user signed out; they can try again.
+      }
+    }
 
     final savedUser = await tokenStorage.getSavedUser();
     if (savedUser != null) {
@@ -309,6 +329,15 @@ class ApiAuthRepository implements IAuthRepository {
         return _cachedUser;
       }
     } on ApiException catch (e) {
+      // An expired ID token (about an hour): renew it once with the refresh token, then retry.
+      if (e.statusCode == 401 && cognito != null && !_retriedAfterRefresh && await _refreshIdToken()) {
+        _retriedAfterRefresh = true;
+        try {
+          return await getCurrentUser();
+        } finally {
+          _retriedAfterRefresh = false;
+        }
+      }
       // Only a rejected sign-in ends the session; a network blip or server error keeps the
       // last known user so the app doesn't sign people out while the server restarts.
       if (e.statusCode == 401 || e.statusCode == 403) {
@@ -391,27 +420,43 @@ class ApiAuthRepository implements IAuthRepository {
     return AccountStatus.fromJson(data);
   }
 
-  @override
-  Future<void> sendOtp(String email) async {
-    // In cloud deployment (auth_mode=cognito), Cognito emails and verifies its own code at
-    // sign-up; this call 404s there and is skipped by the dialog. Locally, it emails a real code.
+  Future<bool> _refreshIdToken() async {
+    final refresh = await tokenStorage.getRefreshToken();
+    if (refresh == null || refresh.isEmpty) return false;
+    final tokens = await cognito!.refresh(refresh);
+    if (tokens == null) return false;
+    await tokenStorage.saveTokens(accessToken: tokens.idToken, refreshToken: tokens.refreshToken);
+    return true;
+  }
+
+  /// Cloud sign-in: sends the browser to Cognito's Hosted UI, which handles sign-up and the emailed code.
+  Future<void> startCognitoSignIn(String email, {bool signUp = false}) async {
+    final hosted = cognito;
+    if (hosted == null) throw Exception('Cognito sign-in is not set up for this build.');
     final trimmed = email.trim().toLowerCase();
     if (!isIiscEmail(trimmed)) {
       throw Exception('Only valid IISc email addresses (ending in iisc.ac.in) are accepted.');
     }
-    try {
-      await apiClient.post(ApiEndpoints.otpRequest, data: {'email': trimmed});
-    } on ApiException catch (e) {
-      if (e.statusCode == 404) return; // not dev auth: nothing to send, Cognito owns this step
-      rethrow;
+    await hosted.startSignIn(current: Uri.base, email: trimmed, signUp: signUp);
+  }
+
+  @override
+  Future<void> sendOtp(String email) async {
+    // Hardcoded sign-in code: no email is sent. The code is always 123456 (see verifyOtp).
+    final trimmed = email.trim().toLowerCase();
+    if (!isIiscEmail(trimmed)) {
+      throw Exception('Only valid IISc email addresses (ending in iisc.ac.in) are accepted.');
     }
   }
 
   @override
   Future<User> verifyOtp(String email, String otp) async {
-    // Local dev sign-in: check the code the user was emailed, then the email goes to the API in
-    // the X-Dev-User header. The server creates the account on first sign-in and returns the
-    // user's real roles from `/me`.
+    // Hardcoded sign-in code: only 123456 is accepted.
+    if (otp.trim() != '123456') {
+      throw Exception('Incorrect code. Use 123456.');
+    }
+    // Local dev sign-in: the email goes to the API in the X-Dev-User header. The server creates the
+    // account on first sign-in and returns the user's real roles from `/me`.
     final trimmedEmail = email.trim().toLowerCase();
     try {
       await apiClient.post(ApiEndpoints.otpVerify, data: {'email': trimmedEmail, 'otp': otp.trim()});
@@ -441,6 +486,11 @@ class ApiAuthRepository implements IAuthRepository {
     await tokenStorage.clearAll();
     _cachedUser = null;
     _controller.add(null);
+    final hosted = cognito;
+    if (hosted != null) {
+      // End the Hosted UI session too, or the next sign-in would log straight back in as this user.
+      await hosted.endSession(current: Uri.base);
+    }
   }
 
   @override

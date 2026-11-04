@@ -64,6 +64,7 @@ module "compute" {
   cognito_app_client_id        = module.auth.user_pool_client_id
   lambda_memory_size           = var.lambda_memory_size
   tesseract_layer_zip          = var.tesseract_layer_zip
+  ml_layer_zip                 = var.ml_layer_zip
   community_events_memory_size = var.community_events_memory_size
 }
 

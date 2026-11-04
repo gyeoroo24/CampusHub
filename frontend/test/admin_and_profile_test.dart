@@ -304,7 +304,7 @@ void main() {
       expect(find.text('User Accounts'), findsOneWidget);
       expect(find.text('Reports Queue'), findsOneWidget);
       expect(find.text('Categories'), findsOneWidget);
-      expect(find.text('Backend & Health'), findsOneWidget);
+      expect(find.text('Backend & Health'), findsNothing);
       expect(find.text('Campus Services'), findsOneWidget);
       expect(find.text('Appoint a moderator'), findsOneWidget);
     });
@@ -348,7 +348,6 @@ void main() {
       // A Buy & Sell moderator gets only the tools they can use: reports and categories.
       expect(find.text('Categories'), findsOneWidget);
       expect(find.text('User Accounts'), findsNothing);
-      expect(find.text('Backend & Health'), findsNothing);
       expect(find.text('Campus Services'), findsNothing);
       expect(find.text('Appoint a moderator'), findsNothing);
     });
@@ -400,41 +399,6 @@ void main() {
       expect(updated.useMockData, isFalse);
       expect(updated.apiBaseUrl, 'http://localhost:8000');
       expect(updated.devKey, 'test_key');
-    });
-
-    testWidgets('AdminControlsScreen tab 4 renders Live Demo Connection Card', (WidgetTester tester) async {
-      final adminUser = User(
-        id: 'usr_mock_001',
-        email: 'mukund@iisc.ac.in',
-        name: 'Mukund Kukreja',
-        isAdmin: true,
-        moderatorGrants: const [],
-        createdAt: DateTime.now(),
-      );
-
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            currentUserProvider.overrideWith((ref) => adminUser),
-            adminRepositoryProvider.overrideWithValue(MockAdminRepository()),
-            buySellCategoriesProvider.overrideWith((ref) => [const CategoryRef(id: 1, name: 'Books')]),
-            lostFoundCategoriesProvider.overrideWith((ref) => [const CategoryRef(id: 1, name: 'Electronics')]),
-          ],
-          child: const MaterialApp(
-            home: AdminControlsScreen(initialTab: 5), // after the Seller Strikes tab
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Live Demo Backend & Database Connection'), findsOneWidget);
-      expect(find.text('FastAPI Server Base URL'), findsOneWidget);
-      expect(find.text('Developer Security Key / Secret (X-Dev-Key)'), findsOneWidget);
-      expect(find.text('Test User Email Identity (X-Dev-User)'), findsOneWidget);
-      expect(find.text('Database Connection URI (Demo Reference)'), findsOneWidget);
-      expect(find.text('Save & Apply Backend'), findsOneWidget);
-      expect(find.text('Test Server & Database Connection'), findsOneWidget);
-      expect(find.text('Reset to Default Mock'), findsOneWidget);
     });
   });
 }

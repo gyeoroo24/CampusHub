@@ -4,6 +4,7 @@ The tests act as real clients with tests/chat_crypto.py, so they check both the 
 (who can see and do what) and that what it stores can only be read with the right keys.
 """
 import uuid
+from types import SimpleNamespace
 
 import pytest
 from cryptography.exceptions import InvalidTag
@@ -549,6 +550,18 @@ def test_delete_a_message_for_me_or_for_everyone(client, chat):
     assert client.delete(f"{API}/chat/messages/{mine['id']}", headers=RAVI).status_code == 204
     gone = [m for m in _messages(client, ASHA, conv["id"])["items"] if m["id"] == mine["id"]][0]
     assert gone["deleted_at"] is not None and gone["ciphertext"] is None
+
+
+def test_search_lists_only_people_who_signed_in(client, monkeypatch):
+    """A row from the local dev seed ("dev|...") was never signed in on the deployed app, so the search
+    leaves it out there. Dev auth lists everyone."""
+    for h in (KIRAN, RAVI, ASHA):
+        sign_in(client, h)
+    assert [u["name"] for u in client.get(f"{API}/users/search", params={"q": "asha"}, headers=KIRAN).json()] == ["Asha"]
+    sql("UPDATE users SET cognito_sub = $1 WHERE email = $2", "3f2a9c1e-0d7b-4e8a-9c55-7a1b2c3d4e5f", "ravi@iisc.ac.in")
+    monkeypatch.setattr("app.routers.users.get_settings", lambda: SimpleNamespace(auth_mode="cognito"))
+    assert client.get(f"{API}/users/search", params={"q": "asha"}, headers=KIRAN).json() == []
+    assert [u["name"] for u in client.get(f"{API}/users/search", params={"q": "ravi"}, headers=KIRAN).json()] == ["Ravi"]
 
 
 def test_find_people_to_chat_with(client, chat):

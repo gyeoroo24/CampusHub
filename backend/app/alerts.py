@@ -38,11 +38,20 @@ FOUND_MATCHES_SEARCH = r"""
          '%' || replace(replace(replace(s.query, '\', '\\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
 """
 
-# Does listing l match Wanted post w? Same category, within budget, and at least one word of the
-# title in the listing (any word, so "Need a Hero cycle" matches "Hero Sprint 26T").
-LISTING_MATCHES_WANTED = """
+# How far above a Wanted post's budget a listing marked negotiable may be priced and still match.
+# A 2023 study of about 26 million eBay Best Offer negotiations (Leuphana University, PNAS) found the offer
+# that best balances price against the seller walking away averages 80% of the asking price. Allowing 20%
+# over budget is a little more cautious: a ₹3,600 negotiable listing matches a ₹3,000 budget if the buyer
+# offers about 83% of the asking price.
+NEGOTIABLE_MARGIN = "1.20"
+
+# Does listing l match Wanted post w? Same category, within budget (or within NEGOTIABLE_MARGIN of it when
+# the listing is negotiable), and at least one word of the title in the listing (any word, so "Need a Hero
+# cycle" matches "Hero Sprint 26T").
+LISTING_MATCHES_WANTED = f"""
     w.category_id = l.category_id
-    AND (w.max_price IS NULL OR l.price <= w.max_price)
+    AND (w.max_price IS NULL OR l.price <= w.max_price
+         OR (l.negotiable AND l.price <= w.max_price * {NEGOTIABLE_MARGIN}))
     AND (numnode(plainto_tsquery('english', w.title)) = 0
          OR l.search_vector @@ replace(plainto_tsquery('english', w.title)::text, ' & ', ' | ')::tsquery)
 """

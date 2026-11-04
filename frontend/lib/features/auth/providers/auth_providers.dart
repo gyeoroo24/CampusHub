@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/config/server_config.dart';
+import '../../../core/constants/app_config.dart';
 import '../../../core/storage/token_storage.dart';
 import '../data/auth_repository.dart';
+import '../data/cognito_hosted_ui.dart';
 import '../domain/user.dart';
 
 final tokenStorageProvider = Provider<ITokenStorage>((ref) {
@@ -29,6 +31,9 @@ final authRepositoryProvider = Provider<IAuthRepository>((ref) {
   return ApiAuthRepository(
     apiClient: ref.watch(apiClientProvider),
     tokenStorage: tokenStorage,
+    cognito: AppConfig.cognitoEnabled
+        ? CognitoHostedUi(domain: AppConfig.cognitoDomain, clientId: AppConfig.cognitoClientId)
+        : null,
   );
 });
 

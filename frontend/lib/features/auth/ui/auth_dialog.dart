@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/api/api_exception.dart';
+import '../../../../core/constants/app_config.dart';
 import '../../../../core/config/server_config.dart';
 import '../../../../core/utils/error_text.dart';
 import '../../../../core/utils/validators.dart';
+import '../data/auth_repository.dart';
 import '../providers/auth_providers.dart';
 
 /// Modal dialog prompting the user to sign in with their IISc email address and OTP.
@@ -73,7 +75,13 @@ class _AuthDialogState extends ConsumerState<AuthDialog> {
 
     try {
       final email = _emailController.text.trim();
-      await ref.read(authRepositoryProvider).sendOtp(email);
+      final repository = ref.read(authRepositoryProvider);
+      if (AppConfig.cognitoEnabled && repository is ApiAuthRepository) {
+        // Cloud: the Hosted UI takes over (sign-up and the emailed code), then the browser comes back.
+        await repository.startCognitoSignIn(email);
+        return;
+      }
+      await repository.sendOtp(email);
 
       if (mounted) {
         setState(() {
@@ -198,12 +206,40 @@ class _AuthDialogState extends ConsumerState<AuthDialog> {
     );
   }
 
+  Future<void> _handleCreateAccount() async {
+    if (!_emailFormKey.currentState!.validate()) return;
+    final repository = ref.read(authRepositoryProvider);
+    if (repository is! ApiAuthRepository) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      // Cloud: Cognito's sign-up page takes the IISc email, then emails the verification code.
+      await repository.startCognitoSignIn(_emailController.text.trim(), signUp: true);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = errorText(e);
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   List<Widget> _buildEmailActions() {
+    final cloud = AppConfig.cognitoEnabled;
     return [
-      TextButton(
+      FilledButton(
+        style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700, foregroundColor: Colors.white),
         onPressed: _isLoading ? null : () => Navigator.of(context).pop(false),
-        child: const Text('Cancel / Browse as Guest'),
+        child: const Text('Cancel'),
       ),
+      if (cloud)
+        OutlinedButton(
+          onPressed: _isLoading ? null : _handleCreateAccount,
+          child: const Text('Create account'),
+        ),
       FilledButton.icon(
         onPressed: _isLoading ? null : _handleSendOtp,
         icon: _isLoading
@@ -213,7 +249,7 @@ class _AuthDialogState extends ConsumerState<AuthDialog> {
                 child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
               )
             : const Icon(Icons.arrow_forward_rounded, size: 16),
-        label: const Text('Send OTP'),
+        label: Text(cloud ? 'Sign in' : 'Send OTP'),
       ),
     ];
   }

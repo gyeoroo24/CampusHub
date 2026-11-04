@@ -17,6 +17,7 @@ import '../../lost_found/providers/lost_found_providers.dart';
 import '../../lost_found/ui/widgets/edit_report_dialog.dart';
 import '../../lost_found/ui/widgets/lost_found_detail_dialog.dart';
 import '../../wanted/providers/wanted_providers.dart';
+import '../data/my_posts.dart';
 import 'role_card.dart';
 import 'verify_phone_dialog.dart';
 import '../../wanted/ui/wanted_feed_sliver.dart';
@@ -28,10 +29,7 @@ class UserProfileScreen extends ConsumerStatefulWidget {
   ConsumerState<UserProfileScreen> createState() => _UserProfileScreenState();
 }
 
-class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _postingsTabController;
-
+class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
   bool _isEditingProfile = false;
   bool _isSavingProfile = false;
 
@@ -45,7 +43,6 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
   @override
   void initState() {
     super.initState();
-    _postingsTabController = TabController(length: 5, vsync: this);
     final user = ref.read(currentUserProvider);
     _populateFields(user);
   }
@@ -63,7 +60,6 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
 
   @override
   void dispose() {
-    _postingsTabController.dispose();
     _nameController.dispose();
     _phoneController.dispose();
     _programmeController.dispose();
@@ -559,7 +555,27 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
   // Postings & Activity Hub Section
   // ---------------------------------------------------------------------------
   Widget _buildPostingsSection(User user, bool isDark, ThemeData theme) {
-    return Column(
+    // Moderators and the admin also see the companies and the events/mess menus they added.
+    final tabs = <(String, Widget Function())>[
+      ('Buy & Sell Listings', () => _buildMyBuySellList(user, isDark, theme)),
+      ('Lost Reports', () => _buildMyLostReportsList(user, isDark, theme)),
+      ('Found Reports', () => _buildMyFoundReportsList(user, isDark, theme)),
+      ('Wanted Posts', _buildMyWantedList),
+      ('Course Feedback', () => _buildMyPostsList((p) => p.feedback, Icons.rate_review_outlined,
+          'No Course Feedback Yet', 'Feedback you leave on a course is listed here.')),
+      ('Course Materials', () => _buildMyPostsList((p) => p.materials, Icons.description_outlined,
+          'No Course Materials Yet', 'Notes, past papers and other files you share on a course are listed here.')),
+      if (user.isModerator) ...[
+        ('Placement Companies', () => _buildMyPostsList((p) => p.companies, Icons.business_outlined,
+            'No Companies Added', 'Companies you add to the Placement Hub, by hand or from a CSV, are listed here.')),
+        ('Events & Mess Menus', () => _buildMyPostsList((p) => p.events, Icons.event_outlined,
+            'No Events or Menus Added', 'Events you create and mess menus you upload are listed here.')),
+      ],
+    ];
+    return DefaultTabController(
+      key: ValueKey(tabs.length),
+      length: tabs.length,
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
@@ -568,40 +584,27 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
         ),
         const SizedBox(height: 4),
         Text(
-          'Review, edit details, update post statuses, or delete your own submissions across Buy & Sell and Lost & Found.',
+          'Review, edit details, update post statuses, or delete your own submissions across CampusHub.',
           style: TextStyle(fontSize: 12, color: theme.hintColor),
         ),
         const SizedBox(height: 12),
 
         TabBar(
-          controller: _postingsTabController,
           isScrollable: true,
           tabAlignment: TabAlignment.start,
           indicatorColor: theme.colorScheme.primary,
-          tabs: const [
-            Tab(text: 'Buy & Sell Listings'),
-            Tab(text: 'Lost Reports'),
-            Tab(text: 'Found Reports'),
-            Tab(text: 'Wanted Posts'),
-            Tab(text: 'Academic & Placement'),
-          ],
+          tabs: [for (final t in tabs) Tab(text: t.$1)],
         ),
         const SizedBox(height: 16),
 
         SizedBox(
           height: 520,
           child: TabBarView(
-            controller: _postingsTabController,
-            children: [
-              _buildMyBuySellList(user, isDark, theme),
-              _buildMyLostReportsList(user, isDark, theme),
-              _buildMyFoundReportsList(user, isDark, theme),
-              _buildMyWantedList(),
-              _buildAcademicPlaceholder(isDark, theme),
-            ],
+            children: [for (final t in tabs) t.$2()],
           ),
         ),
       ],
+      ),
     );
   }
 
@@ -964,7 +967,6 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
     );
   }
 
-  // ── Tab 4: Academic Placeholder ──
   // ── Tab 4: My Wanted posts (open, fulfilled and closed) ──
   Widget _buildMyWantedList() {
     return ref.watch(myWantedPostsProvider).when(
@@ -983,11 +985,33 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
         );
   }
 
-  Widget _buildAcademicPlaceholder(bool isDark, ThemeData theme) {
-    return _buildEmptyState(
-      'No Academic Help or Placement Posts Yet',
-      'Course feedback, exam solutions, and interview reviews will be listed here once submitted.',
-    );
+  // ── Tabs 5 onwards: course feedback and materials; companies, events and mess menus (moderators) ──
+  Widget _buildMyPostsList(List<MyPost> Function(MyPosts) pick, IconData icon, String emptyTitle, String emptyText) {
+    return ref.watch(myPostsProvider).when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('Failed to load: ${errorText(e)}')),
+          data: (all) {
+            final posts = pick(all);
+            if (posts.isEmpty) return _buildEmptyState(emptyTitle, emptyText);
+            return RefreshIndicator(
+              onRefresh: () => ref.refresh(myPostsProvider.future),
+              child: ListView.separated(
+                itemCount: posts.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (_, i) {
+                  final p = posts[i];
+                  return ListTile(
+                    leading: Icon(icon),
+                    title: Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(p.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    trailing: Text(DateTimeFormatter.timeAgo(p.createdAt), style: const TextStyle(fontSize: 11)),
+                    onTap: () => context.push(p.route),
+                  );
+                },
+              ),
+            );
+          },
+        );
   }
 
   Widget _buildEmptyState(String title, String subtitle) {

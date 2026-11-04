@@ -209,6 +209,10 @@ class _ConversationViewState extends ConsumerState<ConversationView> {
     try {
       await _controller.answerOffer(m.id, action);
       ref.invalidate(conversationsProvider);
+      // Accepting reserves the listing (and withdrawing or declining may free it): update the Buy & Sell feed.
+      ref.read(buySellPaginationProvider.notifier).refreshQuietly();
+      ref.invalidate(buySellListingsProvider);
+      ref.invalidate(myBuySellListingsProvider);
     } catch (e) {
       if (mounted) _snack(context, e);
     }
@@ -233,7 +237,8 @@ class _ConversationViewState extends ConsumerState<ConversationView> {
     final all = state.ordered;
     final filter = c.topic(_filterTopicId);
     final messages = filter == null ? all : all.where((m) => m.topicId == filter.id).toList();
-    // Read receipt: "Seen" goes under the newest of my messages the other person has read.
+    // Read receipts: every message of mine up to the other person's last read one shows two blue ticks, and
+    // the word "Seen" goes under the newest of them.
     final seenId = all.where((m) => m.mine && !m.isDeleted && m.seq <= c.peerLastReadSeq).lastOrNull?.id;
     final about = c.topic(_about(state));
 
@@ -289,6 +294,7 @@ class _ConversationViewState extends ConsumerState<ConversationView> {
                   _Bubble(
                     message: m,
                     peerName: c.peerName,
+                    read: m.mine && m.seq <= c.peerLastReadSeq,
                     seen: m.id == seenId,
                     onLongPress: () => _messageActions(m),
                     onAnswer: (action) => _answer(m, action),
@@ -571,6 +577,11 @@ class _KeyChangedNotice extends StatelessWidget {
 class _Bubble extends StatefulWidget {
   final ChatMessage message;
   final String peerName;
+
+  /// The other person has read this message (two blue ticks).
+  final bool read;
+
+  /// The newest message the other person has read: also labelled "Seen".
   final bool seen;
   final VoidCallback onLongPress;
   final ValueChanged<String> onAnswer;
@@ -578,6 +589,7 @@ class _Bubble extends StatefulWidget {
   const _Bubble({
     required this.message,
     required this.peerName,
+    required this.read,
     required this.seen,
     required this.onLongPress,
     required this.onAnswer,
@@ -596,6 +608,7 @@ class _BubbleState extends State<_Bubble> {
   Widget build(BuildContext context) {
     final m = widget.message;
     final peerName = widget.peerName;
+    final read = widget.read;
     final seen = widget.seen;
     final onLongPress = widget.onLongPress;
     final onAnswer = widget.onAnswer;
@@ -681,9 +694,9 @@ class _BubbleState extends State<_Bubble> {
                   if (mine && !m.isDeleted) ...[
                     const SizedBox(width: 4),
                     Icon(
-                      seen ? Icons.done_all_rounded : Icons.done_rounded,
+                      read ? Icons.done_all_rounded : Icons.done_rounded,
                       size: 13,
-                      color: seen ? theme.colorScheme.primary : theme.hintColor,
+                      color: read ? theme.colorScheme.primary : theme.hintColor,
                     ),
                     if (seen) Text(' Seen', style: TextStyle(fontSize: 10, color: theme.colorScheme.primary)),
                   ],

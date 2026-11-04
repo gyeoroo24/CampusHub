@@ -309,9 +309,10 @@ void main() {
     await tester.tap(find.text('Open Dialog'));
     await tester.pumpAndSettle();
 
-    // Fill form
-    await tester.enterText(find.byType(TextFormField).first, 'Lost Backpack with laptop');
+    // Fill form: title, location, description
+    await tester.enterText(find.byType(TextFormField).first, 'Black backpack');
     await tester.enterText(find.byType(TextFormField).at(1), 'Gymkhana Grounds');
+    await tester.enterText(find.byType(TextFormField).at(2), 'Lost Backpack with laptop');
 
     // Submit
     await tester.tap(find.text('Submit Lost Report'));

@@ -15,6 +15,7 @@ class ApiEndpoints {
   static const String me = '$version/me';
   static const String phoneCode = '$version/me/phone/code';
   static const String phoneVerify = '$version/me/phone/verify';
+  static const String myPosts = '$version/me/posts';
   static String user(String id) => '$version/users/$id';
   static const String userLookup = '$version/users/lookup';
   static String userMakeAdmin(String id) => '$version/users/$id/make-admin';

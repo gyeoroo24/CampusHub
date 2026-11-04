@@ -109,6 +109,7 @@ Ten endpoints cover the signed-in user's profile, other people's public profiles
 | PATCH | `/me` | user | Edit my `name`, `department_id`, `programme`, `graduation_year`. `phone` only accepts `null` (removes it) |
 | POST | `/me/phone/code` | user | `{"phone": "+919876543210"}` (E.164): sends a 6-digit code to that number. No SMS provider yet, so the code is logged; while sign-in codes are hard-coded for testing, it is `123456` |
 | POST | `/me/phone/verify` | user | `{"phone", "code"}`: saves the number on my profile and returns it. 401 for a wrong code |
+| GET | `/me/posts` | user | My course feedback and materials, and the companies, events and mess menus I added (moderators/admin; empty lists for others). Newest first, at most 200 each, removed items left out |
 | GET | `/users/{user_id}` | guest | Someone's public profile; `contact` only for signed-in viewers |
 | GET | `/users/lookup?email=` | admin | Find an account by email; returns `id`, `email`, `name`, `is_active`, `is_admin`. 404 if nobody with that email has signed in yet. Use it before deactivating or handing over the admin role |
 | PATCH | `/users/{user_id}` | admin | Deactivate or reactivate an account: `{"is_active": false}`. Not your own. Returns `id`, `email`, `name`, `is_active`, `is_admin` |
@@ -169,7 +170,7 @@ Lost reports and found reports have identical endpoints. Swap `/lost-reports` fo
 | POST | `/lost-found/categories` | user | Add a category by `name`, or get the existing one with that name |
 | GET | `/lost-found/categories/suggest?title=` | guest | The existing category that clearly fits a title, or `{"category": null}`. Never invents one; see Buy & Sell |
 | GET | `/lost-reports` | guest | Browse. Filters: `q` (description), `category_id`, `status` (repeatable), `reporter_id`, `from_date` and `to_date` (when the item was lost or found; send a time zone). `sort`: `newest` (default) or `oldest`, by when the report was filed |
-| POST | `/lost-reports` | user | File a report: `description`, `category_id`, `occurred_at`, `location`, `photo_keys` (up to 10). The reply includes `possible_matches` |
+| POST | `/lost-reports` | user | File a report: `title` (optional, up to 120 characters; rev 25), `description`, `category_id`, `occurred_at`, `location`, `photo_keys` (up to 10). The reply includes `possible_matches` |
 | GET | `/lost-reports/{id}` | guest | One report with photos; `reporter_contact` for signed-in users |
 | PATCH | `/lost-reports/{id}` | owner, admin | Edit `description`, `category_id`, `occurred_at`, `location` |
 | PATCH | `/lost-reports/{id}/status` | owner, admin | Set `status`: `open` or `closed` |
@@ -339,7 +340,7 @@ Each mess posts its menu for a month or so: what breakfast, lunch, snacks and di
 | PATCH / DELETE | `/messes/{id}` | events moderator, admin | Rename or change meal times; delete with its menus and followers |
 | PUT | `/messes/{id}/follow` | user | `{"meals": ["lunch", "dinner"]}`: the meals to be alerted about; `[]` unfollows |
 | GET | `/messes/{id}/menus` | guest | Current and upcoming menus, then the last few past ones (`past`, default 3) |
-| POST | `/messes/{id}/menus` | events moderator, admin | Post a menu: `valid_from`, `valid_to` (at most about 3 months), `file_s3_key` (upload kind `mess_menu`: the PDF or photo) and/or `items` (`weekday` 1 = Monday … 7, `meal`, `items`), `notes`. The file alone is enough; typed-in meals put the dishes into the alerts. Menus of one mess can't overlap (409), except that a menu with meals replaces an overlapping menu that has only a file |
+| POST | `/messes/{id}/menus` | events moderator, admin | Post a menu: `valid_from`, `valid_to` (at most about 3 months), `file_s3_key` (upload kind `mess_menu`: the PDF or photo) and/or `items` (`weekday` 1 = Monday … 7, `meal`, `items`), `notes`. The file alone is enough; typed-in meals put the dishes into the alerts. A new menu replaces the mess's menu from its first day: a menu that started earlier is cut off the day before, and menus starting within the new dates are removed. (Editing a menu's dates into another menu is still refused, 409) |
 | POST | `/mess-menus/extract` | events moderator, admin | `{"file_s3_key"}` of an uploaded menu (kind `mess_menu`): reads the meals out of it (OCR) to prefill the form. Returns `mess_name`, `month`, `items`, `notes`, `warnings`. Saves nothing; takes a few seconds |
 | POST | `/mess-menus` | events moderator, admin | Post a menu by `mess_name` (same body as above): an unknown name adds the mess (optional `meal_times`) |
 | GET / PATCH / DELETE | `/mess-menus/{id}` | guest / events moderator, admin | One menu; edit (`items` replaces every cell, `file_s3_key: null` removes the file); remove |

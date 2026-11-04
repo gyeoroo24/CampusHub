@@ -135,6 +135,8 @@ class Feedback(BaseModel):
     author: UserRef | None = Field(description="null for anonymous feedback (except to its author) and for guests")
     is_anonymous: bool
     is_mine: bool = Field(description="True when the viewer wrote it, so the app can offer edit and delete")
+    can_remove: bool = Field(description="True when the viewer may remove it: its author, or a moderator of the "
+                                         "course (course or department moderator, or admin)")
     content: str
     created_at: datetime
     updated_at: datetime
@@ -446,12 +448,13 @@ FROM course_feedback f JOIN users u ON u.id = f.author_id
 """
 
 
-def _feedback(r: asyncpg.Record, viewer: CurrentUser | None) -> Feedback:
-    """Names are shown only to signed-in viewers, and never for anonymous feedback (except to its author)."""
+def _feedback(r: asyncpg.Record, viewer: CurrentUser | None, moderator: bool = False) -> Feedback:
+    """Names are shown only to signed-in viewers, and never for anonymous feedback (except to its author).
+    [moderator] is whether the viewer moderates this course (see can_manage_course)."""
     mine = viewer is not None and viewer.id == r["author_id"]
     show_name = mine or (viewer is not None and not r["is_anonymous"])
     return Feedback(id=r["id"], course_id=r["course_id"], content=r["content"], is_anonymous=r["is_anonymous"],
-                    is_mine=mine, author=UserRef(id=r["author_id"], name=r["author_name"]) if show_name else None,
+                    is_mine=mine, can_remove=mine or moderator, author=UserRef(id=r["author_id"], name=r["author_name"]) if show_name else None,
                     created_at=r["created_at"], updated_at=r["updated_at"])
 
 
@@ -482,7 +485,8 @@ async def list_feedback(course_id: UUID, page: PageParams = Depends(page_params)
     rows = await conn.fetch(
         _FEEDBACK_SELECT + """ WHERE f.course_id = $1 AND f.deleted_at IS NULL
         ORDER BY f.created_at DESC, f.id DESC LIMIT $2 OFFSET $3""", course_id, page.limit + 1, page.offset)
-    return make_page(rows, page, lambda r: _feedback(r, viewer))
+    moderator = viewer is not None and await can_manage_course(conn, viewer, course_id)
+    return make_page(rows, page, lambda r: _feedback(r, viewer, moderator))
 
 
 @router.get("/courses/{course_id}/feedback/mine", response_model=Feedback, summary="My feedback on a course, if any")

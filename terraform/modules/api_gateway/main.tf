@@ -107,6 +107,24 @@ resource "aws_apigatewayv2_route" "owned_prefix_sub" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda_integrations[each.value].id}"
 }
 
+# Category suggestion needs the ML layer, which only the buy_sell and lost_found functions carry (see
+# modules/compute/main.tf), so these two routes go there instead of the catch-all. API Gateway prefers
+# the most specific route, so they win over "ANY /api/v1/{proxy+}".
+locals {
+  suggest_routes = {
+    "buy-sell/categories/suggest"   = "buy_sell"
+    "lost-found/categories/suggest" = "lost_found"
+  }
+}
+
+resource "aws_apigatewayv2_route" "category_suggest" {
+  for_each = local.suggest_routes
+
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /api/v1/${each.key}"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda_integrations[each.value].id}"
+}
+
 # Everything else under /api/v1 (and /api/v1 itself, with no sub-path) — the safety net that makes
 # this robust to routes this file doesn't know about, present or future.
 resource "aws_apigatewayv2_route" "catch_all" {

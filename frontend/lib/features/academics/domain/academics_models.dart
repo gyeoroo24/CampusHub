@@ -59,6 +59,9 @@ class CourseFeedback {
 
   /// The viewer wrote it, so they may edit or delete it.
   final bool isMine;
+
+  /// The viewer may remove it: its author, or a moderator of this course (or its department).
+  final bool canRemove;
   final String content;
   final DateTime createdAt;
   final DateTime? updatedAt;
@@ -68,6 +71,7 @@ class CourseFeedback {
     this.authorName,
     this.isAnonymous = false,
     this.isMine = false,
+    this.canRemove = false,
     required this.content,
     required this.createdAt,
     this.updatedAt,
@@ -78,6 +82,7 @@ class CourseFeedback {
         authorName: (json['author'] as Map?)?['name']?.toString(),
         isAnonymous: json['is_anonymous'] as bool? ?? false,
         isMine: json['is_mine'] as bool? ?? false,
+        canRemove: json['can_remove'] as bool? ?? false,
         content: json['content']?.toString() ?? '',
         createdAt: DateTime.tryParse('${json['created_at']}') ?? DateTime.now(),
         updatedAt: DateTime.tryParse('${json['updated_at']}'),
@@ -93,6 +98,7 @@ class CourseFeedback {
         authorName: authorName,
         isAnonymous: isAnonymous ?? this.isAnonymous,
         isMine: isMine,
+        canRemove: canRemove,
         content: content ?? this.content,
         createdAt: createdAt,
         updatedAt: DateTime.now(),

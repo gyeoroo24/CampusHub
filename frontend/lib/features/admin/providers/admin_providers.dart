@@ -50,7 +50,3 @@ final contentReportsProvider = FutureProvider<List<ContentReport>>((ref) async {
   return repo.listReports(status: filter.status, module: filter.module);
 });
 
-final systemHealthProvider = FutureProvider<Map<String, dynamic>>((ref) async {
-  final repo = ref.watch(adminRepositoryProvider);
-  return repo.getSystemHealth();
-});

@@ -386,19 +386,25 @@ class _Menus extends ConsumerWidget {
         final current = menus.where((m) => m.covers(today)).firstOrNull;
         final upcoming = menus.where((m) => m.validFrom.isAfter(today)).toList();
         final past = menus.where((m) => m.validTo.isBefore(DateTime(today.year, today.month, today.day))).toList();
-        final last = menus.isEmpty ? null : menus.map((m) => m.validTo).reduce((a, b) => a.isAfter(b) ? a : b);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // A new menu replaces the mess's menu from its first day (the API trims or removes the old one),
+            // so it starts today by default rather than after the last menu.
             if (canManage)
               Align(
                 alignment: Alignment.centerLeft,
                 child: FilledButton.tonalIcon(
-                  onPressed: () => _edit(context, ref,
-                      from: last != null && !last.isBefore(today) ? last.add(const Duration(days: 1)) : null),
+                  onPressed: () => _edit(context, ref),
                   icon: const Icon(Icons.upload_file_rounded, size: 18),
-                  label: Text(current == null ? 'Post a menu' : 'Post the next menu'),
+                  label: Text(current == null ? 'Post a menu' : 'Post a new menu'),
                 ),
+              ),
+            if (canManage && (current != null || upcoming.isNotEmpty))
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('A new menu replaces this mess\'s menu from its first day.',
+                    style: TextStyle(fontSize: 12, color: theme.hintColor)),
               ),
             if (canManage) const SizedBox(height: 12),
             if (current != null)

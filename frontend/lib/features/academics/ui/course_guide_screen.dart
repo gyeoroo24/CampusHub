@@ -512,6 +512,36 @@ class _FeedbackSection extends ConsumerWidget {
     }
   }
 
+  /// A moderator removes someone else's review (course or department moderator). No strike: this is
+  /// not a Buy & Sell or Lost & Found post.
+  Future<void> _removeAsModerator(BuildContext context, WidgetRef ref, CourseFeedback review) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove this review?'),
+        content: Text('“${review.content.length > 120 ? '${review.content.substring(0, 120)}…' : review.content}”'
+            ' is removed from this course for everyone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(academicsRepositoryProvider).deleteFeedback(review.id);
+      _toast(messenger, 'Review removed.');
+      _refresh(ref);
+    } catch (e) {
+      _toast(messenger, errorText(e), error: true);
+    }
+  }
+
   Future<void> _delete(BuildContext context, WidgetRef ref, CourseFeedback mine) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -616,6 +646,13 @@ class _FeedbackSection extends ConsumerWidget {
                               '${f.displayAuthor} · ${DateTimeFormatter.timeAgo(f.createdAt)}${f.wasEdited ? ' · edited' : ''}',
                               style: const TextStyle(fontSize: 11),
                             ),
+                            trailing: f.canRemove
+                                ? IconButton(
+                                    tooltip: 'Remove review (moderator)',
+                                    icon: Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red.shade700),
+                                    onPressed: () => _removeAsModerator(context, ref, f),
+                                  )
+                                : null,
                           ),
                       ],
                     );

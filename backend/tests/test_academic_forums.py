@@ -41,6 +41,27 @@ def test_department_moderator_limits(client, campus):
                        json={"code": "DS 200", "name": "X"}).status_code == 403
 
 
+def test_moderators_remove_course_feedback_without_strikes(client, campus):
+    """Course moderators remove feedback on their course; department moderators on any course in their
+    department. Removing it never creates a seller strike (strikes are for Buy & Sell listings)."""
+    hpca, cloud = campus["hpca"]["id"], campus["cloud"]["id"]
+    fb = client.post(f"{API}/courses/{hpca}/feedback", headers=ASHA, json={"content": "Tough but great"}).json()
+    other = client.post(f"{API}/courses/{cloud}/feedback", headers=KIRAN, json={"content": "Good"}).json()
+    listed = client.get(f"{API}/courses/{hpca}/feedback", headers=RAVI).json()["items"]
+    assert [f["can_remove"] for f in listed] == [True]
+    assert client.get(f"{API}/courses/{hpca}/feedback", headers=KIRAN).json()["items"][0]["can_remove"] is False
+    assert client.get(f"{API}/courses/{hpca}/feedback", headers=ASHA).json()["items"][0]["can_remove"] is True
+    # Ravi moderates E0 243 only: not the other department's course.
+    assert client.delete(f"{API}/feedback/{other['id']}", headers=RAVI).status_code == 403
+    assert client.delete(f"{API}/feedback/{fb['id']}", headers=RAVI).status_code == 204
+    # The department moderator (CSA) may remove feedback on E0 243, but not on DS 252 (CDS).
+    fb = client.post(f"{API}/courses/{hpca}/feedback", headers=KIRAN, json={"content": "Heavy workload"}).json()
+    assert client.delete(f"{API}/feedback/{other['id']}", headers=DEPTMOD).status_code == 403
+    assert client.delete(f"{API}/feedback/{fb['id']}", headers=DEPTMOD).status_code == 204
+    assert sql("SELECT count(*) FROM seller_strikes")[0][0] == 0
+    assert sql("SELECT count(*) FROM moderation_log WHERE action = 'remove_course_feedback'")[0][0] == 2
+
+
 def test_course_moderator_manages_only_own_course_materials(client, s3, campus):
     """FR-13: course moderators manage materials; others can't edit what they didn't share."""
     hpca, cloud = campus["hpca"]["id"], campus["cloud"]["id"]
@@ -207,3 +228,30 @@ def test_macro_documents_are_refused():
     ok = _zip({"[Content_Types].xml": b"x", "word/document.xml": b"x"})
     assert check_material(ok, "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                           "a.docx").flags == []
+
+
+def test_my_posts_lists_feedback_materials_companies_and_events(client, s3, campus):
+    """GET /me/posts: my course feedback and materials; for moderators also the companies and events they
+    added. Other people's posts and removed ones are left out."""
+    hpca = campus["hpca"]["id"]
+    client.post(f"{API}/courses/{hpca}/feedback", headers=ASHA, json={"content": "Loved it", "is_anonymous": True})
+    client.post(f"{API}/courses/{hpca}/feedback", headers=KIRAN, json={"content": "Hard"})
+    key = upload(client, s3, ASHA, "course_material", b"%PDF-1.4 notes", "application/pdf", course_id=hpca)
+    r = client.post(f"{API}/courses/{hpca}/materials", headers=ASHA,
+                    json={"title": "Week 1 notes", "tags": ["notes"], "s3_key": key})
+    assert r.status_code == 201, r.text
+    mine = client.get(f"{API}/me/posts", headers=ASHA).json()
+    assert [(f["course_code"], f["content"], f["is_anonymous"]) for f in mine["feedback"]] == [("E0 243", "Loved it", True)]
+    assert [(m["course_code"], m["title"]) for m in mine["materials"]] == [("E0 243", "Week 1 notes")]
+    assert mine["companies"] == mine["events"] == mine["mess_menus"] == []
+
+    assert grant(client, ADMIN, "meera@iisc.ac.in", "placement_hub").status_code == 201
+    assert client.post(f"{API}/companies", headers=MEERA, json={"name": "Acme"}).status_code == 201
+    csv = "Name,Industry\nGlobex,Software\nAcme,Retail\n"
+    assert client.post(f"{API}/placement/companies/import", headers=MEERA, json={"csv": csv}).status_code == 201
+    assert [c["name"] for c in client.get(f"{API}/me/posts", headers=MEERA).json()["companies"]] == ["Globex", "Acme"]
+    assert client.get(f"{API}/me/posts", headers=KIRAN).json()["companies"] == []
+
+    client.delete(f"{API}/materials/{r.json()['id']}", headers=ASHA)
+    assert client.get(f"{API}/me/posts", headers=ASHA).json()["materials"] == []
+    assert client.get(f"{API}/me/posts").status_code == 401

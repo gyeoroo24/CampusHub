@@ -1,9 +1,17 @@
 -- ============================================================================
--- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 24
+-- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 25
 -- DS252 Introduction to Cloud Computing — Team "Order of Phoenix"
 --
 -- Permission modules (FR-2, NFR-6): buy_sell, lost_found, academic_help,
 -- placement_hub, events (rev 17: Community Events moderators).
+--
+-- Changes from rev. 24 (4 Nov 2026):
+--   1. companies.created_by: who added the company (by hand or by a CSV import), so a moderator's
+--      profile can list the companies they added. NULL for companies added before rev 25 and for
+--      people whose account is gone.
+--   2. lost_reports.title, found_reports.title: a short name for the item, like a listing's title. NULL on
+--      reports filed before rev 25.
+--   Upgrade: db/migrations/025_company_created_by.sql.
 --
 -- Changes from rev. 23 (event updates, 3 Nov 2026):
 --   1. event_updates: official notices on an event (delays, venue/time changes) from its organizer or
@@ -431,6 +439,7 @@ CREATE INDEX idx_wanted_author ON wanted_posts(author_id, created_at DESC);
 CREATE TABLE lost_reports (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     reporter_id        UUID NOT NULL REFERENCES users(id),
+    title              TEXT CHECK (char_length(btrim(title)) BETWEEN 1 AND 120),   -- rev 25; NULL before
     description        TEXT NOT NULL,
     category_id        INT NOT NULL REFERENCES lf_categories(id),   -- what the item is; matched on
     lost_at            TIMESTAMPTZ NOT NULL,                -- when the item was lost (user-entered)
@@ -460,6 +469,7 @@ CREATE TABLE lost_report_photos (           -- same rules as listing_photos
 CREATE TABLE found_reports (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     reporter_id        UUID NOT NULL REFERENCES users(id),
+    title              TEXT CHECK (char_length(btrim(title)) BETWEEN 1 AND 120),   -- rev 25; NULL before
     description        TEXT NOT NULL,
     category_id        INT NOT NULL REFERENCES lf_categories(id),   -- what the item is; matched on
     found_at           TIMESTAMPTZ NOT NULL,                -- when the item was found (user-entered)
@@ -611,10 +621,12 @@ CREATE TABLE companies (
     description TEXT,
     website     TEXT,                          -- rev 16
     industry    TEXT,                          -- rev 16, e.g. 'Software', 'Finance', 'Semiconductors'
+    created_by  UUID REFERENCES users(id) ON DELETE SET NULL,   -- rev 25: who added it (NULL before rev 25)
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 -- name_key lets the importer match "Walmart", "walmart " and "WALMART" to one company.
+CREATE INDEX idx_companies_created_by ON companies(created_by) WHERE created_by IS NOT NULL;
 
 CREATE TABLE job_descriptions (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),

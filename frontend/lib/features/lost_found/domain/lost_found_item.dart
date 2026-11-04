@@ -27,8 +27,8 @@ enum ReportStatus {
 }
 
 /// Domain entity representing a Lost or Found report (FR-7, FR-8, FR-9).
-/// Note: Reports do not have titles; the item is identified by [category] (what it is)
-/// and [description] (distinguishing marks / details).
+/// [title] is a short name for the item (rev 25). Reports filed before titles existed have none, so
+/// [displayTitle] falls back to the start of [description].
 class LostFoundItem {
   final String id;
   final String? title;

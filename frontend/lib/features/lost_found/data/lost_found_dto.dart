@@ -176,6 +176,7 @@ class LostFoundReportDto {
   factory LostFoundReportDto.fromDomain(LostFoundItem item) {
     return LostFoundReportDto(
       id: item.id,
+      title: item.title,
       kind: item.kind.name,
       description: item.description,
       category: item.category,
@@ -196,6 +197,7 @@ class LostFoundReportDto {
 
   Map<String, dynamic> toCreateJson({List<String> photoKeys = const []}) {
     return {
+      if (title != null && title!.trim().isNotEmpty) 'title': title!.trim(),
       'description': description,
       'category_id': category.id,
       'occurred_at': occurredAt.toUtc().toIso8601String(),
@@ -208,6 +210,7 @@ class LostFoundReportDto {
 
   Map<String, dynamic> toUpdateJson() {
     return {
+      if (title != null && title!.trim().isNotEmpty) 'title': title!.trim(),
       'description': description,
       'category_id': category.id,
       'occurred_at': occurredAt.toUtc().toIso8601String(),

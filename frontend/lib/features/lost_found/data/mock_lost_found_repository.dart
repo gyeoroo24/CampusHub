@@ -465,6 +465,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
   Future<LostFoundItem> updateReport(
     String id, {
     required PostType type,
+    String? title,
     String? description,
     int? categoryId,
     DateTime? occurredAt,
@@ -482,6 +483,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
     }
 
     final updated = _mockReports[index].copyWith(
+      title: title,
       description: description,
       category: newCat,
       occurredAt: occurredAt,
@@ -522,6 +524,15 @@ class MockLostFoundRepository implements ILostFoundRepository {
   @override
   Future<void> deleteReport(String id, PostType type, {String? reason}) async {
     _mockReports.removeWhere((item) => item.id == id);
+  }
+
+  @override
+  Future<CategoryRef?> suggestCategory(String title) async {
+    final words = title.toLowerCase().split(RegExp(r'\W+')).where((w) => w.length > 2);
+    for (final c in _categories) {
+      if (words.any((w) => c.name.toLowerCase().contains(w))) return c;
+    }
+    return null;
   }
 
   @override

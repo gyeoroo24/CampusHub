@@ -36,6 +36,7 @@ class ReportItemDialog extends ConsumerStatefulWidget {
 
 class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
   final _formKey = GlobalKey<FormState>();
+  final _titleController = TextEditingController();
   final _descController = TextEditingController();
   final _locController = TextEditingController();
   List<PickedPhoto> _photos = [];
@@ -48,18 +49,60 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
   final _customCategoryController = TextEditingController();
   bool _isSubmitting = false;
 
+  // Category auto-suggestion from the title (as in Buy & Sell): a hint only, never auto-applied.
+  Timer? _suggestDebounce;
+  CategoryRef? _suggestedCategory;
+  bool _categoryTouchedByUser = false;
+
   @override
   void initState() {
     super.initState();
     _loadCategories();
+    _titleController.addListener(_onTitleChanged);
   }
 
   @override
   void dispose() {
+    _suggestDebounce?.cancel();
+    _titleController.removeListener(_onTitleChanged);
+    _titleController.dispose();
     _descController.dispose();
     _locController.dispose();
     _customCategoryController.dispose();
     super.dispose();
+  }
+
+  void _onTitleChanged() {
+    _suggestDebounce?.cancel();
+    if (_categoryTouchedByUser || _isCustomCategory) return;
+    final title = _titleController.text.trim();
+    if (title.length < 4) {
+      if (_suggestedCategory != null) setState(() => _suggestedCategory = null);
+      return;
+    }
+    _suggestDebounce = Timer(const Duration(milliseconds: 500), () => _fetchSuggestion(title));
+  }
+
+  Future<void> _fetchSuggestion(String title) async {
+    try {
+      final suggestion = await ref.read(lostFoundRepositoryProvider).suggestCategory(title);
+      if (!mounted || _titleController.text.trim() != title) return; // stale request
+      setState(() => _suggestedCategory = suggestion?.id == _selectedCategory?.id ? null : suggestion);
+    } catch (_) {
+      // Suggestion is a nice-to-have; silently skip on any failure.
+    }
+  }
+
+  void _applySuggestion() {
+    final suggestion = _suggestedCategory;
+    if (suggestion == null) return;
+    final match = _availableCategories.where((c) => c.id == suggestion.id);
+    setState(() {
+      _selectedCategory = match.isNotEmpty ? match.first : suggestion;
+      _isCustomCategory = false;
+      _categoryTouchedByUser = true;
+      _suggestedCategory = null;
+    });
   }
 
   Future<void> _loadCategories() async {
@@ -203,6 +246,17 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
                 ),
                 const SizedBox(height: 12),
 
+                TextFormField(
+                  controller: _titleController,
+                  maxLength: 120,
+                  decoration: InputDecoration(
+                    labelText: 'Title *',
+                    hintText: isLost ? 'e.g. Black JBL earbuds' : 'e.g. Blue Milton water bottle',
+                  ),
+                  validator: (val) => val == null || val.trim().isEmpty ? 'Please give the item a short title.' : null,
+                ),
+                const SizedBox(height: 6),
+
                 // Category Dropdown
                 if (_isLoadingCategories)
                   const Padding(
@@ -220,11 +274,14 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
                         setState(() {
                           _isCustomCategory = true;
                           _selectedCategory = null;
+                          _suggestedCategory = null;
                         });
                       } else {
                         setState(() {
                           _isCustomCategory = false;
                           _selectedCategory = val;
+                          _categoryTouchedByUser = true;
+                          _suggestedCategory = null;
                         });
                       }
                     },
@@ -235,6 +292,18 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
                       return null;
                     },
                   ),
+                  if (_suggestedCategory != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: ActionChip(
+                          avatar: const Icon(Icons.auto_awesome, size: 16),
+                          label: Text('Suggested category: ${_suggestedCategory!.name}'),
+                          onPressed: _applySuggestion,
+                        ),
+                      ),
+                    ),
                   if (_isCustomCategory) ...[
                     const SizedBox(height: 8),
                     TextFormField(
@@ -382,6 +451,7 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
       final newItem = LostFoundItem(
         id: '',
         kind: widget.postType,
+        title: _titleController.text.trim(),
         description: _descController.text.trim(),
         category: cat,
         occurredAt: _occurredAt,

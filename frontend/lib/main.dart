@@ -4,9 +4,12 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'features/auth/data/cognito_hosted_ui.dart';
 import 'features/auth/ui/session_keeper.dart';
 
 void main() {
+  // Before the router runs: it rewrites `/?code=...` (the Cognito redirect) to `/buy`.
+  CognitoHostedUi.launchUri = Uri.base;
   usePathUrlStrategy();
   // context.push('/profile') etc. should show their own URL, so a refresh stays on that page.
   GoRouter.optionURLReflectsImperativeAPIs = true;

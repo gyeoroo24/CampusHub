@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .. import otp
 from ..auth import CurrentUser, current_user, optional_user
 from ..common import Contact, forbidden, like_pattern, not_found, search_text, set_clause, text
+from ..config import get_settings
 from ..db import get_conn
 from ..permissions import log_moderation
 from .moderators import notify_role_change
@@ -150,16 +151,21 @@ class UserMatch(BaseModel):
             summary="Find people by name or email, to start a chat (signed-in users)")
 async def search_users(q: str = Query(..., min_length=2, max_length=100), limit: int = Query(20, ge=1, le=50),
                        user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
-    """Active accounts other than mine whose name or email contains q. Names that start with q come first."""
+    """Active accounts other than mine whose name or email contains q. Names that start with q come first.
+
+    Only people who have signed in to CampusHub are listed: rows made by the local dev seed (cognito_sub
+    "dev|...") were never signed in on the deployed app, so they can't receive messages. Dev auth lists
+    everyone, since every local account is a dev row."""
     q = search_text(q) or ""
     if len(q) < 2:
         return []
     rows = await conn.fetch(
         """SELECT id, name, email::text AS email, programme FROM users
             WHERE is_active AND id <> $1
+              AND ($4::bool OR cognito_sub NOT LIKE 'dev|%')
               AND (name ILIKE '%' || $2 || '%' ESCAPE '\' OR email::text ILIKE '%' || $2 || '%' ESCAPE '\')
             ORDER BY (name ILIKE $2 || '%' ESCAPE '\') DESC, (email::text ILIKE $2 || '%' ESCAPE '\') DESC, name
-            LIMIT $3""", user.id, like_pattern(q), limit)
+            LIMIT $3""", user.id, like_pattern(q), limit, get_settings().auth_mode == "dev")
     return [UserMatch(**dict(r)) for r in rows]
 
 

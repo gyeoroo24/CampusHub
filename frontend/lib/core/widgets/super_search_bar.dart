@@ -25,6 +25,15 @@ final _eventSearchProvider = FutureProvider.autoDispose.family<List<CampusEvent>
     ref.watch(eventsRepositoryProvider).fetchEvents(
         when: const {EventWhen.present, EventWhen.upcoming, EventWhen.past}, query: q, limit: 6));
 
+/// Listings, lost reports and found reports that match, searched on the server. These are the search's own
+/// lookups: typing here doesn't set the Buy & Sell or Lost & Found filters, so those pages stay unfiltered.
+final _listingSearchProvider = FutureProvider.autoDispose.family<List<ListingItem>, String>((ref, q) =>
+    ref.watch(buySellRepositoryProvider).fetchListings(query: q, limit: 6));
+final _lostSearchProvider = FutureProvider.autoDispose.family<List<LostFoundItem>, String>((ref, q) =>
+    ref.watch(lostFoundRepositoryProvider).fetchReports(type: PostType.lost, query: q, limit: 6));
+final _foundSearchProvider = FutureProvider.autoDispose.family<List<LostFoundItem>, String>((ref, q) =>
+    ref.watch(lostFoundRepositoryProvider).fetchReports(type: PostType.found, query: q, limit: 6));
+
 class SuperSearchBar extends ConsumerStatefulWidget {
   const SuperSearchBar({super.key});
 
@@ -58,10 +67,6 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
     _searchController.clear();
     _removeOverlay();
     setState(() => _isDebouncing = false);
-    ref.read(buySellFilterProvider.notifier).state =
-        ref.read(buySellFilterProvider).copyWith(query: '');
-    ref.read(lostFoundFilterProvider.notifier).state =
-        ref.read(lostFoundFilterProvider).copyWith(query: '');
   }
 
   void _showOverlay() {
@@ -101,32 +106,16 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
                   }
 
                   final activeTab = ref.watch(tabIndexProvider);
-                  final buySellAsync = ref.watch(buySellListingsProvider);
-                  final lostAsync = ref.watch(lostReportsProvider);
-                  final foundAsync = ref.watch(foundReportsProvider);
+                  final buySellAsync = ref.watch(_listingSearchProvider(query));
+                  final lostAsync = ref.watch(_lostSearchProvider(query));
+                  final foundAsync = ref.watch(_foundSearchProvider(query));
 
-                  final List<ListingItem> buySellMatches = buySellAsync.maybeWhen<List<ListingItem>>(
-                    data: (items) => items.where((i) =>
-                        i.title.toLowerCase().contains(query) ||
-                        i.description.toLowerCase().contains(query)).toList(),
-                    orElse: () => const <ListingItem>[],
-                  );
-
-                  final List<LostFoundItem> lostMatches = lostAsync.maybeWhen<List<LostFoundItem>>(
-                    data: (items) => items.where((i) =>
-                        i.category.name.toLowerCase().contains(query) ||
-                        i.description.toLowerCase().contains(query) ||
-                        i.location.toLowerCase().contains(query)).toList(),
-                    orElse: () => const <LostFoundItem>[],
-                  );
-
-                  final List<LostFoundItem> foundMatches = foundAsync.maybeWhen<List<LostFoundItem>>(
-                    data: (items) => items.where((i) =>
-                        i.category.name.toLowerCase().contains(query) ||
-                        i.description.toLowerCase().contains(query) ||
-                        i.location.toLowerCase().contains(query)).toList(),
-                    orElse: () => const <LostFoundItem>[],
-                  );
+                  final List<ListingItem> buySellMatches =
+                      buySellAsync.maybeWhen(data: (items) => items, orElse: () => const <ListingItem>[]);
+                  final List<LostFoundItem> lostMatches =
+                      lostAsync.maybeWhen(data: (items) => items, orElse: () => const <LostFoundItem>[]);
+                  final List<LostFoundItem> foundMatches =
+                      foundAsync.maybeWhen(data: (items) => items, orElse: () => const <LostFoundItem>[]);
 
                   final courseMatchList = ref.watch(allCoursesProvider).maybeWhen(
                     data: (all) => all.where((c) => courseMatches(c, query)).take(8).toList(),
@@ -443,20 +432,12 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
               _debounceTimer?.cancel();
               if (val.trim().isEmpty) {
                 setState(() => _isDebouncing = false);
-                ref.read(buySellFilterProvider.notifier).state =
-                    ref.read(buySellFilterProvider).copyWith(query: '');
-                ref.read(lostFoundFilterProvider.notifier).state =
-                    ref.read(lostFoundFilterProvider).copyWith(query: '');
                 _overlayEntry?.markNeedsBuild();
               } else {
                 setState(() => _isDebouncing = true);
                 _debounceTimer = Timer(const Duration(milliseconds: 300), () {
                   if (mounted) {
                     setState(() => _isDebouncing = false);
-                    ref.read(buySellFilterProvider.notifier).state =
-                        ref.read(buySellFilterProvider).copyWith(query: val.trim());
-                    ref.read(lostFoundFilterProvider.notifier).state =
-                        ref.read(lostFoundFilterProvider).copyWith(query: val.trim());
                     _overlayEntry?.markNeedsBuild();
                   }
                 });

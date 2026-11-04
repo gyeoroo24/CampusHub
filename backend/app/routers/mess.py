@@ -359,6 +359,22 @@ async def _check_overlap(conn: asyncpg.Connection, mess_id: int, start: date, en
                                  f"{other['valid_to']:%-d %b %Y}. Change the dates, or edit that menu instead.")
 
 
+async def _replace_older_menus(conn: asyncpg.Connection, mess_id: int, start: date, end: date,
+                               user_id: UUID) -> list[str]:
+    """A new menu replaces what the mess had for its dates. A menu that started earlier now ends the day
+    before (its earlier days stay as history); one that starts on or after the new menu's first day and
+    overlaps it is removed. Returns the removed menus' files, to delete once the change is saved."""
+    trimmed = await conn.fetch(
+        """UPDATE mess_menus SET valid_to = $2::date - 1, updated_at = now()
+            WHERE mess_id = $1 AND valid_from < $2 AND valid_to >= $2 RETURNING id""", mess_id, start)
+    removed = await conn.fetch(
+        """DELETE FROM mess_menus WHERE mess_id = $1 AND valid_from >= $2 AND valid_from <= $3
+            RETURNING id, file_s3_key""", mess_id, start, end)
+    for r in [*trimmed, *removed]:
+        await log_moderation(conn, user_id, "replace_mess_menu", "mess_menu", r["id"])
+    return [r["file_s3_key"] for r in removed if r["file_s3_key"]]
+
+
 async def _save_items(conn: asyncpg.Connection, menu_id: UUID, items: list[MenuItem]) -> None:
     await conn.execute("DELETE FROM mess_menu_items WHERE menu_id = $1", menu_id)
     await conn.executemany("INSERT INTO mess_menu_items (menu_id, weekday, meal, items) VALUES ($1, $2, $3, $4)",
@@ -374,20 +390,9 @@ async def create_menu(mess_id: int, body: MenuIn, user: CurrentUser = Depends(cu
         raise not_found("Mess")
     if body.file_s3_key:
         await verify_own_uploads([body.file_s3_key], "mess_menu", user.id)
-    replaced_files: list[str] = []
     async with conn.transaction():
-        if body.items:
-            # A menu posted as a file only (no meals typed in) gives way to one with the meals for the same
-            # weeks; otherwise the meals could only be posted for later dates and the page stays empty.
-            replaced = await conn.fetch(
-                """DELETE FROM mess_menus mm WHERE mess_id = $1 AND valid_from <= $3 AND valid_to >= $2
-                     AND NOT EXISTS (SELECT 1 FROM mess_menu_items i WHERE i.menu_id = mm.id)
-                   RETURNING id, file_s3_key""", mess_id, body.valid_from, body.valid_to)
-            for r in replaced:
-                await log_moderation(conn, user.id, "replace_mess_menu", "mess_menu", r["id"])
-            replaced_files = [r["file_s3_key"] for r in replaced
-                              if r["file_s3_key"] and r["file_s3_key"] != body.file_s3_key]
-        await _check_overlap(conn, mess_id, body.valid_from, body.valid_to)
+        replaced_files = await _replace_older_menus(conn, mess_id, body.valid_from, body.valid_to, user.id)
+        replaced_files = [k for k in replaced_files if k != body.file_s3_key]
         menu_id = await conn.fetchval(
             """INSERT INTO mess_menus (mess_id, valid_from, valid_to, file_s3_key, notes, created_by)
                VALUES ($1, $2, $3, $4, $5, $6) RETURNING id""",

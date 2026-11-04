@@ -16,6 +16,7 @@ class EditReportDialog extends ConsumerStatefulWidget {
 
 class _EditReportDialogState extends ConsumerState<EditReportDialog> {
   final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _titleController;
   late final TextEditingController _locationController;
   late final TextEditingController _descController;
   CategoryRef? _selectedCategory;
@@ -24,6 +25,7 @@ class _EditReportDialogState extends ConsumerState<EditReportDialog> {
   @override
   void initState() {
     super.initState();
+    _titleController = TextEditingController(text: widget.item.title ?? '');
     _locationController = TextEditingController(text: widget.item.location);
     _descController = TextEditingController(text: widget.item.description);
     _selectedCategory = widget.item.category;
@@ -31,6 +33,7 @@ class _EditReportDialogState extends ConsumerState<EditReportDialog> {
 
   @override
   void dispose() {
+    _titleController.dispose();
     _locationController.dispose();
     _descController.dispose();
     super.dispose();
@@ -44,6 +47,7 @@ class _EditReportDialogState extends ConsumerState<EditReportDialog> {
       await ref.read(lostFoundRepositoryProvider).updateReport(
             widget.item.id,
             type: widget.item.kind,
+            title: _titleController.text.trim(),
             description: _descController.text.trim(),
             categoryId: _selectedCategory?.id,
             location: _locationController.text.trim(),
@@ -121,6 +125,16 @@ class _EditReportDialogState extends ConsumerState<EditReportDialog> {
                     value: _selectedCategory,
                     onChanged: (val) => setState(() => _selectedCategory = val),
                   ),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _titleController,
+                  maxLength: 120,
+                  decoration: const InputDecoration(
+                    labelText: 'Title *',
+                    hintText: 'e.g. Black JBL earbuds',
+                  ),
+                  validator: (val) => val == null || val.trim().isEmpty ? 'Please enter a title.' : null,
                 ),
                 const SizedBox(height: 8),
                 TextFormField(

@@ -42,7 +42,8 @@ EXAMPLE_WEIGHT = 0.3
 EXAMPLES_PER_CATEGORY = 20
 MAX_CACHED_VECTORS = 20_000
 
-# Recent titles per category: Buy & Sell listings, or Lost & Found report descriptions.
+# Recent titles per category: Buy & Sell listings, or Lost & Found report titles (the description for
+# reports filed before titles existed).
 _EXAMPLES = {
     "bs_categories": """
         SELECT category_id, title AS text FROM (
@@ -51,11 +52,11 @@ _EXAMPLES = {
         WHERE n <= $1""",
     "lf_categories": """
         SELECT category_id, text FROM (
-            SELECT category_id, left(description, 120) AS text,
+            SELECT category_id, coalesce(title, left(description, 120)) AS text,
                    row_number() OVER (PARTITION BY category_id ORDER BY created_at DESC) AS n
-            FROM (SELECT category_id, description, created_at FROM lost_reports WHERE deleted_at IS NULL
+            FROM (SELECT category_id, title, description, created_at FROM lost_reports WHERE deleted_at IS NULL
                   UNION ALL
-                  SELECT category_id, description, created_at FROM found_reports WHERE deleted_at IS NULL) r) x
+                  SELECT category_id, title, description, created_at FROM found_reports WHERE deleted_at IS NULL) r) x
         WHERE n <= $1""",
 }
 

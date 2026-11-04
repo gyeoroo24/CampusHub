@@ -83,6 +83,12 @@ variable "tesseract_layer_zip" {
   default     = ""
 }
 
+variable "ml_layer_zip" {
+  description = "Path to the ML layer zip built by modules/compute/ml_layer/build.sh (onnxruntime, tokenizers, numpy, the bge category model). Empty = no layer: category suggestion answers with no suggestion."
+  type        = string
+  default     = ""
+}
+
 variable "community_events_memory_size" {
   description = "Memory for the community-events function (mess menu reading with OCR needs more CPU than 512 MB)"
   type        = number
@@ -93,4 +99,10 @@ variable "lambda_runtime" {
   description = "Lambda runtime"
   type        = string
   default     = "python3.11"
+}
+
+variable "warm_schedule" {
+  description = "How often EventBridge calls GET /api/v1/health on each function so a warm instance stays ready (the first request to a cold function takes 3-4 s). Empty = no warming."
+  type        = string
+  default     = "rate(5 minutes)"
 }

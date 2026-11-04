@@ -429,8 +429,9 @@ async def create_company(body: CompanyCreate, user: CurrentUser = Depends(curren
     await _require_moderator(conn, user)
     try:
         company_id = await conn.fetchval(
-            "INSERT INTO companies (name, description, website, industry) VALUES ($1, $2, $3, $4) RETURNING id",
-            body.name, body.description or None, body.website or None, body.industry or None)
+            """INSERT INTO companies (name, description, website, industry, created_by) VALUES ($1, $2, $3, $4, $5)
+               RETURNING id""",
+            body.name, body.description or None, body.website or None, body.industry or None, user.id)
     except asyncpg.UniqueViolationError as exc:
         raise HTTPException(409, f"A company called “{body.name}” already exists.") from exc
     return await _company_detail(conn, company_id, user)
@@ -851,9 +852,9 @@ async def import_sheet(body: ImportRequest, user: CurrentUser = Depends(current_
             key = row.company.lower()
             if key not in company_ids:
                 company = await conn.fetchrow(
-                    """INSERT INTO companies (name) VALUES ($1)
+                    """INSERT INTO companies (name, created_by) VALUES ($1, $2)
                        ON CONFLICT (name_key) DO UPDATE SET name = companies.name
-                       RETURNING id, (xmax = 0) AS was_created""", row.company)
+                       RETURNING id, (xmax = 0) AS was_created""", row.company, user.id)
                 company_ids[key] = company["id"]
                 if company["was_created"]:
                     new_companies.append(row.company)
@@ -899,11 +900,12 @@ async def list_imports(page: PageParams = Depends(page_params), user: CurrentUse
 
 
 # ---------------------------------------------------------------- CSV imports: companies and schedule
-async def _company_id_for(conn: asyncpg.Connection, name: str, created: list[str]) -> UUID:
+async def _company_id_for(conn: asyncpg.Connection, name: str, created: list[str], creator: UUID) -> UUID:
+    """The company called [name], added (by [creator]) if it doesn't exist yet."""
     row = await conn.fetchrow(
-        """INSERT INTO companies (name) VALUES ($1)
+        """INSERT INTO companies (name, created_by) VALUES ($1, $2)
            ON CONFLICT (name_key) DO UPDATE SET name = companies.name
-           RETURNING id, (xmax = 0) AS was_created""", name)
+           RETURNING id, (xmax = 0) AS was_created""", name, creator)
     if row["was_created"]:
         created.append(name)
     return row["id"]
@@ -925,12 +927,12 @@ async def import_companies(body: CsvImportRequest, user: CurrentUser = Depends(c
     async with conn.transaction():
         for row in rows:
             was_created = await conn.fetchval(
-                """INSERT INTO companies (name, industry, website, description) VALUES ($1, $2, $3, $4)
+                """INSERT INTO companies (name, industry, website, description, created_by) VALUES ($1, $2, $3, $4, $5)
                    ON CONFLICT (name_key) DO UPDATE
                      SET industry = coalesce(EXCLUDED.industry, companies.industry),
                          website = coalesce(EXCLUDED.website, companies.website),
                          description = coalesce(EXCLUDED.description, companies.description)
-                   RETURNING (xmax = 0)""", row.name, row.industry, row.website, row.description)
+                   RETURNING (xmax = 0)""", row.name, row.industry, row.website, row.description, user.id)
             if was_created:
                 created.append(row.name)
             else:
@@ -965,7 +967,7 @@ async def import_schedule(body: CsvImportRequest, user: CurrentUser = Depends(cu
         for row in rows:
             key = row.company.lower()
             if key not in company_ids:
-                company_ids[key] = await _company_id_for(conn, row.company, new_companies)
+                company_ids[key] = await _company_id_for(conn, row.company, new_companies, user.id)
             existing = None
             if row.scheduled_at is not None:
                 existing = await conn.fetchval(
@@ -1192,7 +1194,7 @@ async def import_roles(body: RolesImportRequest, user: CurrentUser = Depends(cur
         for row in rows:
             key = row.company.lower()
             if key not in company_ids:
-                company_ids[key] = await _company_id_for(conn, row.company, new_companies)
+                company_ids[key] = await _company_id_for(conn, row.company, new_companies, user.id)
             was_created = await conn.fetchval(
                 """INSERT INTO job_descriptions (company_id, role_title, placement_year, job_type, compensation, ctc_min,
                                                  ctc_max, base_text, base_annual, description, skills)

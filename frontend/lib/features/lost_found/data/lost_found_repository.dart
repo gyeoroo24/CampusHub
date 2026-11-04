@@ -52,6 +52,7 @@ abstract class ILostFoundRepository {
   Future<LostFoundItem> updateReport(
     String id, {
     required PostType type,
+    String? title,
     String? description,
     int? categoryId,
     DateTime? occurredAt,
@@ -69,6 +70,10 @@ abstract class ILostFoundRepository {
 
   /// Lists all Lost & Found categories from `GET /api/v1/lost-found/categories`.
   Future<List<CategoryRef>> fetchCategories();
+
+  /// The closest existing category for a report's title, or null when nothing fits well
+  /// (`GET /api/v1/lost-found/categories/suggest`).
+  Future<CategoryRef?> suggestCategory(String title);
 
   /// Adds a category or retrieves existing one (`POST /api/v1/lost-found/categories`).
   Future<CategoryRef> createCategory(String name);

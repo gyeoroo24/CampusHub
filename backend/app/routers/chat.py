@@ -273,8 +273,8 @@ SELECT t.id, t.conversation_id, t.kind::text AS kind, t.started_by, t.created_at
        coalesce(t.listing_id, t.lost_report_id, t.found_report_id) AS ref_id,
        coalesce(l.seller_id, t.listing_seller_id, lr.reporter_id, fr.reporter_id) AS owner_id,
        CASE t.kind WHEN 'listing' THEN coalesce(l.title, t.listing_title, 'Deleted listing')
-                   WHEN 'lost_report' THEN 'Lost: ' || lc.name
-                   ELSE 'Found: ' || fc.name END AS title,
+                   WHEN 'lost_report' THEN 'Lost: ' || coalesce(lr.title, lc.name)
+                   ELSE 'Found: ' || coalesce(fr.title, fc.name) END AS title,
        coalesce(lr.description, fr.description) AS description,
        l.price,
        coalesce(l.status::text, lr.status::text, fr.status::text, 'available') AS status,
@@ -499,10 +499,10 @@ _TOPIC_TARGETS = {
     "listing_id": ("listing", "listing_id",
                    "SELECT seller_id AS owner_id, title FROM listings WHERE id = $1 AND deleted_at IS NULL"),
     "lost_report_id": ("lost_report", "lost_report_id",
-                       """SELECT r.reporter_id AS owner_id, 'Lost: ' || c.name AS title FROM lost_reports r
+                       """SELECT r.reporter_id AS owner_id, 'Lost: ' || coalesce(r.title, c.name) AS title FROM lost_reports r
                           JOIN lf_categories c ON c.id = r.category_id WHERE r.id = $1 AND r.deleted_at IS NULL"""),
     "found_report_id": ("found_report", "found_report_id",
-                        """SELECT r.reporter_id AS owner_id, 'Found: ' || c.name AS title FROM found_reports r
+                        """SELECT r.reporter_id AS owner_id, 'Found: ' || coalesce(r.title, c.name) AS title FROM found_reports r
                            JOIN lf_categories c ON c.id = r.category_id WHERE r.id = $1 AND r.deleted_at IS NULL"""),
 }
 

@@ -201,6 +201,11 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
     super.initState();
     _scrollController.addListener(_onScroll);
     _filterNotifier = ref.read(buySellFilterProvider.notifier);
+    // The feed outlives this screen, so pick up changes made while it was away (e.g. a listing reserved by
+    // accepting an offer in Messages).
+    Future.microtask(() {
+      if (mounted) ref.read(buySellPaginationProvider.notifier).refreshQuietly();
+    });
   }
 
   @override

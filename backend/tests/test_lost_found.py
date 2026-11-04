@@ -77,3 +77,21 @@ def test_lost_and_found_feeds_are_separate(client):
     found = _file(client, MEERA, "found", id_card, 0.5)
     assert [i["id"] for i in client.get(f"{API}/lost-reports").json()["items"]] == [lost["id"]]
     assert [i["id"] for i in client.get(f"{API}/found-reports").json()["items"]] == [found["id"]]
+
+
+def test_reports_have_titles_that_search_and_chat_use(client):
+    """Rev 25: a report may have a short title. Search matches it; reports without one still work."""
+    cat = category(client, ASHA, "lost-found", "Electronics")
+    r = client.post(f"{API}/lost-reports", headers=ASHA, json={
+        "title": "Black JBL earbuds", "description": "In a small case, near the library",
+        "category_id": cat, "occurred_at": "2026-10-01T10:00:00Z"})
+    assert r.status_code == 201, r.text
+    assert r.json()["title"] == "Black JBL earbuds"
+    assert [i["title"] for i in client.get(f"{API}/lost-reports", params={"q": "jbl"}).json()["items"]] == ["Black JBL earbuds"]
+    old = client.post(f"{API}/lost-reports", headers=ASHA, json={
+        "description": "Blue water bottle", "category_id": cat, "occurred_at": "2026-10-01T10:00:00Z"}).json()
+    assert old["title"] is None
+    edited = client.patch(f"{API}/lost-reports/{old['id']}", headers=ASHA, json={"title": "Milton bottle"}).json()
+    assert edited["title"] == "Milton bottle"
+    assert client.post(f"{API}/lost-reports", headers=ASHA, json={
+        "title": "   ", "description": "x", "category_id": cat, "occurred_at": "2026-10-01T10:00:00Z"}).status_code == 422

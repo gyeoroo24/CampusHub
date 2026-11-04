@@ -145,6 +145,19 @@ def test_wanted_post_shows_matches_and_alerts_on_new_listing(client):
     assert len(client.get(f"{API}/wanted", params={"status": "fulfilled"}).json()["items"]) == 1
 
 
+def test_negotiable_listings_match_up_to_20_percent_over_budget(client):
+    """A listing marked negotiable matches a Wanted post priced up to 20% over its budget; others don't."""
+    cycles = category(client, ASHA, "buy-sell", "Cycles")
+    fits = _listing(client, ASHA, cycles, title="Hero cycle negotiable", price="3600", negotiable=True)
+    _listing(client, ASHA, cycles, title="Hero cycle firm", price="3600")                    # over budget, firm
+    _listing(client, ASHA, cycles, title="Hero cycle pricey", price="3700", negotiable=True)  # over 20%
+    post = client.post(f"{API}/wanted", headers=RAVI, json={
+        "title": "Need a Hero cycle", "category_id": cycles, "max_price": "3000"}).json()
+    assert [m["id"] for m in post["possible_matches"]] == [fits["id"]]
+    new = _listing(client, MEERA, cycles, title="Hero Jet cycle", price="3500", negotiable=True)
+    assert [a["listing_id"] for a in _alerts(client, RAVI, "wanted_post_match")] == [new["id"]]
+
+
 def test_wanted_post_browse_edit_and_permissions(client):
     cycles = category(client, ASHA, "buy-sell", "Cycles")
     books = category(client, ASHA, "buy-sell", "Books")

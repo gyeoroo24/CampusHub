@@ -51,6 +51,7 @@ PastTime = Annotated[datetime, AfterValidator(_not_in_future)]
 
 
 class ReportCreate(BaseModel):
+    title: text(120) | None = Field(None, description="Short name of the item, e.g. 'Black JBL earbuds' (rev 25)")
     description: text(2000)
     category_id: CategoryId = Field(description="What the item is, e.g. the id of 'ID card'")
     occurred_at: PastTime = Field(description="When the item was lost (lost reports) or found (found reports)")
@@ -59,6 +60,7 @@ class ReportCreate(BaseModel):
 
 
 class ReportUpdate(BaseModel):
+    title: text(120) | None = None
     description: text(2000) | None = None
     category_id: CategoryId | None = None
     occurred_at: PastTime | None = None
@@ -76,6 +78,7 @@ class PhotosUpdate(BaseModel):
 class ReportSummary(BaseModel):
     id: UUID
     kind: Literal["lost", "found"]
+    title: str | None = Field(description="null on reports filed before titles existed")
     description: str
     category: CategoryRef
     occurred_at: datetime
@@ -111,7 +114,7 @@ class MatchList(BaseModel):
 
 def select_for(k: Kind, extra_columns: str = "") -> str:
     return f"""
-    SELECT {extra_columns}r.id, r.description, r.{k.when} AS occurred_at, r.location, r.status::text AS status,
+    SELECT {extra_columns}r.id, r.title, r.description, r.{k.when} AS occurred_at, r.location, r.status::text AS status,
            r.created_at, r.updated_at, r.reporter_id,
            c.id AS category_id, c.name AS category_name,
            u.name AS reporter_name, u.email::text AS reporter_email, u.phone AS reporter_phone,
@@ -156,7 +159,7 @@ def build_router(kind: Kind) -> APIRouter:
 
     def summary(r: asyncpg.Record, k: Kind = kind) -> ReportSummary:
         return ReportSummary(
-            id=r["id"], kind=k.name, description=r["description"],
+            id=r["id"], kind=k.name, title=r["title"], description=r["description"],
             category=CategoryRef(id=r["category_id"], name=r["category_name"]),
             occurred_at=r["occurred_at"], location=r["location"], status=r["status"],
             reporter=UserRef(id=r["reporter_id"], name=r["reporter_name"]),
@@ -230,7 +233,7 @@ def build_router(kind: Kind) -> APIRouter:
     async def list_reports(
         category_id: int | None = Query(None, ge=1, le=MAX_INT_ID),
         status: list[ReportStatus] | None = Query(None),
-        q: str | None = Query(None, max_length=200, description="Words in the description"),
+        q: str | None = Query(None, max_length=200, description="Words in the title or description"),
         reporter_id: UUID | None = None,
         from_date: datetime | None = Query(None, description=f"Only items {kind.name} at or after this time"),
         to_date: datetime | None = Query(None, description=f"Only items {kind.name} at or before this time"),
@@ -244,7 +247,8 @@ def build_router(kind: Kind) -> APIRouter:
             WHERE r.deleted_at IS NULL
               AND ($1::int IS NULL OR r.category_id = $1)
               AND ($2::text[] IS NULL OR r.status::text = ANY($2::text[]))
-              AND ($3::text IS NULL OR r.description ILIKE '%' || $3 || '%' ESCAPE '\\')
+              AND ($3::text IS NULL OR r.description ILIKE '%' || $3 || '%' ESCAPE '\\'
+                   OR r.title ILIKE '%' || $3 || '%' ESCAPE '\\')
               AND ($4::uuid IS NULL OR r.reporter_id = $4)
               AND ($7::timestamptz IS NULL OR r.{kind.when} >= $7)
               AND ($8::timestamptz IS NULL OR r.{kind.when} <= $8)
@@ -269,9 +273,9 @@ def build_router(kind: Kind) -> APIRouter:
         pushes = []
         async with conn.transaction():
             report_id = await conn.fetchval(
-                f"""INSERT INTO {kind.table} (reporter_id, description, category_id, {kind.when}, location)
-                    VALUES ($1, $2, $3, $4, $5) RETURNING id""",
-                user.id, body.description, body.category_id, body.occurred_at, body.location)
+                f"""INSERT INTO {kind.table} (reporter_id, title, description, category_id, {kind.when}, location)
+                    VALUES ($1, $2, $3, $4, $5, $6) RETURNING id""",
+                user.id, body.title, body.description, body.category_id, body.occurred_at, body.location)
             await insert_photos(conn, report_id, body.photo_keys)
             await screen_text(conn, background, f"{kind.name}_report", report_id)   # automatic flagging, §1.6
             if kind is FOUND:
@@ -304,7 +308,7 @@ def build_router(kind: Kind) -> APIRouter:
         content_changed = (
             changes.get("category_id", before["category_id"]) != before["category_id"]
             or changes.get("occurred_at", before["occurred_at"]) != before["occurred_at"]
-            or "description" in changes)
+            or changes.keys() & {"title", "description"})
         rematch_needed = kind is FOUND and content_changed
         if "occurred_at" in changes:
             changes[kind.when] = changes.pop("occurred_at")
@@ -313,7 +317,7 @@ def build_router(kind: Kind) -> APIRouter:
             await conn.execute(f"UPDATE {kind.table} SET {sql} WHERE id = $1", report_id, *values)
             if before["by_admin"]:
                 await log_moderation(conn, user.id, f"edit_{kind.name}_report", f"{kind.name}_report", report_id)
-            if "description" in changes:
+            if changes.keys() & {"title", "description"}:
                 await screen_text(conn, background, f"{kind.name}_report", report_id)
             if content_changed:
                 await needs_rematch(conn, report_id)
@@ -400,7 +404,8 @@ def build_router(kind: Kind) -> APIRouter:
                             user: CurrentUser = Depends(current_user),
                             conn: asyncpg.Connection = Depends(get_conn)):
         found = await conn.fetchrow(
-            f"SELECT reporter_id, description FROM {kind.table} WHERE id = $1 AND deleted_at IS NULL", report_id)
+            f"""SELECT reporter_id, coalesce(title, description) AS description FROM {kind.table}
+                WHERE id = $1 AND deleted_at IS NULL""", report_id)
         reporter = found["reporter_id"] if found else None
         if reporter is None:
             raise not_found(f"{kind.name.capitalize()} report")

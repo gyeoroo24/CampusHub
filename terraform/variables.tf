@@ -97,6 +97,12 @@ variable "tesseract_layer_zip" {
   default     = ""
 }
 
+variable "ml_layer_zip" {
+  description = "Path (relative to the terraform directory) to ml-layer.zip from modules/compute/ml_layer/build.sh. Empty = no ML layer; Buy & Sell and Lost & Found category suggestions are off."
+  type        = string
+  default     = ""
+}
+
 variable "community_events_memory_size" {
   description = "Memory (MB) for the community-events function, which reads mess menus"
   type        = number

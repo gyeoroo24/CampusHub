@@ -20,10 +20,10 @@ final savedSearchesProvider = FutureProvider<List<SavedSearch>>((ref) async {
 });
 
 /// The latest notifications in my inbox, newest first (empty for guests).
-/// Refreshed every minute while signed in, so new alerts show up without a reload.
+/// Refreshed every 30 seconds while signed in, so the badge shows new alerts without a reload.
 final notificationsProvider = FutureProvider<List<AppNotification>>((ref) async {
   if (ref.watch(isGuestUserProvider)) return [];
-  final timer = Timer(const Duration(seconds: 60), ref.invalidateSelf);
+  final timer = Timer(const Duration(seconds: 30), ref.invalidateSelf);
   ref.onDispose(timer.cancel);
   return ref.watch(alertsRepositoryProvider).fetchNotifications(limit: 30);
 });

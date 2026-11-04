@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../forums/ui/thread_view.dart';
@@ -151,6 +153,20 @@ class _NotificationsDialogState extends ConsumerState<NotificationsDialog> {
   /// Null: not selecting. Otherwise the ids picked for deletion.
   Set<String>? _selected;
   bool _busy = false;
+  Timer? _refresh;
+
+  @override
+  void initState() {
+    super.initState();
+    // New notifications show up while the inbox stays open, without closing and reopening it.
+    _refresh = Timer.periodic(const Duration(seconds: 15), (_) => ref.invalidate(notificationsProvider));
+  }
+
+  @override
+  void dispose() {
+    _refresh?.cancel();
+    super.dispose();
+  }
 
   Future<void> _delete(List<String> ids) async {
     if (ids.isEmpty) return;

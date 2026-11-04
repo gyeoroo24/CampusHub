@@ -139,9 +139,13 @@ def test_mess_menu_and_meal_alerts(client, people, s3, monkeypatch):
     assert r.status_code == 201, r.text
     menu = r.json()
     assert menu["file_type"] == "pdf" and menu["file_url"] and len(menu["items"]) == 28
-    overlap = body | {"valid_from": (today + timedelta(days=20)).isoformat(), "file_s3_key": None,
-                      "valid_to": (today + timedelta(days=40)).isoformat()}
-    assert client.post(f"{API}/messes/{mess['id']}/menus", headers=MEERA, json=overlap).status_code == 409
+    # The next menu takes over from its first day: the current one now ends the day before.
+    nxt = body | {"valid_from": (today + timedelta(days=20)).isoformat(), "file_s3_key": None,
+                  "valid_to": (today + timedelta(days=40)).isoformat()}
+    nxt = client.post(f"{API}/messes/{mess['id']}/menus", headers=MEERA, json=nxt)
+    assert nxt.status_code == 201, nxt.text
+    assert client.get(f"{API}/mess-menus/{menu['id']}").json()["valid_to"] == (today + timedelta(days=19)).isoformat()
+    client.delete(f"{API}/mess-menus/{nxt.json()['id']}", headers=MEERA)
 
     listed = client.get(f"{API}/messes").json()
     assert listed["can_manage"] is False
@@ -352,7 +356,8 @@ def test_menu_with_meals_replaces_a_file_only_menu(client, people, s3):
     assert with_meals.status_code == 201, with_meals.text
     assert client.get(f"{API}/mess-menus/{file_only['id']}").status_code == 404
     assert [m["id"] for m in client.get(f"{API}/messes/{mess['id']}/menus").json()] == [with_meals.json()["id"]]
-    # A menu that has meals is never replaced: overlapping it is still refused.
+    # A new menu for the same dates replaces one with meals too (4 Nov: posting a new menu replaces the old).
     again = client.post(f"{API}/messes/{mess['id']}/menus", headers=MEERA,
                         json=dates | {"file_s3_key": None, "items": _grid({1: "Other"})})
-    assert again.status_code == 409
+    assert again.status_code == 201, again.text
+    assert [m["id"] for m in client.get(f"{API}/messes/{mess['id']}/menus").json()] == [again.json()["id"]]

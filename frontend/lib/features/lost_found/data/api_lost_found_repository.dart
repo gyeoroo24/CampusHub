@@ -189,12 +189,14 @@ class ApiLostFoundRepository implements ILostFoundRepository {
   Future<LostFoundItem> updateReport(
     String id, {
     required PostType type,
+    String? title,
     String? description,
     int? categoryId,
     DateTime? occurredAt,
     String? location,
   }) async {
     final payload = <String, dynamic>{};
+    if (title != null && title.trim().isNotEmpty) payload['title'] = title.trim();
     if (description != null) payload['description'] = description;
     if (categoryId != null) payload['category_id'] = categoryId;
     if (occurredAt != null) payload['occurred_at'] = occurredAt.toUtc().toIso8601String();
@@ -236,6 +238,17 @@ class ApiLostFoundRepository implements ILostFoundRepository {
       _itemPath(type, id),
       queryParameters: queryParams.isNotEmpty ? queryParams : null,
     );
+  }
+
+  @override
+  Future<CategoryRef?> suggestCategory(String title) async {
+    if (title.trim().isEmpty) return null;
+    final response = await apiClient.get(
+      ApiEndpoints.lostFoundCategorySuggest,
+      queryParameters: {'title': title.trim()},
+    );
+    final category = (response.data as Map<String, dynamic>)['category'];
+    return category == null ? null : CategoryRef.fromJson(category as Map<String, dynamic>);
   }
 
   @override

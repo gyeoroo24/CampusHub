@@ -15,6 +15,11 @@ class AppConfig {
     defaultValue: '',
   );
 
+  /// Cognito Hosted UI sign-in (cloud builds). Leave both empty for local sign-in with the 123456 code.
+  static const String cognitoDomain = String.fromEnvironment('COGNITO_DOMAIN', defaultValue: '');
+  static const String cognitoClientId = String.fromEnvironment('COGNITO_CLIENT_ID', defaultValue: '');
+  static bool get cognitoEnabled => cognitoDomain.isNotEmpty && cognitoClientId.isNotEmpty;
+
   /// Active runtime values (can be updated at runtime by Admin via Live Demo Connection controls)
   static bool useMockData = defaultUseMockData;
   static String apiBaseUrl = defaultApiBaseUrl;

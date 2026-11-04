@@ -90,8 +90,10 @@ class Target:
 TARGETS = {
     "listing": Target("listing", "buy_sell", "listings", "seller_id",
                       "title || E'\\n' || coalesce(description, '')", "listing"),
-    "lost_report": Target("lost_report", "lost_found", "lost_reports", "reporter_id", "description", "lost item report"),
-    "found_report": Target("found_report", "lost_found", "found_reports", "reporter_id", "description", "found item report"),
+    "lost_report": Target("lost_report", "lost_found", "lost_reports", "reporter_id",
+                          "coalesce(title || E'\\n', '') || description", "lost item report"),
+    "found_report": Target("found_report", "lost_found", "found_reports", "reporter_id",
+                           "coalesce(title || E'\\n', '') || description", "found item report"),
 }
 
 

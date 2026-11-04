@@ -81,6 +81,32 @@ resource "aws_lambda_layer_version" "tesseract" {
   compatible_architectures = ["x86_64"]
 }
 
+# ML layer for category suggestion (optional; see ml_layer/build.sh). Only buy_sell and lost_found carry it,
+# and API Gateway sends the two /categories/suggest routes to them (modules/api_gateway): community-events
+# can't, because its Tesseract layer already uses most of Lambda's 250 MB limit.
+locals {
+  ml_layer_services = var.ml_layer_zip == "" ? [] : ["buy_sell", "lost_found"]
+}
+
+resource "aws_s3_object" "ml_layer" {
+  count       = var.ml_layer_zip == "" ? 0 : 1
+  bucket      = var.media_bucket_id
+  key         = "_layers/ml-${filemd5(var.ml_layer_zip)}.zip"
+  source      = var.ml_layer_zip
+  source_hash = filemd5(var.ml_layer_zip)
+}
+
+resource "aws_lambda_layer_version" "ml" {
+  count                    = var.ml_layer_zip == "" ? 0 : 1
+  layer_name               = "${var.project_name}-${var.environment}-ml"
+  description              = "onnxruntime 1.16.3, tokenizers, numpy 1.26, bge-small-en-v1.5 (x86_64, Python 3.11)"
+  s3_bucket                = aws_s3_object.ml_layer[0].bucket
+  s3_key                   = aws_s3_object.ml_layer[0].key
+  source_code_hash         = filebase64sha256(var.ml_layer_zip)
+  compatible_runtimes      = [var.lambda_runtime]
+  compatible_architectures = ["x86_64"]
+}
+
 # CloudWatch Log Groups for each microservice with cost-effective 7-day retention
 resource "aws_cloudwatch_log_group" "lambda_logs" {
   for_each          = local.services
@@ -110,7 +136,10 @@ resource "aws_lambda_function" "services" {
   timeout     = var.lambda_timeout
 
   # The OCR layer is only attached to community-events, which serves the mess menu routes.
-  layers = each.key == "community_events" && var.tesseract_layer_zip != "" ? [aws_lambda_layer_version.tesseract[0].arn] : []
+  layers = concat(
+    each.key == "community_events" && var.tesseract_layer_zip != "" ? [aws_lambda_layer_version.tesseract[0].arn] : [],
+    contains(local.ml_layer_services, each.key) ? [aws_lambda_layer_version.ml[0].arn] : [],
+  )
 
   # Hyperplane VPC Configuration (Access RDS and S3 Endpoint privately)
   vpc_config {
@@ -145,7 +174,11 @@ resource "aws_lambda_function" "services" {
       # (the app's default) then resolves to "off": Lost & Found falls back to its same-category
       # rule, and auto-flagging's text checks skip the embedding-similarity part. Nothing crashes;
       # see app/config.py and app/categories_suggest.py's own "if missing, returns None" design.
-    }, each.key == "community_events" && var.tesseract_layer_zip != "" ? { TESSDATA_PREFIX = "/opt/share/tessdata" } : {})
+      },
+      each.key == "community_events" && var.tesseract_layer_zip != "" ? { TESSDATA_PREFIX = "/opt/share/tessdata" } : {},
+      # The ML layer's model sits in /opt/models. Only the bge category model is there, so Lost & Found
+      # matching still resolves to "off" (it needs the matching models too).
+    contains(local.ml_layer_services, each.key) ? { CAMPUSHUB_MATCH_MODEL_DIR = "/opt/models" } : {})
   }
 
   depends_on = [
