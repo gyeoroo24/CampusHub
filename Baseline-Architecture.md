@@ -208,3 +208,4 @@ terraform/
 └── scripts/
     └── deploy_frontend.sh     # Automates Flutter Web build and S3 sync
 ```
+
