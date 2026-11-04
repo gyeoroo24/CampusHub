@@ -82,6 +82,11 @@ output "database_password_ssm_parameter" {
   value       = module.database.db_password_ssm_param
 }
 
+output "data_tools_function_name" {
+  description = "Snapshot Lambda used by scripts/snapshot_export.sh and snapshot_restore.sh"
+  value       = module.data_tools.data_tools_function_name
+}
+
 output "cost_guardrail_budget" {
   description = "AWS Budgets Free Tier Guardrail Monitor"
   value       = module.monitoring.budget_name

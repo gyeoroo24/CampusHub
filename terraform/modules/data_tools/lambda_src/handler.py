@@ -5,6 +5,7 @@ Payloads (invoke with `aws lambda invoke --payload ...`):
   {"action": "restore", "key": "_snapshots/x.dump",    replaces the public schema with the dump; refuses
    "force": false}                                     if the database already has tables, unless force is true
   {"action": "counts"}                                 row counts of the main tables
+  {"action": "run_sql", "key": "_snapshots/x.sql"}     runs a SQL file (a db/migrations upgrade) against the database
 
 The PostgreSQL client programs (pg_dump, pg_restore, psql) come from the pg layer under /opt/bin.
 Only boto3 and the standard library are used here.
@@ -19,6 +20,7 @@ import boto3
 BUCKET = os.environ["MEDIA_BUCKET"]
 SNAPSHOT_PREFIX = "_snapshots/"
 LOCAL_DUMP = "/tmp/campushub.dump"
+LOCAL_SQL = "/tmp/migration.sql"
 MAIN_TABLES = ["users", "listings", "notifications", "comments", "threads", "placement_records",
                "course_feedback", "events", "mess_menus", "moderation_log"]
 
@@ -69,6 +71,17 @@ def restore(event):
     return counts({})
 
 
+def run_sql(event):
+    key = event["key"]
+    if not key.startswith(SNAPSHOT_PREFIX):
+        raise ValueError("run_sql only reads files under _snapshots/")
+    env = _db_env()
+    s3.download_file(BUCKET, key, LOCAL_SQL)
+    _run(["psql", "-v", "ON_ERROR_STOP=1", "-f", LOCAL_SQL], env)
+    os.remove(LOCAL_SQL)
+    return {"ran": key}
+
+
 def counts(_event):
     env = _db_env()
     result = {}
@@ -88,4 +101,6 @@ def handler(event, _context):
         return restore(event)
     if action == "counts":
         return counts(event)
+    if action == "run_sql":
+        return run_sql(event)
     raise ValueError(f"unknown action {action!r}")

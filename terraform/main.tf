@@ -140,3 +140,18 @@ module "monitoring" {
   alb_arn_suffix     = module.compute_ec2.alb_arn_suffix
   asg_name           = module.compute_ec2.asg_name
 }
+
+# 9. SNAPSHOT TOOLS (in-VPC Lambda that exports and restores the database for scripts/snapshot_*.sh)
+module "data_tools" {
+  source = "./modules/data_tools"
+
+  environment           = var.environment
+  project_name          = var.project_name
+  lambda_subnet_ids     = module.networking.lambda_subnet_ids
+  app_security_group_id = module.networking.app_security_group_id
+  db_host               = module.database.db_address
+  db_name               = module.database.db_name
+  db_secret_arn         = module.database.db_secret_arn
+  media_bucket_id       = module.storage.media_bucket_id
+  media_bucket_arn      = module.storage.media_bucket_arn
+}
