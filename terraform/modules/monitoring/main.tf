@@ -98,3 +98,23 @@ resource "aws_cloudwatch_metric_alarm" "api_5xx_errors" {
     ApiId = var.api_id
   }
 }
+
+# CloudWatch Metric Alarm for the EC2 baseline's ALB 5XX Errors (additive -- doesn't touch anything
+# above; only created when the EC2 baseline is enabled).
+resource "aws_cloudwatch_metric_alarm" "alb_5xx_errors" {
+  count               = var.enable_alb_alarm ? 1 : 0
+  alarm_name          = "${var.project_name}-${var.environment}-alb-5xx-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "HTTPCode_Target_5XX_Count"
+  namespace           = "AWS/ApplicationELB"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 5
+  alarm_description   = "EC2 baseline ALB target 5XX errors exceeded threshold"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+
+  dimensions = {
+    LoadBalancer = var.alb_arn_suffix
+  }
+}

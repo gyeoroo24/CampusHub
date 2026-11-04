@@ -36,3 +36,15 @@ variable "lambda_function_names" {
   description = "Map of Lambda function names"
   type        = map(string)
 }
+
+variable "enable_alb_alarm" {
+  description = "Create the EC2 baseline's ALB 5XX alarm (only meaningful when enable_ec2_baseline is true)"
+  type        = bool
+  default     = false
+}
+
+variable "alb_arn_suffix" {
+  description = "ALB ARN suffix for the 5XX alarm's dimension (required when enable_alb_alarm is true)"
+  type        = string
+  default     = ""
+}

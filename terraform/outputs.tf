@@ -91,3 +91,18 @@ output "data_tools_function_name" {
   description = "Snapshot Lambda: export and restore the database (scripts/snapshot_export.sh, snapshot_restore.sh)"
   value       = module.data_tools.data_tools_function_name
 }
+
+output "ec2_baseline_enabled" {
+  description = "Whether the EC2 baseline comparison deployment is currently provisioned"
+  value       = var.enable_ec2_baseline
+}
+
+output "ec2_baseline_url" {
+  description = "HTTPS URL for the EC2 baseline deployment (its own CloudFront distribution in front of the ALB), for comparison against app_url. Null unless enable_ec2_baseline is true."
+  value       = var.enable_ec2_baseline ? "https://${module.cdn_baseline[0].cloudfront_domain_name}" : null
+}
+
+output "ec2_baseline_alb_dns_name" {
+  description = "The ALB's own DNS name (plain HTTP, no CDN) -- useful for load-testing tools that don't need TLS. Null unless enable_ec2_baseline is true."
+  value       = var.enable_ec2_baseline ? module.compute_ec2[0].alb_dns_name : null
+}

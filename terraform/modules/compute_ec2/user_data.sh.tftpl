@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+set -u
+
+# Redirect all stdout & stderr to log and console
+exec > >(tee -a /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+echo "=== Starting CampusHub EC2 Baseline User Data Initialization ==="
+date
+
+STATUS_FILE=/var/lib/campushub-user-data-status
+echo "in_progress" > "$STATUS_FILE"
+fail() { echo "FATAL: $*"; echo "failed" > "$STATUS_FILE"; exit 1; }
+
+# 1. Install prerequisites (Amazon Linux 2023 ships AWS CLI v2 pre-installed)
+echo "Installing OS packages..."
+dnf install -y python3.11 git unzip jq || dnf install -y python3 git unzip jq \
+  || fail "could not install required OS packages (python3/git/unzip/jq)"
+
+# 2. Setup application directory
+APP_DIR="/opt/campushub"
+mkdir -p "$APP_DIR/backend"
+cd "$APP_DIR"
+
+# 3. Download CampusHub backend code package from S3
+echo "Downloading backend package from s3://${media_bucket_id}/_deploy/backend.zip..."
+aws s3 cp "s3://${media_bucket_id}/_deploy/backend.zip" /tmp/backend.zip --region "${aws_region}" \
+  || fail "could not download backend.zip from S3 (check the ec2_app_policy IAM permissions and the _deploy/backend.zip key)"
+unzip -q -o /tmp/backend.zip -d "$APP_DIR/backend" || fail "backend.zip downloaded but failed to unzip"
+echo "Backend package extracted successfully."
+
+# 4. Retrieve database credentials from Secrets Manager (only for this script's own direct schema
+#    check below; the app itself fetches the same secret at startup via CAMPUSHUB_DATABASE_SECRET_ARN
+#    -- the password is never written to .env, same as the Lambda deployment path)
+echo "Retrieving database credentials from Secrets Manager..."
+SECRET_JSON=$(aws secretsmanager get-secret-value \
+  --secret-id "${db_secret_arn}" \
+  --region "${aws_region}" \
+  --query SecretString \
+  --output text) || fail "could not read the DB secret from Secrets Manager (check IAM and db_secret_arn)"
+DB_PASS=$(echo "$SECRET_JSON" | jq -r '.password // empty')
+[ -n "$DB_PASS" ] || fail "DB secret JSON had no 'password' field"
+
+# 5. Write .env configuration file. CAMPUSHUB_DATABASE_URL carries no password -- app/db.py fetches
+#    user+password from CAMPUSHUB_DATABASE_SECRET_ARN itself and they replace whatever the URL has.
+cat <<EOF > "$APP_DIR/backend/.env"
+CAMPUSHUB_DATABASE_URL=postgresql://${db_user}@${db_host}:5432/${db_name}
+CAMPUSHUB_DATABASE_SECRET_ARN=${db_secret_arn}
+CAMPUSHUB_AUTH_MODE=cognito
+CAMPUSHUB_COGNITO_REGION=${aws_region}
+CAMPUSHUB_COGNITO_USER_POOL_ID=${cognito_user_pool_id}
+CAMPUSHUB_COGNITO_APP_CLIENT_ID=${cognito_app_client_id}
+CAMPUSHUB_S3_BUCKET=${media_bucket_id}
+CAMPUSHUB_S3_REGION=${aws_region}
+CAMPUSHUB_CORS_ALLOW_ORIGINS=["*"]
+CAMPUSHUB_ORIGIN_VERIFY_SECRET=${origin_verify_header}
+EOF
+
+chmod 600 "$APP_DIR/backend/.env"
+
+# 6. Setup Python virtual environment & dependencies
+PYTHON_BIN=$(command -v python3.11 || command -v python3) || fail "no python3 interpreter found"
+echo "Using Python: $($PYTHON_BIN --version)"
+$PYTHON_BIN -m venv "$APP_DIR/venv" || fail "python venv creation failed"
+"$APP_DIR/venv/bin/pip" install --upgrade pip setuptools wheel --quiet || fail "pip/setuptools/wheel upgrade failed"
+
+echo "Installing backend dependencies..."
+"$APP_DIR/venv/bin/pip" install --no-cache-dir "fastapi==0.115.6" "uvicorn[standard]==0.34.0" "asyncpg==0.30.0" "pydantic==2.10.4" "pydantic-settings==2.7.1" "PyJWT[crypto]==2.10.1" "cryptography==50.0.2" "boto3==1.37.38" --quiet \
+  || fail "core backend dependency install failed"
+
+# requirements.txt carries the optional/ML-adjacent deps (see backend/requirements.txt); a failure
+# here is logged loudly, not swallowed, but doesn't block the service from starting with what the
+# core install above already provides.
+if [ -f "$APP_DIR/backend/requirements.txt" ]; then
+  if ! "$APP_DIR/venv/bin/pip" install --no-cache-dir -r "$APP_DIR/backend/requirements.txt" --quiet; then
+    echo "WARNING: requirements.txt install failed -- continuing with only the core deps installed above. Optional features (category suggestion, mess menu OCR, matching) will not work."
+  fi
+fi
+
+# 7. Initialize Database Schema if not already loaded in RDS
+if [ -f "$APP_DIR/backend/db/schema.sql" ]; then
+  echo "Checking database schema initialization..."
+  "$APP_DIR/venv/bin/python" -c "
+import asyncio, asyncpg, os
+async def init():
+    try:
+        conn = await asyncpg.connect('postgresql://${db_user}:$DB_PASS@${db_host}:5432/${db_name}', timeout=10)
+        exists = await conn.fetchval(\"SELECT to_regclass('users');\")
+        if not exists:
+            print('Loading schema.sql into database...')
+            with open('$APP_DIR/backend/db/schema.sql') as f:
+                await conn.execute(f.read())
+            ref = '$APP_DIR/backend/db/reference-data.sql'
+            if os.path.exists(ref):
+                with open(ref) as f:
+                    await conn.execute(f.read())
+            print('Database tables created successfully.')
+        else:
+            print('Database tables already exist -- nothing to do (this deployment shares the RDS instance with the serverless path).')
+        await conn.close()
+    except Exception as e:
+        print('DB Init note:', e)
+asyncio.run(init())
+" || echo "WARNING: schema-init check raised an error (see above); the service will still start, but may fail at startup if tables are genuinely missing."
+fi
+
+# 8. Create systemd unit service
+cat <<'SERVICE' > /etc/systemd/system/campushub.service
+[Unit]
+Description=CampusHub FastAPI Backend (Baseline EC2)
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/opt/campushub/backend
+EnvironmentFile=/opt/campushub/backend/.env
+ExecStart=/opt/campushub/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+# Set ownership
+chown -R ec2-user:ec2-user "$APP_DIR"
+
+# 9. Start and enable systemd service
+systemctl daemon-reload
+systemctl enable --now campushub.service
+
+# 10. Health check poll -- this now actually reflects reality in $STATUS_FILE instead of always
+#     claiming success (the ASG health check hitting the ALB target group is the real signal
+#     CloudWatch/the ASG act on; this is for a human reading /var/log/user-data.log).
+echo "Polling health check on port 8000..."
+healthy=false
+for i in {1..30}; do
+  if curl -sf http://127.0.0.1:8000/api/v1/health >/dev/null 2>&1; then
+    echo "CampusHub FastAPI backend is UP and HEALTHY on port 8000!"
+    healthy=true
+    break
+  fi
+  sleep 2
+done
+
+if [ "$healthy" = true ]; then
+  echo "ok" > "$STATUS_FILE"
+  echo "=== CampusHub EC2 Baseline User Data Completed Successfully ==="
+else
+  echo "unhealthy" > "$STATUS_FILE"
+  echo "=== CampusHub EC2 Baseline User Data FINISHED BUT THE APP NEVER BECAME HEALTHY -- check 'journalctl -u campushub' on this instance via SSM Session Manager ==="
+fi
+date
