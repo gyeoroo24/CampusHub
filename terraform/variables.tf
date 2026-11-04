@@ -86,9 +86,9 @@ variable "cognito_domain_prefix" {
 }
 
 variable "additional_callback_urls" {
-  description = "Extra web-app addresses for Cognito redirects, e.g. [\"https://<cloudfront-domain>/\"]. Set after the first apply, then apply again."
+  description = "Extra web-app addresses for Cognito redirects, e.g. [\"https://<cloudfront-domain>/\"]. Configured in terraform.tfvars."
   type        = list(string)
-  default     = ["https://dohlbabjfehbe.cloudfront.net/"]
+  default     = []
 }
 
 variable "tesseract_layer_zip" {

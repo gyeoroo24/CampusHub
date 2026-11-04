@@ -32,6 +32,11 @@ output "asg_name" {
   value       = module.compute_ec2.asg_name
 }
 
+output "target_group_arn" {
+  description = "Target Group ARN for Application Load Balancer"
+  value       = module.compute_ec2.target_group_arn
+}
+
 output "cognito_hosted_ui_domain" {
   description = "Hosted UI host the web app uses for sign-in (COGNITO_DOMAIN build define)"
   value       = "${module.auth.hosted_ui_domain_prefix}.auth.${var.aws_region}.amazoncognito.com"
