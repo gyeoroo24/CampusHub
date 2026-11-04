@@ -22,6 +22,16 @@ output "api_endpoint" {
   value       = module.api_gateway.api_endpoint
 }
 
+output "cognito_hosted_ui_domain" {
+  description = "Hosted UI host the web app uses for sign-in (COGNITO_DOMAIN build define)"
+  value       = "${module.auth.hosted_ui_domain_prefix}.auth.${var.aws_region}.amazoncognito.com"
+}
+
+output "cloudfront_distribution_id" {
+  description = "CloudFront distribution ID (for cache invalidation after a frontend release)"
+  value       = var.enable_cloudfront ? module.cdn[0].cloudfront_distribution_id : null
+}
+
 output "cognito_user_pool_id" {
   description = "Cognito User Pool ID for Authentication"
   value       = module.auth.user_pool_id
@@ -65,4 +75,9 @@ output "lambda_functions" {
 output "cost_guardrail_budget" {
   description = "AWS Budgets Free Tier Guardrail Monitor"
   value       = module.monitoring.budget_name
+}
+
+output "data_tools_function_name" {
+  description = "Snapshot Lambda: export and restore the database (scripts/snapshot_export.sh, snapshot_restore.sh)"
+  value       = module.data_tools.data_tools_function_name
 }

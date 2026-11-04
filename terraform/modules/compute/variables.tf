@@ -77,6 +77,18 @@ variable "lambda_timeout" {
   default     = 29
 }
 
+variable "tesseract_layer_zip" {
+  description = "Path to the Tesseract layer zip built by modules/compute/tesseract_layer/build.sh. Empty = no layer: mess menus can't be read from files and the app says so."
+  type        = string
+  default     = ""
+}
+
+variable "community_events_memory_size" {
+  description = "Memory for the community-events function (mess menu reading with OCR needs more CPU than 512 MB)"
+  type        = number
+  default     = 1024
+}
+
 variable "lambda_runtime" {
   description = "Lambda runtime"
   type        = string

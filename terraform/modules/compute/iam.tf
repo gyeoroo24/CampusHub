@@ -36,6 +36,9 @@ resource "aws_iam_policy" "lambda_app_permissions" {
         Action = [
           "s3:GetObject",
           "s3:PutObject",
+          # Upload tickets carry the tag state=pending, so S3 also checks these two.
+          "s3:PutObjectTagging",
+          "s3:GetObjectTagging",
           "s3:DeleteObject",
           "s3:ListBucket"
         ]

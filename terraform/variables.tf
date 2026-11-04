@@ -79,6 +79,30 @@ variable "monthly_budget_usd" {
   default     = "50.0"
 }
 
+variable "cognito_domain_prefix" {
+  description = "Prefix of the Cognito Hosted UI domain. Must be unique across AWS. Empty = campushub-<env>-<account id>. For an existing deployment, set it to the domain already in use so Terraform doesn't create a second one."
+  type        = string
+  default     = ""
+}
+
+variable "additional_callback_urls" {
+  description = "Extra web-app addresses for Cognito redirects, e.g. [\"https://<cloudfront-domain>/\"]. Set after the first apply, then apply again."
+  type        = list(string)
+  default     = []
+}
+
+variable "tesseract_layer_zip" {
+  description = "Path (relative to the terraform directory) to tesseract-layer.zip from modules/compute/tesseract_layer/build.sh. Empty = no OCR layer; mess menus can't be read from files."
+  type        = string
+  default     = ""
+}
+
+variable "community_events_memory_size" {
+  description = "Memory (MB) for the community-events function, which reads mess menus"
+  type        = number
+  default     = 1024
+}
+
 variable "lambda_memory_size" {
   description = "Memory allocated to each Lambda function in MB"
   type        = number

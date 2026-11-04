@@ -7,9 +7,10 @@ Nothing here is posted: the moderator checks every cell in the app, fixes what w
      small slant (a phone photo, a crooked scan) is straightened by finding the angle at which the
      table's rows line up best.
   2. Find the table's ruled lines: rows and columns where long runs of dark pixels cross the page.
-  3. OCR each cell with Tesseract (the `tesseract` program; Apache-2.0 LSTM OCR, no network, ~0.1 s
-     a cell). Coloured text (veg / non-veg colour coding) is easy to lose, so each cell is read three
-     ways (grey, and the darkest colour channel at two thresholds) and the cleanest reading kept.
+  3. OCR each cell with Tesseract (Apache-2.0 LSTM OCR, no network). Tesseract is called in-process through
+     libtesseract, so its language model loads once and is reused for every cell. Each cell is read in grey;
+     coloured text (veg / non-veg colour coding) is easy to lose, so a weak reading is read again with the
+     darkest colour channel at two thresholds and the cleanest reading kept.
   4. Find the header row (Breakfast / Lunch / Snacks / Dinner) and the weekday in each row, and turn
      the grid into menu cells. Rows below the week whose first cell is a meal ("Breakfast: tea, milk
      ...") become the notes, and so do "Daily Breakfast items: ..." lines printed under the table (D Mess);
@@ -26,12 +27,16 @@ Tesseract, instead of crashing the whole app at startup.
 """
 from __future__ import annotations
 
+import ctypes
 import io
+import os
+import queue
 import re
 import shutil
 import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -50,6 +55,42 @@ WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", 
 MONTHS = ("january", "february", "march", "april", "may", "june", "july", "august", "september",
           "october", "november", "december")
 MAX_PAGES = 3
+
+# libtesseract, called in-process when it's installed (the Lambda layer ships it). Running the tesseract
+# program for every cell loads the language model each time, which was most of the reader's run time.
+_LIBRARY_NAMES = ("libtesseract.so.5", "libtesseract.5.dylib", "/opt/homebrew/lib/libtesseract.5.dylib",
+                  "/usr/local/lib/libtesseract.5.dylib")
+_TESSDATA_DIRS = ("/opt/share/tessdata", "/opt/homebrew/share/tessdata", "/usr/local/share/tessdata",
+                  "/usr/share/tessdata")
+
+
+def _load_libtesseract() -> ctypes.CDLL | None:
+    for name in _LIBRARY_NAMES:
+        try:
+            lib = ctypes.CDLL(name)
+        except OSError:
+            continue
+        p, i = ctypes.c_void_p, ctypes.c_int
+        lib.TessBaseAPICreate.restype = p
+        lib.TessBaseAPIInit3.argtypes = [p, ctypes.c_char_p, ctypes.c_char_p]
+        lib.TessBaseAPIInit3.restype = i
+        lib.TessBaseAPISetPageSegMode.argtypes = [p, i]
+        lib.TessBaseAPISetImage.argtypes = [p, p, i, i, i, i]
+        lib.TessBaseAPIGetUTF8Text.argtypes = [p]
+        lib.TessBaseAPIGetUTF8Text.restype = p
+        lib.TessBaseAPIGetTsvText.argtypes = [p, i]
+        lib.TessBaseAPIGetTsvText.restype = p
+        lib.TessDeleteText.argtypes = [p]
+        lib.TessBaseAPIDetectOrientationScript.argtypes = [
+            p, ctypes.POINTER(i), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_char_p),
+            ctypes.POINTER(ctypes.c_float)]
+        lib.TessBaseAPIDetectOrientationScript.restype = ctypes.c_bool
+        return lib
+    return None
+
+
+_tess = _load_libtesseract() if _IMAGING_AVAILABLE else None
+_idle_engines = {"eng": queue.SimpleQueue(), "osd": queue.SimpleQueue()}
 
 
 @dataclass
@@ -83,6 +124,18 @@ def _orientation(page: Image.Image) -> int:
     """Degrees to turn the page clockwise so its text reads normally (0, 90, 180 or 270)."""
     small = page.copy()
     small.thumbnail((1600, 1600))
+    if _tess is not None:
+        degrees, confidence = ctypes.c_int(), ctypes.c_float()
+        script, script_confidence = ctypes.c_char_p(), ctypes.c_float()
+        with _engine("osd") as handle:
+            _tess.TessBaseAPISetPageSegMode(handle, 0)      # 0 = orientation and script only
+            _set_image(handle, _pixels(small))
+            found = _tess.TessBaseAPIDetectOrientationScript(
+                handle, ctypes.byref(degrees), ctypes.byref(confidence), ctypes.byref(script),
+                ctypes.byref(script_confidence))
+        if not found or confidence.value < 1.0:
+            return 0
+        return -degrees.value % 360     # the API counts the turn the other way from the program's "Rotate:" line
     with tempfile.NamedTemporaryFile(suffix=".png") as f:
         small.save(f.name)
         out = subprocess.run(["tesseract", f.name, "-", "--psm", "0"], capture_output=True, text=True, timeout=30)
@@ -143,27 +196,72 @@ def _lines(runs: np.ndarray, fraction: float, gap: int = 4) -> list[int]:
     return [round(sum(g) / len(g)) for g in found]
 
 
+def _new_engine(lang: str) -> int:
+    datadir = os.environ.get("TESSDATA_PREFIX") or next((d for d in _TESSDATA_DIRS if os.path.isdir(d)), None)
+    handle = _tess.TessBaseAPICreate()
+    if _tess.TessBaseAPIInit3(handle, datadir.encode() if datadir else None, lang.encode()) != 0:
+        raise RuntimeError(f"Tesseract couldn't load its {lang} model")
+    return handle
+
+
+@contextmanager
+def _engine(lang: str = "eng"):
+    """An initialised Tesseract engine that no other thread is using. Engines are kept and reused, so the
+    language model loads once per engine, not once per cell. Orientation needs an engine started with
+    "osd": on an "eng" engine, libtesseract aborts the whole process."""
+    idle = _idle_engines[lang]
+    try:
+        handle = idle.get_nowait()
+    except queue.Empty:
+        handle = _new_engine(lang)
+    try:
+        yield handle
+    finally:
+        idle.put(handle)
+
+
+def _pixels(image: Image.Image) -> np.ndarray:
+    return np.ascontiguousarray(np.asarray(image))
+
+
+def _set_image(handle: int, pixels: np.ndarray) -> None:
+    height, width = pixels.shape[:2]
+    channels = 1 if pixels.ndim == 2 else pixels.shape[2]
+    _tess.TessBaseAPISetImage(handle, pixels.ctypes.data, width, height, channels, pixels.strides[0])
+
+
+def _tesseract_output(image: Image.Image, psm: int, tsv: bool) -> str:
+    """Tesseract's text for [image], or its TSV (one row per word, with boxes) with tsv."""
+    if _tess is None:
+        with tempfile.NamedTemporaryFile(suffix=".png") as f:
+            image.save(f.name)
+            args = ["tesseract", f.name, "-", "--psm", str(psm), *(["tsv"] if tsv else [])]
+            return subprocess.run(args, capture_output=True, text=True, timeout=30).stdout
+    pixels = _pixels(image)
+    with _engine() as handle:
+        _tess.TessBaseAPISetPageSegMode(handle, psm)
+        _set_image(handle, pixels)
+        result = _tess.TessBaseAPIGetTsvText(handle, 0) if tsv else _tess.TessBaseAPIGetUTF8Text(handle)
+        try:
+            return ctypes.string_at(result).decode("utf-8")
+        finally:
+            _tess.TessDeleteText(result)
+
+
 def _tesseract(image: Image.Image, psm: int = 6, keep_lines: bool = False):
     """The text Tesseract reads, on one line; or its lines as a list with keep_lines."""
-    with tempfile.NamedTemporaryFile(suffix=".png") as f:
-        image.save(f.name)
-        result = subprocess.run(["tesseract", f.name, "-", "--psm", str(psm)], capture_output=True, text=True,
-                                timeout=30)
+    text = _tesseract_output(image, psm, tsv=False)
     if keep_lines:
-        return [" ".join(line.split()) for line in result.stdout.splitlines() if line.strip()]
-    return " ".join(result.stdout.split())
+        return [" ".join(line.split()) for line in text.splitlines() if line.strip()]
+    return " ".join(text.split())
 
 
 def _tesseract_lines(image: Image.Image, psm: int = 6) -> list[tuple[str, int, int]]:
     """Each line Tesseract reads, with its width and its first word's width, in pixels."""
-    with tempfile.NamedTemporaryFile(suffix=".png") as f:
-        image.save(f.name)
-        result = subprocess.run(["tesseract", f.name, "-", "--psm", str(psm), "tsv"], capture_output=True,
-                                text=True, timeout=30)
     lines: dict[tuple, list[tuple[int, int, str]]] = {}
-    for row in result.stdout.splitlines()[1:]:
+    for row in _tesseract_output(image, psm, tsv=True).splitlines():
         cols = row.split("\t")
-        if len(cols) == 12 and cols[11].strip():
+        if len(cols) == 12 and cols[0] != "level" and cols[11].strip():
             left, width = int(cols[6]), int(cols[8])
             lines.setdefault((cols[2], cols[3], cols[4]), []).append((left, left + width, cols[11]))
     return [(" ".join(w for *_, w in words), words[-1][1] - words[0][0], words[0][1] - words[0][0])
@@ -199,17 +297,28 @@ def _score(text: str) -> float:
     return sum(len(w) for w in words) - 4 * len(scraps) - 3 * junk
 
 
+def _read_variant(v: Image.Image, width: int) -> str:
+    v = ImageOps.expand(v.resize((v.width * 2, v.height * 2), Image.LANCZOS), 30, 255)
+    return _join_lines(_tesseract_lines(v), width)
+
+
 def _read_cell(rgb: np.ndarray, grey: np.ndarray, box: tuple[int, int, int, int]) -> str:
+    """One Tesseract call per cell in grey. A blank cell is skipped; a weak reading (coloured veg / non-veg
+    text often reads badly in grey) is read again with the two colour thresholds, and the cleanest kept.
+    Every read is a Tesseract call, so the reads that can be skipped are skipped."""
     x0, y0, x1, y1 = box
-    darkest = rgb[y0:y1, x0:x1].min(axis=2)
-    variants = [Image.fromarray(grey[y0:y1, x0:x1])]
-    variants += [Image.fromarray(np.where(darkest < t, 0, 255).astype("uint8")) for t in (150, 200)]
-    readings = []
-    for v in variants:
-        width = v.width * 2
-        v = ImageOps.expand(v.resize((v.width * 2, v.height * 2), Image.LANCZOS), 30, 255)
-        readings.append(_join_lines(_tesseract_lines(v), width))
-    return max(readings, key=_score)
+    crop = grey[y0:y1, x0:x1]
+    if float(np.mean(crop < 170)) < 0.002:
+        return ""
+    width = (x1 - x0) * 2
+    best = _read_variant(Image.fromarray(crop), width)
+    if _score(best) < 0.5 * len(best):
+        darkest = rgb[y0:y1, x0:x1].min(axis=2)
+        for t in (150, 200):
+            candidate = _read_variant(Image.fromarray(np.where(darkest < t, 0, 255).astype("uint8")), width)
+            if _score(candidate) > _score(best):
+                best = candidate
+    return best
 
 
 def _clean(text: str) -> str:

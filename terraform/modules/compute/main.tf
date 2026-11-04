@@ -58,6 +58,29 @@ data "archive_file" "lambda_zip" {
   depends_on  = [null_resource.build_lambda_package]
 }
 
+# Tesseract OCR layer for reading mess menus (optional; see tesseract_layer/build.sh). Layers are
+# unzipped under /opt: /opt/bin is on PATH, /opt/lib is searched for shared libraries, and /opt/python
+# is importable. The zip is over Lambda's 50 MB direct-upload limit, so it is staged in the media
+# bucket under _layers/ and the layer is published from there.
+resource "aws_s3_object" "tesseract_layer" {
+  count       = var.tesseract_layer_zip == "" ? 0 : 1
+  bucket      = var.media_bucket_id
+  key         = "_layers/tesseract-${filemd5(var.tesseract_layer_zip)}.zip"
+  source      = var.tesseract_layer_zip
+  source_hash = filemd5(var.tesseract_layer_zip)
+}
+
+resource "aws_lambda_layer_version" "tesseract" {
+  count                    = var.tesseract_layer_zip == "" ? 0 : 1
+  layer_name               = "${var.project_name}-${var.environment}-tesseract"
+  description              = "Tesseract 5.5.3 OCR, eng data, numpy, Pillow, pypdfium2 (x86_64, Python 3.11)"
+  s3_bucket                = aws_s3_object.tesseract_layer[0].bucket
+  s3_key                   = aws_s3_object.tesseract_layer[0].key
+  source_code_hash         = filebase64sha256(var.tesseract_layer_zip)
+  compatible_runtimes      = [var.lambda_runtime]
+  compatible_architectures = ["x86_64"]
+}
+
 # CloudWatch Log Groups for each microservice with cost-effective 7-day retention
 resource "aws_cloudwatch_log_group" "lambda_logs" {
   for_each          = local.services
@@ -83,8 +106,11 @@ resource "aws_lambda_function" "services" {
   filename         = data.archive_file.lambda_zip.output_path
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 
-  memory_size = var.lambda_memory_size
+  memory_size = each.key == "community_events" ? var.community_events_memory_size : var.lambda_memory_size
   timeout     = var.lambda_timeout
+
+  # The OCR layer is only attached to community-events, which serves the mess menu routes.
+  layers = each.key == "community_events" && var.tesseract_layer_zip != "" ? [aws_lambda_layer_version.tesseract[0].arn] : []
 
   # Hyperplane VPC Configuration (Access RDS and S3 Endpoint privately)
   vpc_config {
@@ -94,7 +120,7 @@ resource "aws_lambda_function" "services" {
 
   # Names and shapes here must match app/config.py's Settings fields (env_prefix="CAMPUSHUB_").
   environment {
-    variables = {
+    variables = merge({
       CAMPUSHUB_DATABASE_URL = "postgresql://${var.db_user}@${var.db_host}:5432/${var.db_name}"
       # The URL above carries no password: the real one is injected from Secrets Manager at
       # startup (app/db.py), so it's never in plaintext in the Lambda console or CloudWatch.
@@ -103,20 +129,23 @@ resource "aws_lambda_function" "services" {
       # own (app/config.py resolves the pool size to 2 automatically once it detects it's running
       # in Lambda, via the AWS_LAMBDA_FUNCTION_NAME variable Lambda itself always sets).
 
-      CAMPUSHUB_AUTH_MODE          = "cognito"
-      CAMPUSHUB_COGNITO_REGION     = var.aws_region
+      CAMPUSHUB_AUTH_MODE             = "cognito"
+      CAMPUSHUB_COGNITO_REGION        = var.aws_region
       CAMPUSHUB_COGNITO_USER_POOL_ID  = var.cognito_user_pool_id
       CAMPUSHUB_COGNITO_APP_CLIENT_ID = var.cognito_app_client_id
 
       CAMPUSHUB_S3_BUCKET = var.media_bucket_id
       CAMPUSHUB_S3_REGION = var.aws_region
+      # Presigned upload URLs must point at the regional host: the global host answers with a 307
+      # redirect, which browsers refuse for cross-origin PUTs (the upload then fails with a network error).
+      CAMPUSHUB_S3_ENDPOINT_URL = "https://s3.${var.aws_region}.amazonaws.com"
 
       # No matcher Lambda is deployed (zip-only deployment; the matcher needs the ML dependencies
       # this build intentionally leaves out — see requirements-lambda-zip.txt). match_mode="auto"
       # (the app's default) then resolves to "off": Lost & Found falls back to its same-category
       # rule, and auto-flagging's text checks skip the embedding-similarity part. Nothing crashes;
       # see app/config.py and app/categories_suggest.py's own "if missing, returns None" design.
-    }
+    }, each.key == "community_events" && var.tesseract_layer_zip != "" ? { TESSDATA_PREFIX = "/opt/share/tessdata" } : {})
   }
 
   depends_on = [

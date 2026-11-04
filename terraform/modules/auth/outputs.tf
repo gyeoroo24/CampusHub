@@ -1,3 +1,8 @@
+output "hosted_ui_domain_prefix" {
+  description = "Prefix of the Hosted UI domain (the full host is <prefix>.auth.<region>.amazoncognito.com)"
+  value       = aws_cognito_user_pool_domain.hosted_ui.domain
+}
+
 output "user_pool_id" {
   description = "The ID of the Cognito User Pool"
   value       = aws_cognito_user_pool.pool.id

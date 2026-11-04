@@ -34,3 +34,9 @@ override.tf.json
 Thumbs.db
 .idea/
 .vscode/
+
+# Build outputs and personal-data snapshots (see docs/deployment errors resolution.md)
+data/snapshot/
+modules/data_tools/handler.zip
+modules/data_tools/pg_layer/pg-layer.zip
+modules/compute/tesseract_layer/tesseract-layer.zip

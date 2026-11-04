@@ -39,28 +39,32 @@ module "storage" {
 module "auth" {
   source = "./modules/auth"
 
-  environment  = var.environment
-  project_name = var.project_name
+  environment              = var.environment
+  project_name             = var.project_name
+  cognito_domain_prefix    = var.cognito_domain_prefix
+  additional_callback_urls = var.additional_callback_urls
 }
 
 # 5. BACKEND APP TIER (5 Serverless FastAPI Lambda Microservices in VPC)
 module "compute" {
   source = "./modules/compute"
 
-  environment            = var.environment
-  project_name           = var.project_name
-  aws_region             = var.aws_region
-  lambda_subnet_ids      = module.networking.lambda_subnet_ids
-  app_security_group_id  = module.networking.app_security_group_id
-  db_host                = module.database.db_address
-  db_name                = module.database.db_name
-  db_user                = module.database.db_username
-  db_secret_arn          = module.database.db_secret_arn
-  media_bucket_id        = module.storage.media_bucket_id
-  media_bucket_arn       = module.storage.media_bucket_arn
-  cognito_user_pool_id   = module.auth.user_pool_id
-  cognito_app_client_id  = module.auth.user_pool_client_id
-  lambda_memory_size     = var.lambda_memory_size
+  environment                  = var.environment
+  project_name                 = var.project_name
+  aws_region                   = var.aws_region
+  lambda_subnet_ids            = module.networking.lambda_subnet_ids
+  app_security_group_id        = module.networking.app_security_group_id
+  db_host                      = module.database.db_address
+  db_name                      = module.database.db_name
+  db_user                      = module.database.db_username
+  db_secret_arn                = module.database.db_secret_arn
+  media_bucket_id              = module.storage.media_bucket_id
+  media_bucket_arn             = module.storage.media_bucket_arn
+  cognito_user_pool_id         = module.auth.user_pool_id
+  cognito_app_client_id        = module.auth.user_pool_client_id
+  lambda_memory_size           = var.lambda_memory_size
+  tesseract_layer_zip          = var.tesseract_layer_zip
+  community_events_memory_size = var.community_events_memory_size
 }
 
 # 6. API GATEWAY TIER (HTTP API v2, Cognito JWT Authorizer, Routes, Throttling)
@@ -114,8 +118,8 @@ resource "aws_s3_bucket_policy" "frontend_cloudfront_oac" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid       = "AllowCloudFrontServicePrincipalReadOnly"
-        Effect    = "Allow"
+        Sid    = "AllowCloudFrontServicePrincipalReadOnly"
+        Effect = "Allow"
         Principal = {
           Service = "cloudfront.amazonaws.com"
         }
@@ -142,4 +146,19 @@ module "monitoring" {
   api_id                = module.api_gateway.api_id
   db_instance_id        = module.database.db_instance_id
   lambda_function_names = module.compute.lambda_function_names
+}
+
+# 10. DATA TOOLS: database snapshot export/restore, run inside the VPC (see modules/data_tools)
+module "data_tools" {
+  source = "./modules/data_tools"
+
+  environment           = var.environment
+  project_name          = var.project_name
+  lambda_subnet_ids     = module.networking.lambda_subnet_ids
+  app_security_group_id = module.networking.app_security_group_id
+  db_host               = module.database.db_address
+  db_name               = module.database.db_name
+  db_secret_arn         = module.database.db_secret_arn
+  media_bucket_id       = module.storage.media_bucket_id
+  media_bucket_arn      = module.storage.media_bucket_arn
 }

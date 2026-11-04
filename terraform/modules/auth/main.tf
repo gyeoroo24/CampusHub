@@ -1,3 +1,5 @@
+data "aws_caller_identity" "current" {}
+
 # AWS Cognito User Pool for CampusHub Authentication
 resource "aws_cognito_user_pool" "pool" {
   name = "${var.project_name}-${var.environment}-user-pool"
@@ -42,22 +44,22 @@ resource "aws_cognito_user_pool_client" "client" {
 
   generate_secret                      = false
   prevent_user_existence_errors        = "ENABLED"
-  enable_token_revocation               = true
+  enable_token_revocation              = true
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code", "implicit"]
   allowed_oauth_scopes                 = ["email", "openid", "profile"]
   supported_identity_providers         = ["COGNITO"]
 
-  callback_urls = [
+  callback_urls = concat([
     "http://localhost:3000/",
     "http://localhost:8080/",
     "https://oauth.pstmn.io/v1/callback"
-  ]
+  ], var.additional_callback_urls)
 
-  logout_urls = [
+  logout_urls = concat([
     "http://localhost:3000/",
     "http://localhost:8080/"
-  ]
+  ], var.additional_callback_urls)
 
   explicit_auth_flows = [
     "ALLOW_USER_PASSWORD_AUTH",
@@ -74,6 +76,12 @@ resource "aws_cognito_user_pool_client" "client" {
     access_token  = "hours"
     refresh_token = "days"
   }
+}
+
+# Hosted UI: the sign-in and sign-up pages the web app redirects to (authorization code + PKCE).
+resource "aws_cognito_user_pool_domain" "hosted_ui" {
+  domain       = var.cognito_domain_prefix != "" ? var.cognito_domain_prefix : "${var.project_name}-${var.environment}-${data.aws_caller_identity.current.account_id}"
+  user_pool_id = aws_cognito_user_pool.pool.id
 }
 
 # ==========================================
