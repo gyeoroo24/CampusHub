@@ -88,7 +88,7 @@ variable "cognito_domain_prefix" {
 variable "additional_callback_urls" {
   description = "Extra web-app addresses for Cognito redirects, e.g. [\"https://<cloudfront-domain>/\"]. Set after the first apply, then apply again."
   type        = list(string)
-  default     = []
+  default     = ["https://dohlbabjfehbe.cloudfront.net/"]
 }
 
 variable "tesseract_layer_zip" {

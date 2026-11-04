@@ -61,7 +61,7 @@ resource "aws_subnet" "app" {
   cidr_block        = var.lambda_subnet_cidrs[count.index]
   availability_zone = var.availability_zones[count.index]
 
-  map_public_ip_on_launch = false
+  map_public_ip_on_launch = true
 
   tags = {
     Name = "campushub-${var.environment}-app-subnet-${var.availability_zones[count.index]}"

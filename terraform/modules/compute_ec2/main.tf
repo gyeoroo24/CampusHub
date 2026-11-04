@@ -187,7 +187,10 @@ resource "aws_launch_template" "app" {
 
   depends_on = [aws_s3_object.backend_code]
 
-  vpc_security_group_ids = [var.app_security_group_id]
+  network_interfaces {
+    associate_public_ip_address = true
+    security_groups             = [var.app_security_group_id]
+  }
 
   iam_instance_profile {
     name = aws_iam_instance_profile.ec2_profile.name
