@@ -153,12 +153,39 @@ resource "aws_lb_listener" "http" {
 }
 
 # ==========================================
+# Backend Code Packaging & S3 Deployment
+# ==========================================
+data "archive_file" "backend_code" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend"
+  output_path = "${path.module}/backend.zip"
+  excludes = [
+    ".git",
+    ".pytest_cache",
+    "__pycache__",
+    "*.pyc",
+    ".venv",
+    "venv",
+    "tests"
+  ]
+}
+
+resource "aws_s3_object" "backend_code" {
+  bucket      = var.media_bucket_id
+  key         = "_deploy/backend.zip"
+  source      = data.archive_file.backend_code.output_path
+  source_hash = data.archive_file.backend_code.output_base64sha256
+}
+
+# ==========================================
 # EC2 Launch Template & Auto Scaling Group
 # ==========================================
 resource "aws_launch_template" "app" {
   name_prefix   = "${var.project_name}-${var.environment}-lt-"
   image_id      = data.aws_ami.al2023.id
   instance_type = var.instance_type
+
+  depends_on = [aws_s3_object.backend_code]
 
   vpc_security_group_ids = [var.app_security_group_id]
 

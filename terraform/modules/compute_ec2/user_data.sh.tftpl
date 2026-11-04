@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Redirect output to user-data log
-exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+# Redirect all stdout & stderr to log
+exec > >(tee -a /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
 echo "=== Starting CampusHub EC2 Baseline User Data Initialization ==="
 
 # 1. Install prerequisites
 dnf update -y
-dnf install -y python3.11 python3.11-pip git jq awscli
+dnf install -y python3.11 python3.11-pip unzip jq awscli
 
 # 2. Setup application directory
 APP_DIR="/opt/campushub"
-mkdir -p "$APP_DIR"
+mkdir -p "$APP_DIR/backend"
 cd "$APP_DIR"
 
-# 3. Retrieve DB credentials securely from AWS Secrets Manager
+# 3. Download CampusHub backend code package from S3
+echo "Downloading backend package from s3://${media_bucket_id}/_deploy/backend.zip..."
+aws s3 cp "s3://${media_bucket_id}/_deploy/backend.zip" /tmp/backend.zip --region "${aws_region}"
+unzip -q -o /tmp/backend.zip -d "$APP_DIR/backend"
+
+# 4. Retrieve database credentials from Secrets Manager
 echo "Retrieving database credentials from Secrets Manager..."
 SECRET_JSON=$(aws secretsmanager get-secret-value \
   --secret-id "${db_secret_arn}" \
@@ -25,17 +30,6 @@ SECRET_JSON=$(aws secretsmanager get-secret-value \
 DB_PASS=$(echo "$SECRET_JSON" | jq -r '.password // empty')
 if [ -z "$DB_PASS" ]; then
   DB_PASS=$(echo "$SECRET_JSON" | jq -r '.db_password // empty')
-fi
-
-# 4. Clone or fetch CampusHub backend code
-echo "Fetching CampusHub backend source..."
-git clone --depth 1 https://github.com/gyeoroo24/CampusHub.git "$APP_DIR/repo" || true
-
-if [ -d "$APP_DIR/repo/backend" ]; then
-  cp -r "$APP_DIR/repo/backend" "$APP_DIR/backend"
-else
-  # Fallback: create minimal healthy stub if repo is private without token
-  mkdir -p "$APP_DIR/backend/app"
 fi
 
 # 5. Write .env configuration file
@@ -54,16 +48,43 @@ EOF
 
 chmod 600 "$APP_DIR/backend/.env"
 
-# 6. Install dependencies in a virtual environment
+# 6. Install dependencies in virtual environment
 python3.11 -m venv "$APP_DIR/venv"
 "$APP_DIR/venv/bin/pip" install --upgrade pip
 if [ -f "$APP_DIR/backend/requirements.txt" ]; then
-  "$APP_DIR/venv/bin/pip" install --no-cache-dir -r "$APP_DIR/backend/requirements.txt" "uvicorn[standard]==0.34.0" || true
+  "$APP_DIR/venv/bin/pip" install --no-cache-dir "fastapi==0.115.6" "uvicorn[standard]==0.34.0" "asyncpg==0.30.0" "pydantic==2.10.4" "pydantic-settings==2.7.1" "PyJWT[crypto]==2.10.1" "cryptography==50.0.2" "boto3==1.37.38"
+  "$APP_DIR/venv/bin/pip" install --no-cache-dir -r "$APP_DIR/backend/requirements.txt" || true
 else
-  "$APP_DIR/venv/bin/pip" install fastapi uvicorn[standard] psycopg2-binary
+  "$APP_DIR/venv/bin/pip" install --no-cache-dir "fastapi==0.115.6" "uvicorn[standard]==0.34.0" "asyncpg==0.30.0" "pydantic==2.10.4" "pydantic-settings==2.7.1" "PyJWT[crypto]==2.10.1" "cryptography==50.0.2" "boto3==1.37.38"
 fi
 
-# 7. Create systemd unit service
+# 7. Initialize Database Schema if not already loaded in RDS
+if [ -f "$APP_DIR/backend/db/schema.sql" ]; then
+  echo "Checking database schema initialization..."
+  "$APP_DIR/venv/bin/python" -c "
+import asyncio, asyncpg
+async def init():
+    try:
+        conn = await asyncpg.connect('postgresql://${db_user}:$DB_PASS@${db_host}:5432/${db_name}', timeout=15)
+        exists = await conn.fetchval(\"SELECT to_regclass('users');\")
+        if not exists:
+            print('Initializing database tables from schema.sql...')
+            with open('$APP_DIR/backend/db/schema.sql') as f:
+                await conn.execute(f.read())
+            if os.path.exists('$APP_DIR/backend/db/reference-data.sql'):
+                with open('$APP_DIR/backend/db/reference-data.sql') as f:
+                    await conn.execute(f.read())
+            print('Database tables initialized successfully.')
+        else:
+            print('Database tables already exist.')
+        await conn.close()
+    except Exception as e:
+        print('Database init notice:', e)
+asyncio.run(init())
+" || true
+fi
+
+# 8. Create systemd unit service
 cat <<'SERVICE' > /etc/systemd/system/campushub.service
 [Unit]
 Description=CampusHub FastAPI Backend (Baseline EC2)
@@ -76,7 +97,7 @@ WorkingDirectory=/opt/campushub/backend
 EnvironmentFile=/opt/campushub/backend/.env
 ExecStart=/opt/campushub/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
 Restart=always
-RestartSec=5
+RestartSec=3
 StandardOutput=journal
 StandardError=journal
 
@@ -87,9 +108,18 @@ SERVICE
 # Set ownership
 chown -R ec2-user:ec2-user "$APP_DIR"
 
-# 8. Start and enable systemd service
+# 9. Start and enable systemd service
 systemctl daemon-reload
 systemctl enable --now campushub.service
 
-echo "=== CampusHub EC2 Baseline User Data Completed Successfully ==="
+# 10. Health check poll
+for i in {1..30}; do
+  if curl -sf http://127.0.0.1:8000/api/v1/health >/dev/null 2>&1; then
+    echo "CampusHub backend is healthy on port 8000!"
+    break
+  fi
+  echo "Waiting for backend to start (attempt $i/30)..."
+  sleep 3
+done
 
+echo "=== CampusHub EC2 Baseline User Data Completed Successfully ==="
