@@ -25,7 +25,7 @@ terraform {
   # 3. Run `terraform init -migrate-state`
   # ============================================================================
    backend "s3" {
-     bucket         = "campushub-tfstate-4a2783e6"
+     bucket         = "campushub-tfstate-3797456e"
      key            = "campushub/dev/terraform.tfstate"
      region         = "ap-south-1"
      dynamodb_table = "campushub-tf-locks"
