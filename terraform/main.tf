@@ -136,6 +136,7 @@ module "monitoring" {
   alert_email        = var.alert_email
   monthly_budget_usd = var.monthly_budget_usd
   db_instance_id     = module.database.db_instance_id
+  enable_alb_alarm   = true
   alb_arn_suffix     = module.compute_ec2.alb_arn_suffix
   asg_name           = module.compute_ec2.asg_name
 }

@@ -55,7 +55,7 @@ resource "aws_route_table_association" "public" {
 }
 
 # Subnets for App Tier (EC2 Instances in Baseline / Lambda in Serverless)
-resource "aws_subnet" "lambda" {
+resource "aws_subnet" "app" {
   count             = length(var.lambda_subnet_cidrs)
   vpc_id            = aws_vpc.main.id
   cidr_block        = var.lambda_subnet_cidrs[count.index]
@@ -85,7 +85,7 @@ resource "aws_subnet" "database" {
 }
 
 # Route Table for App Subnets (Routes to IGW for zero-cost outbound to Cognito/packages; inbound locked by SG)
-resource "aws_route_table" "lambda" {
+resource "aws_route_table" "app" {
   vpc_id = aws_vpc.main.id
 
   route {
@@ -98,11 +98,11 @@ resource "aws_route_table" "lambda" {
   }
 }
 
-# Route Table Association for Lambda Subnets
-resource "aws_route_table_association" "lambda" {
-  count          = length(aws_subnet.lambda)
-  subnet_id      = aws_subnet.lambda[count.index].id
-  route_table_id = aws_route_table.lambda.id
+# Route Table Association for App Subnets
+resource "aws_route_table_association" "app" {
+  count          = length(aws_subnet.app)
+  subnet_id      = aws_subnet.app[count.index].id
+  route_table_id = aws_route_table.app.id
 }
 
 # Route Table for Database Subnets
@@ -126,7 +126,7 @@ resource "aws_vpc_endpoint" "s3" {
   vpc_id            = aws_vpc.main.id
   service_name      = "com.amazonaws.${var.aws_region}.s3"
   vpc_endpoint_type = "Gateway"
-  route_table_ids   = [aws_route_table.lambda.id, aws_route_table.public.id]
+  route_table_ids   = [aws_route_table.app.id, aws_route_table.public.id]
 
   tags = {
     Name = "campushub-${var.environment}-s3-gateway-endpoint"
@@ -138,7 +138,7 @@ resource "aws_vpc_endpoint" "ssm" {
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.aws_region}.ssm"
   vpc_endpoint_type   = "Interface"
-  subnet_ids          = aws_subnet.lambda[*].id
+  subnet_ids          = aws_subnet.app[*].id
   security_group_ids  = [aws_security_group.vpce_sg.id]
   private_dns_enabled = true
 
@@ -152,7 +152,7 @@ resource "aws_vpc_endpoint" "kms" {
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.aws_region}.kms"
   vpc_endpoint_type   = "Interface"
-  subnet_ids          = aws_subnet.lambda[*].id
+  subnet_ids          = aws_subnet.app[*].id
   security_group_ids  = [aws_security_group.vpce_sg.id]
   private_dns_enabled = true
 
@@ -166,7 +166,7 @@ resource "aws_vpc_endpoint" "secretsmanager" {
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.aws_region}.secretsmanager"
   vpc_endpoint_type   = "Interface"
-  subnet_ids          = aws_subnet.lambda[*].id
+  subnet_ids          = aws_subnet.app[*].id
   security_group_ids  = [aws_security_group.vpce_sg.id]
   private_dns_enabled = true
 
@@ -184,7 +184,7 @@ resource "aws_vpc_endpoint" "cognito_idp" {
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.aws_region}.cognito-idp"
   vpc_endpoint_type   = "Interface"
-  subnet_ids          = aws_subnet.lambda[*].id
+  subnet_ids          = aws_subnet.app[*].id
   security_group_ids  = [aws_security_group.vpce_sg.id]
   private_dns_enabled = true
 

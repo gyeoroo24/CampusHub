@@ -22,6 +22,18 @@ variable "monthly_budget_usd" {
   default     = "5.0"
 }
 
+variable "enable_alb_alarm" {
+  description = "Set to true to provision CloudWatch alarm for Application Load Balancer"
+  type        = bool
+  default     = false
+}
+
+variable "enable_api_gateway_alarm" {
+  description = "Set to true to provision CloudWatch alarm for API Gateway"
+  type        = bool
+  default     = false
+}
+
 variable "api_id" {
   description = "API Gateway HTTP API ID (Optional in baseline)"
   type        = string

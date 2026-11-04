@@ -37,3 +37,4 @@ output "ec2_role_arn" {
   description = "IAM Role ARN attached to EC2 instances"
   value       = aws_iam_role.ec2_role.arn
 }
+

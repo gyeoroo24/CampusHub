@@ -83,7 +83,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
 
 # CloudWatch Metric Alarm for API Gateway 5XX Errors
 resource "aws_cloudwatch_metric_alarm" "api_5xx_errors" {
-  count               = var.api_id != "" ? 1 : 0
+  count               = var.enable_api_gateway_alarm ? 1 : 0
   alarm_name          = "${var.project_name}-${var.environment}-api-5xx-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -102,7 +102,7 @@ resource "aws_cloudwatch_metric_alarm" "api_5xx_errors" {
 
 # CloudWatch Metric Alarm for Application Load Balancer 5XX Errors (Baseline)
 resource "aws_cloudwatch_metric_alarm" "alb_5xx_errors" {
-  count               = var.alb_arn_suffix != "" ? 1 : 0
+  count               = var.enable_alb_alarm ? 1 : 0
   alarm_name          = "${var.project_name}-${var.environment}-alb-5xx-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1

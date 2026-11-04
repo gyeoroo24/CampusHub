@@ -15,12 +15,12 @@ output "public_subnet_ids" {
 
 output "app_subnet_ids" {
   description = "List of IDs of subnets for EC2 App tier"
-  value       = aws_subnet.lambda[*].id
+  value       = aws_subnet.app[*].id
 }
 
 output "lambda_subnet_ids" {
   description = "List of IDs of private subnets for Lambda functions"
-  value       = aws_subnet.lambda[*].id
+  value       = aws_subnet.app[*].id
 }
 
 output "database_subnet_ids" {
