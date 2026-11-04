@@ -14,6 +14,18 @@ variable "db_security_group_id" {
   type        = string
 }
 
+variable "app_security_group_id" {
+  description = "Security Group ID for the Lambda application tier. Reused as RDS Proxy's own security group when enable_rds_proxy is true, so it's already covered by the existing db_sg ingress-from-app_sg rule."
+  type        = string
+  default     = ""
+}
+
+variable "enable_rds_proxy" {
+  description = "Provision RDS Proxy in front of this database. See the root variable of the same name for cost/usage notes."
+  type        = bool
+  default     = false
+}
+
 variable "db_name" {
   description = "Database name for CampusHub"
   type        = string

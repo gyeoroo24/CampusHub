@@ -15,15 +15,17 @@ module "networking" {
 module "database" {
   source = "./modules/database"
 
-  environment          = var.environment
-  database_subnet_ids  = module.networking.database_subnet_ids
-  db_security_group_id = module.networking.db_security_group_id
-  db_name              = var.db_name
-  db_username          = var.db_username
-  instance_class       = var.db_instance_class
-  allocated_storage    = var.db_allocated_storage
-  engine_version       = var.db_engine_version
-  multi_az             = var.multi_az_db
+  environment           = var.environment
+  database_subnet_ids   = module.networking.database_subnet_ids
+  db_security_group_id  = module.networking.db_security_group_id
+  app_security_group_id = module.networking.app_security_group_id
+  db_name               = var.db_name
+  db_username           = var.db_username
+  instance_class        = var.db_instance_class
+  allocated_storage     = var.db_allocated_storage
+  engine_version        = var.db_engine_version
+  multi_az              = var.multi_az_db
+  enable_rds_proxy      = var.enable_rds_proxy
 }
 
 # 3. STORAGE TIER (Frontend S3 Bucket, Media/Docs S3 Bucket, CORS, Encryption)
@@ -54,7 +56,7 @@ module "compute" {
   aws_region                   = var.aws_region
   lambda_subnet_ids            = module.networking.lambda_subnet_ids
   app_security_group_id        = module.networking.app_security_group_id
-  db_host                      = module.database.db_address
+  db_host                      = module.database.db_connect_host
   db_name                      = module.database.db_name
   db_user                      = module.database.db_username
   db_secret_arn                = module.database.db_secret_arn

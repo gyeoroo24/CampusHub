@@ -57,6 +57,16 @@ output "database_endpoint" {
   value       = module.database.db_endpoint
 }
 
+output "database_connect_host" {
+  description = "Host the API Lambdas actually connect to right now: the RDS Proxy endpoint if enable_rds_proxy=true, otherwise the RDS instance directly"
+  value       = module.database.db_connect_host
+}
+
+output "rds_proxy_enabled" {
+  description = "Whether RDS Proxy is currently provisioned (enable_rds_proxy)"
+  value       = module.database.rds_proxy_enabled
+}
+
 output "database_name" {
   description = "RDS PostgreSQL Database Name"
   value       = module.database.db_name

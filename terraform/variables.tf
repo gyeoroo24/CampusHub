@@ -67,6 +67,12 @@ variable "db_username" {
   default     = "campushub_admin"
 }
 
+variable "enable_rds_proxy" {
+  description = "Set to true to provision RDS Proxy in front of the database, for load/perf testing. NOT Free Tier (~$0.015/vCPU-hour, 2 vCPU minimum, so ~$0.03/hour / ~$22/month if left running) — turn it off again (terraform apply) once testing is done. Switching it on or off only changes the Lambdas' CAMPUSHUB_DATABASE_URL env var, not their code, so no rebuild/redeploy is needed either way."
+  type        = bool
+  default     = false
+}
+
 variable "alert_email" {
   description = "Email address for AWS Budgets cost alerts and CloudWatch alarms"
   type        = string
@@ -118,11 +124,11 @@ variable "lambda_memory_size" {
 variable "throttling_rate_limit" {
   description = "API Gateway steady-state request rate limit (req/s) (PRD Section 8.4 Risk 1)"
   type        = number
-  default     = 50
+  default     = 1000
 }
 
 variable "throttling_burst_limit" {
   description = "API Gateway burst capacity limit (PRD Section 8.4 Risk 1)"
   type        = number
-  default     = 100
+  default     = 2000
 }

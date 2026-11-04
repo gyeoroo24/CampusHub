@@ -37,3 +37,13 @@ output "db_secret_arn" {
   description = "Secrets Manager secret ARN holding {username, password} for the API Lambda"
   value       = aws_secretsmanager_secret.db_credentials.arn
 }
+
+output "db_connect_host" {
+  description = "The host the API Lambdas should connect to: the RDS Proxy endpoint when enable_rds_proxy is true, otherwise the RDS instance directly. data_tools always uses db_address directly, bypassing the proxy."
+  value       = var.enable_rds_proxy ? aws_db_proxy.main[0].endpoint : aws_db_instance.postgres.address
+}
+
+output "rds_proxy_enabled" {
+  description = "Whether RDS Proxy is currently provisioned"
+  value       = var.enable_rds_proxy
+}
