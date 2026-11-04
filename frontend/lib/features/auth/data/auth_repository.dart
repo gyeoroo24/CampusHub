@@ -420,6 +420,10 @@ class ApiAuthRepository implements IAuthRepository {
     return AccountStatus.fromJson(data);
   }
 
+  /// Refreshes the stored ID token using the Cognito refresh token; wired into [ApiClient] as its
+  /// `onUnauthorized` callback, so it runs on any API call's 401, not just [getCurrentUser]'s.
+  Future<bool> refreshSession() => _refreshIdToken();
+
   Future<bool> _refreshIdToken() async {
     final refresh = await tokenStorage.getRefreshToken();
     if (refresh == null || refresh.isEmpty) return false;
@@ -442,27 +446,25 @@ class ApiAuthRepository implements IAuthRepository {
 
   @override
   Future<void> sendOtp(String email) async {
-    // Hardcoded sign-in code: no email is sent. The code is always 123456 (see verifyOtp).
+    // Local dev sign-in only: the server refuses this (404) when CAMPUSHUB_AUTH_MODE=cognito, i.e.
+    // on every real cloud deployment — see startCognitoSignIn for that path.
     final trimmed = email.trim().toLowerCase();
     if (!isIiscEmail(trimmed)) {
       throw Exception('Only valid IISc email addresses (ending in iisc.ac.in) are accepted.');
+    }
+    try {
+      await apiClient.post(ApiEndpoints.otpRequest, data: {'email': trimmed});
+    } on ApiException catch (e) {
+      if (e.statusCode != 404) rethrow; // 404 = not dev auth; nothing to request here
     }
   }
 
   @override
   Future<User> verifyOtp(String email, String otp) async {
-    // Hardcoded sign-in code: only 123456 is accepted.
-    if (otp.trim() != '123456') {
-      throw Exception('Incorrect code. Use 123456.');
-    }
     // Local dev sign-in: the email goes to the API in the X-Dev-User header. The server creates the
     // account on first sign-in and returns the user's real roles from `/me`.
     final trimmedEmail = email.trim().toLowerCase();
-    try {
-      await apiClient.post(ApiEndpoints.otpVerify, data: {'email': trimmedEmail, 'otp': otp.trim()});
-    } on ApiException catch (e) {
-      if (e.statusCode != 404) rethrow; // 404 = not dev auth; nothing to verify here
-    }
+    await apiClient.post(ApiEndpoints.otpVerify, data: {'email': trimmedEmail, 'otp': otp.trim()});
     await tokenStorage.saveUser({'email': trimmedEmail, 'name': trimmedEmail.split('@').first});
     await tokenStorage.saveTokens(accessToken: 'dev_token_$trimmedEmail');
 

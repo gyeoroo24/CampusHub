@@ -29,10 +29,6 @@ class _Entry:
 
 _store: dict[str, _Entry] = {}
 
-# === TEMP HARDCODED OTP — remove this block to restore real OTP generation/verification ===
-_HARDCODED_OTP = "123456"
-# === END TEMP HARDCODED OTP BLOCK ===
-
 
 def _hash(email: str, code: str) -> str:
     return hashlib.sha256(f"{email}:{code}".encode()).hexdigest()
@@ -95,19 +91,11 @@ def request_otp(email: str, send=None) -> None:
     code = f"{secrets.randbelow(1_000_000):06d}"
     _store[email] = _Entry(code_hash=_hash(email, code), expires_at=now + s.otp_ttl_seconds,
                            attempts=0, sent_at=now)
-    # === TEMP HARDCODED OTP — remove this block to restore real email sending ===
-    return
-    # === END TEMP HARDCODED OTP BLOCK ===
     (send or _send_email)(email, code)
 
 
 def verify_otp(email: str, code: str) -> bool:
     email = email.strip().lower()
-    # === TEMP HARDCODED OTP — remove this block to restore real code verification ===
-    if code.strip() == _HARDCODED_OTP:
-        _store.pop(email, None)
-        return True
-    # === END TEMP HARDCODED OTP BLOCK ===
     s = get_settings()
     entry = _store.get(email)
     if entry is None:

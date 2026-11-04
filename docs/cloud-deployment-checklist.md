@@ -1,11 +1,18 @@
 # Deploying CampusHub to the cloud: what still has to change
 
-*Last updated 2 Nov 2026 (database revision 16)*
+*Last updated 4 Nov 2026 (database revision 25)*
 
 Local development takes shortcuts that must not reach a real deployment. This page lists them,
 plus the cloud work each feature still needs. How to build and wire the Lambda, RDS Proxy, S3,
 CloudFront and IAM is in [backend/README.md → Deploying on AWS](../backend/README.md#deploying-on-aws).
 Update this page whenever a new shortcut or cloud dependency is added.
+
+**Currently deployed:** branch `fix/cloud-deploy-zip-and-routes`, commit `ea763ab` and this change
+on top of it, in AWS account `366314472818` (ap-south-1), environment `dev`. RDS is at schema
+revision 25 (migrations through `025_company_created_by.sql` applied); both the ML and Tesseract
+layers are attached. Record the new commit hash here each time the Lambdas are rebuilt and
+deployed, so it's never a guess which code is actually running — see `docs/deployment errors
+resolution.md`'s open item 1/no-CI-CD risk.
 
 ## Must do before going live
 
@@ -26,6 +33,10 @@ Update this page whenever a new shortcut or cloud dependency is added.
    - `021_role_compensation`
    - `022_course_repository_and_follows` (adds a notification type outside the transaction; run as is)
    - `023_permanent_buy_sell_deletes` (deletes listings and Wanted posts that were soft-deleted earlier; their photos stay in S3 until removed by hand or by a lifecycle rule)
+   - `024_event_updates`
+   - `025_company_created_by` (companies added before this revision have no recorded creator, and
+     stay unlisted on their creator's profile; older Lost & Found reports have no title and fall
+     back to showing their description)
 
    `010` merges older per-listing chats into one chat per person. Back up the `chat_*` tables
    first.

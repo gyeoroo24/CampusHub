@@ -19,6 +19,12 @@ class ApiClient {
   final String? devUserName;
   final String? devKey;
 
+  /// Set by the auth layer once it exists (ApiClient itself doesn't know about Cognito). On a 401,
+  /// this is called once per request to refresh the stored ID token; the request is retried with
+  /// the new token if it returns true. Without this, a signed-in user is logged out as soon as
+  /// their ~1 hour ID token expires, even with a valid refresh token sitting unused in storage.
+  Future<bool> Function()? onUnauthorized;
+
   ApiClient({
     Dio? dioClient,
     ITokenStorage? storage,
@@ -75,8 +81,24 @@ class ApiClient {
           }
           return handler.next(options);
         },
-        onError: (DioException error, handler) {
+        onError: (DioException error, handler) async {
           if (error.response?.statusCode == 403) forbidden.add(error.requestOptions.path);
+
+          final alreadyRetried = error.requestOptions.extra['_retriedAfter401'] == true;
+          if (error.response?.statusCode == 401 && !alreadyRetried && onUnauthorized != null) {
+            final refreshed = await onUnauthorized!();
+            if (refreshed) {
+              try {
+                final retryOptions = error.requestOptions
+                  ..extra['_retriedAfter401'] = true;
+                final response = await dio.fetch(retryOptions);
+                return handler.resolve(response);
+              } on DioException catch (retryError) {
+                return handler.next(retryError);
+              }
+            }
+          }
+
           // Wrap with our typed ApiException
           final appError = ApiException.fromDioException(error);
           return handler.reject(

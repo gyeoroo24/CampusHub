@@ -28,13 +28,18 @@ final authRepositoryProvider = Provider<IAuthRepository>((ref) {
   if (serverConfig.useMockData) {
     return MockAuthRepository(storage: tokenStorage);
   }
-  return ApiAuthRepository(
-    apiClient: ref.watch(apiClientProvider),
+  final apiClient = ref.watch(apiClientProvider);
+  final repo = ApiAuthRepository(
+    apiClient: apiClient,
     tokenStorage: tokenStorage,
     cognito: AppConfig.cognitoEnabled
         ? CognitoHostedUi(domain: AppConfig.cognitoDomain, clientId: AppConfig.cognitoClientId)
         : null,
   );
+  // Any API call's 401 (not just getCurrentUser's) now refreshes the Cognito ID token and retries
+  // once, instead of leaving the user signed out until they reload.
+  apiClient.onUnauthorized = repo.refreshSession;
+  return repo;
 });
 
 /// Stream of the current authenticated user (null means Guest).

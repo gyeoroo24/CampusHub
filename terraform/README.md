@@ -31,16 +31,18 @@ This repository contains production-ready, modular Terraform code automating the
              v                                                  v
 +-----------------------------+               +-----------------------------------+
 |      S3 Frontend Bucket     |               |    AWS API Gateway (HTTP API v2)  |
-|  (Flutter Web Static Build) |               |      + Built-in JWT Authorizer    |
-|   Protected by OAC          |               +-----------------+-----------------+
-+-----------------------------+                                 |
-                                                                | (Validates JWT)
-                                                                v
+|  (Flutter Web Static Build) |               | (no gateway-level authorizer; the |
+|   Protected by OAC          |               |  FastAPI app checks auth itself)  |
++-----------------------------+               +-----------------+-----------------+
+                                                                 |
+                                                                 v
                                               +-----------------------------------+
                                               |       AWS Cognito User Pool       |
                                               | (Guests, Signed-in, Mods, Admins) |
+                                              |  the app validates the ID token   |
+                                              |   against this pool's JWKS        |
                                               +-----------------------------------+
-                                                                |
+                                                                 |
         +-------------------------------------------------------+
         | Private VPC Invocations
         v
@@ -112,7 +114,7 @@ terraform/
 
 | Proposed Resource in PRD / Diagram | AWS Free Tier Status | Adopted Solution in Terraform |
 | :--- | :--- | :--- |
-| **RDS Multi-AZ Cluster (3 nodes)** | **NOT Free Tier** (Would incur immediate charges for 2 standby nodes) | Configured as **Single-AZ `db.t4g.micro`** by default (`multi_az_db = false`), with 20 GB gp3 storage (100% Free Tier). Multi-AZ can be enabled via variable for benchmark testing. |
+| **RDS Multi-AZ Cluster (3 nodes)** | **NOT Free Tier** (Would incur immediate charges for 2 standby nodes) | `db.t4g.micro`, 20 GB gp3 storage. The `multi_az_db` variable currently **defaults to `true`** (not Free Tier — this incurs real standby-node cost); set `multi_az_db = false` in `terraform.tfvars` for a Free Tier single-AZ instance, or keep `true` deliberately for HA/benchmark testing. |
 | **AWS WAF** | **NOT Free Tier** ($5/mo WebACL + $1/mo per rule) | Made **toggleable** (`enable_waf = false` by default). API Gateway's built-in throttling (50 req/s, 100 burst) handles edge rate-limiting for **$0**. |
 | **VPC NAT Gateway** | **NOT Free Tier** (~$32.40/month per gateway) | Lambdas utilize the **free VPC Gateway Endpoint for S3**. API Gateway validates Cognito JWT at the edge, removing any need for Lambdas to make public internet calls. |
 | **Route 53 Hosted Zone** | **NOT Free Tier** ($0.50/mo per zone + domain purchase) | CloudFront provides a free SSL certificate on `*.cloudfront.net`. Route 53 is decoupled and optional. |
@@ -194,6 +196,14 @@ This tests:
      --user-pool-id <cognito_user_pool_id> \
      --username teststudent@iisc.ac.in \
      --group-name "Signed-in"
+   ```
+3b. **Mark the email verified** — `admin-confirm-sign-up` alone does not set this, and the backend
+    refuses to create the account (403) without it:
+   ```bash
+   aws cognito-idp admin-update-user-attributes \
+     --user-pool-id <cognito_user_pool_id> \
+     --username teststudent@iisc.ac.in \
+     --user-attributes Name=email_verified,Value=true
    ```
 4. Authenticate and retrieve the Cognito JWT IdToken:
    ```bash

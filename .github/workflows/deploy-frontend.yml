@@ -39,7 +39,9 @@ jobs:
         run: |
           flutter build web --release \
             --dart-define=USE_MOCK=false \
-            --dart-define=API_BASE_URL="${{ secrets.API_BASE_URL }}"
+            --dart-define=API_BASE_URL="${{ secrets.API_BASE_URL }}" \
+            --dart-define=COGNITO_DOMAIN="${{ secrets.COGNITO_DOMAIN }}" \
+            --dart-define=COGNITO_CLIENT_ID="${{ secrets.COGNITO_CLIENT_ID }}"
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4

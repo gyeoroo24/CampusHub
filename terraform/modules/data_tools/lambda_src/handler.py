@@ -5,6 +5,8 @@ Payloads (invoke with `aws lambda invoke --payload ...`):
   {"action": "restore", "key": "_snapshots/x.dump",    replaces the public schema with the dump; refuses
    "force": false}                                     if the database already has tables, unless force is true
   {"action": "counts"}                                 row counts of the main tables
+  {"action": "migrate", "sql": "<file contents>"}      runs a backend/db/migrations/0NN_*.sql file
+                                                        with ON_ERROR_STOP=1 in one psql session
 
 The PostgreSQL client programs (pg_dump, pg_restore, psql) come from the pg layer under /opt/bin.
 Only boto3 and the standard library are used here.
@@ -69,6 +71,18 @@ def restore(event):
     return counts({})
 
 
+def migrate(event):
+    env = _db_env()
+    path = "/tmp/migrate.sql"
+    with open(path, "w") as f:
+        f.write(event["sql"])
+    try:
+        output = _run(["psql", "-v", "ON_ERROR_STOP=1", "-f", path], env)
+    finally:
+        os.remove(path)
+    return {"output": output}
+
+
 def counts(_event):
     env = _db_env()
     result = {}
@@ -88,4 +102,6 @@ def handler(event, _context):
         return restore(event)
     if action == "counts":
         return counts(event)
+    if action == "migrate":
+        return migrate(event)
     raise ValueError(f"unknown action {action!r}")

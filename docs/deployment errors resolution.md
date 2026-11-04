@@ -55,6 +55,8 @@ passwords) are deliberately not written here.
 | 29 | Category suggestion doesn't work on the cloud (Buy & Sell, and now Lost & Found) | It runs an ONNX model in the API, but the Lambda zip leaves out onnxruntime, tokenizers, numpy and the model (250 MB limit), so the API answers "no suggestion" | New ML layer (onnxruntime 1.16.3, tokenizers, numpy 1.26, bge-small model; 132 MB unzipped) on the buy-sell and lost-found Lambdas; the two `/categories/suggest` routes go to them | `terraform/modules/compute/ml_layer/build.sh`, `modules/compute/main.tf`, `modules/api_gateway/main.tf`, `variables.tf` (`ml_layer_zip`) | Yes (not yet applied) |
 | 30 | Lost & Found reports have no title, and no category suggestion | Never built | Optional `title` on reports (required in the app), searched with the description, used in chat topics, the reports queue, removal notices, matching and suggestion examples. The report form suggests a category from the title, as Buy & Sell does | `backend/app/routers/lost_found.py`, migration 025, `frontend/lib/features/lost_found/` | Code (uncommitted); migration 025 must be run on RDS |
 | 31 | Posting a new mess menu adds it after the old one instead of replacing it | "Post the next menu" started the new menu after the last one ended, and overlapping a menu that had meals was refused (409) | A new menu replaces the mess's menu from its first day: a menu that started earlier now ends the day before, and menus starting within the new dates are removed (their files deleted). The button is "Post a new menu" and starts today | `backend/app/routers/mess.py` (`_replace_older_menus`), `frontend/lib/features/mess/ui/mess_screen.dart` | Code (uncommitted) |
+| 32 | `GET /api/v1/me` with a real Cognito token returns the SPA's `index.html` (200) instead of the user, looking exactly like a routing bug | Not a routing bug: the backend correctly 403s (unverified email), and CloudFront's distribution-wide `custom_error_response` for 403 serves `index.html` instead, from the S3 origin — that is also why the response's `Server` header says `AmazonS3` even though API Gateway produced the error | No fix needed in this case: `admin-confirm-sign-up` alone doesn't set `email_verified=true` on the Cognito user, only `admin-update-user-attributes --user-attributes Name=email_verified,Value=true` does (or the real Hosted UI code flow). The README's §5 manual test steps should add that attribute call, or they'll hit this too | `terraform/README.md` §5 (needs updating) | N/A — document the gotcha |
+| 33 | Signed-in users on the cloud site get logged out roughly every hour | `ApiClient`'s 401 retry only ran inside `getCurrentUser()`; every other authenticated call (posting, chat, uploads, …) had no refresh path, so once the ~1 hour Cognito ID token expired the first such call failed outright | `ApiClient` gained an `onUnauthorized` hook called on any 401, which refreshes the ID token via the stored Cognito refresh token and retries the request once; wired to `ApiAuthRepository.refreshSession` in `authRepositoryProvider` | `frontend/lib/core/api/api_client.dart`, `frontend/lib/features/auth/providers/auth_providers.dart` | Code (uncommitted at the time of writing — see commit in this same change) |
 
 ## Details
 
@@ -291,30 +293,36 @@ For the course demo, the sandbox with a few verified team numbers is enough to s
 
 ## Open items
 
-1. **Commit the frontend changes** under `frontend/lib/` on the deploy branch (auth files and
-   `main.dart`). They are uncommitted in the `CampusHub-cloud-web` worktree, so
-   `deploy_frontend.sh` builds them only on the machine that has them.
-2. **Database schema and data.** Terraform doesn't load them. Decide between a one-off load
-   (the temporary-Lambda method in items 2 and 3) and a migration job, and check the schema revision
-   against the deploy branch's code.
-3. **Remove the 123456 shortcut** from `backend/app/otp.py` on `backend_v2` (commit `7bce283`) before
-   deploying from that branch. The local build's 123456 check is separate and only applies to the
-   local build.
+1. ~~**Commit the frontend changes**~~ — done (this change commits everything under `frontend/lib/`
+   and `backend/app/` that was outstanding, plus items 1, 8 and 33 below).
+2. ~~**Database schema and data.**~~ — done via the `data_tools` Lambda's `restore` action
+   (`terraform/scripts/snapshot_restore.sh`), from the snapshot staged in `terraform/data/snapshot/`.
+3. ~~**Remove the 123456 shortcut**~~ — done, in both `backend/app/otp.py` (the hardcoded-OTP block)
+   and the frontend's `ApiAuthRepository.sendOtp`/`verifyOtp`, which now call the real
+   `/auth/otp/request`/`/auth/otp/verify` endpoints (404 outside dev mode, as designed).
 4. **Rotate the team dev key** that appears in git history, and the database password that was
-   written into frontend code earlier.
+   written into frontend code earlier. Not done in this pass — needs a team decision on the new
+   values, not something to do unilaterally.
 5. **Dev sign-in on Lambda** (item 12) is refused by design. Enabling it means changing that check,
    which is a decision for the team.
 6. **Textract** (item 13) needs enabling on the account before it can be used.
-7. **Existing deployment:** Terraform does not know about the Cognito domain or the manually added
-   layer and IAM version created earlier. Before applying, either import them
-   (`terraform import`) or set `cognito_domain_prefix = "campushub-dev-iisc"` and check the plan for
-   changes to the Lambda policy, environment and layers.
-8. **Commit the frontend changes** for items 15 to 19 along with the earlier frontend work (see item 1).
+7. ~~**Existing deployment**~~ — moot: this pass's `terraform apply` ran against a fresh state
+   (`campushub-tfstate-3797456e`) that already tracks the Cognito domain, both layers and the IAM
+   policy version as Terraform resources, not manually created ones.
+8. ~~**Commit the frontend changes** for items 15 to 19~~ — done, see item 1.
 9. **Academic Help moderators on the cloud:** check that a course moderator can remove feedback, a
-   material and a forum post on their own course, and that they cannot on another course.
-10. **Run migration 025** (`backend/db/migrations/025_company_created_by.sql`) on RDS before deploying the
-    backend for items 22 and 30, then `terraform apply` for the Lambda warmer (item 21) and redeploy the frontend.
+   material and a forum post on their own course, and that they cannot on another course. Not
+   re-verified in this pass.
+10. ~~**Run migration 025**~~, the warmer apply and the frontend redeploy — all done in this pass
+    (migration 024 was also pending and ran at the same time).
 11. **SMS codes for phone numbers** (item 23): pick option A or B and do the account steps (SNS sandbox,
     DLT, spend limit).
-12. **ML layer for category suggestion** (item 29): run `terraform/modules/compute/ml_layer/build.sh`, set
-    `ml_layer_zip` in `terraform.tfvars`, and `terraform apply`.
+12. ~~**ML layer for category suggestion**~~ — done; the Tesseract OCR layer (item 10/11) was also
+    attached in the same apply. Verified: `GET /api/v1/buy-sell/categories/suggest?title=...` returns
+    a real category, not the "no suggestion" fallback.
+13. **Cognito token refresh** (checklist item 5): now wired (item 33 above) — worth a real idle-past-
+    1-hour test on the live site to confirm, not just the unit-level retry logic.
+14. **CI frontend deploy** (`.github/workflows/deploy-frontend.yml`) now passes
+    `COGNITO_DOMAIN`/`COGNITO_CLIENT_ID` dart-defines, but the matching `COGNITO_DOMAIN` and
+    `COGNITO_CLIENT_ID` **repository secrets still need to be added** in GitHub before a
+    CI-triggered deploy will pick them up — until then, keep using `deploy_frontend.sh` directly.
