@@ -327,6 +327,18 @@ async def _material_course(conn: asyncpg.Connection, material_id: UUID) -> async
     return row
 
 
+@router.get("/materials/{material_id}", response_model=Material,
+            summary="One course material, by id (e.g. for the reports queue)")
+async def get_material(material_id: UUID, viewer: CurrentUser | None = Depends(optional_user),
+                       conn: asyncpg.Connection = Depends(get_conn)):
+    row = await conn.fetchrow(_MATERIAL_SELECT + " WHERE m.id = $1", material_id)
+    if row is None:
+        raise not_found("Material")
+    moderator = viewer is not None and await can_manage_course(conn, viewer, row["course_id"])
+    can_edit = moderator or (viewer is not None and viewer.id == row["uploader_id"])
+    return _material(row, can_edit)
+
+
 @router.get("/courses/{course_id}/materials", response_model=Page[Material], summary="A course's materials")
 async def list_materials(course_id: UUID, material_type: MaterialType | None = None,
                          tag: MaterialTag | None = Query(None, description="Only materials with this tag"),
@@ -481,6 +493,17 @@ async def _may_change_feedback(conn: asyncpg.Connection, user: CurrentUser, feed
     elif not await can_manage_department(conn, user, row["department_id"]):
         raise forbidden("Only the author or this department's moderators can edit this feedback.")
     return row
+
+
+@router.get("/feedback/{feedback_id}", response_model=Feedback,
+            summary="One piece of feedback, by id (e.g. for the reports queue)")
+async def get_feedback(feedback_id: UUID, viewer: CurrentUser | None = Depends(optional_user),
+                       conn: asyncpg.Connection = Depends(get_conn)):
+    row = await conn.fetchrow(_FEEDBACK_SELECT + " WHERE f.id = $1", feedback_id)
+    if row is None:
+        raise not_found("Feedback")
+    moderator = viewer is not None and await can_manage_course(conn, viewer, row["course_id"])
+    return _feedback(row, viewer, moderator)
 
 
 @router.get("/courses/{course_id}/feedback", response_model=Page[Feedback], summary="A course's feedback")

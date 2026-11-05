@@ -31,6 +31,9 @@ abstract class IPlacementRepository {
   /// Newest first. [companyId] null = across all companies.
   Future<List<InterviewExperience>> fetchInterviews({String? companyId, String? query, int limit = 30});
 
+  /// One interview experience, by id (e.g. for the reports queue).
+  Future<InterviewExperience> getInterview(String interviewId);
+
   Future<InterviewExperience> postInterview(String companyId,
       {required String roleTitle, int? placementYear, required String content, bool anonymous = false});
 
@@ -148,6 +151,12 @@ class ApiPlacementRepository implements IPlacementRepository {
       'limit': limit,
     });
     return _items(response.data).map(InterviewExperience.fromJson).toList();
+  }
+
+  @override
+  Future<InterviewExperience> getInterview(String interviewId) async {
+    final response = await apiClient.get(ApiEndpoints.interview(interviewId));
+    return InterviewExperience.fromJson(response.data as Map<String, dynamic>);
   }
 
   @override
@@ -404,6 +413,10 @@ class MockPlacementRepository implements IPlacementRepository {
         .take(limit)
         .toList();
   }
+
+  @override
+  Future<InterviewExperience> getInterview(String interviewId) async =>
+      _interviews.firstWhere((i) => i.id == interviewId, orElse: () => throw Exception('Interview not found.'));
 
   @override
   Future<InterviewExperience> postInterview(String companyId,

@@ -1,20 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/api/api_endpoints.dart';
 import '../../../core/utils/error_text.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/models/category_ref.dart';
 import '../../../core/utils/category_emoji_helper.dart';
 import '../../../core/utils/date_time_formatter.dart';
+import '../../academics/domain/academics_models.dart';
+import '../../academics/ui/course_materials.dart' show CourseMaterial, formatBytes;
 import '../../auth/domain/user.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../buy_sell/providers/buy_sell_providers.dart';
 import '../../buy_sell/ui/widgets/buy_sell_detail_dialog.dart';
 import '../../campus_services/ui/campus_services_admin_panel.dart';
+import '../../forums/providers/forum_providers.dart';
 import '../../lost_found/domain/lost_found_item.dart';
 import '../../lost_found/providers/lost_found_providers.dart';
 import '../../lost_found/ui/widgets/lost_found_detail_dialog.dart';
+import '../../placement/providers/placement_providers.dart';
 import '../../seller_trust/domain/seller_strike.dart';
 import '../../seller_trust/providers/seller_trust_providers.dart';
+import '../../wanted/providers/wanted_providers.dart';
+import '../../wanted/ui/wanted_detail_dialog.dart';
 import '../domain/content_report.dart';
 import '../providers/admin_providers.dart';
 import 'moderator_grants_panel.dart';
@@ -754,6 +761,63 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
           if (!mounted) return;
           if (item == null) throw Exception('This report has been removed.');
           await showDialog(context: context, builder: (_) => LostFoundDetailDialog(item: item));
+        case 'wanted_post':
+          final post = await ref.read(wantedRepositoryProvider).getWanted(r.targetId);
+          if (!mounted) return;
+          if (post == null) throw Exception('This Wanted post has been removed.');
+          await showDialog(context: context, builder: (_) => WantedDetailDialog(post: post));
+        case 'course_feedback':
+          final response = await ref.read(apiClientProvider).get(ApiEndpoints.feedback(r.targetId));
+          final feedback = CourseFeedback.fromJson(response.data as Map<String, dynamic>);
+          if (!mounted) return;
+          await _showContentPreview(
+            title: 'Course review',
+            author: feedback.authorName ?? (feedback.isAnonymous ? 'Anonymous' : null),
+            when: feedback.createdAt,
+            body: feedback.content,
+          );
+        case 'course_material':
+          final response = await ref.read(apiClientProvider).get(ApiEndpoints.material(r.targetId));
+          final material = CourseMaterial.fromJson(response.data as Map<String, dynamic>);
+          if (!mounted) return;
+          await _showContentPreview(
+            title: 'Course material',
+            author: material.uploaderName,
+            when: material.createdAt,
+            body: material.description?.trim().isNotEmpty == true ? material.description! : '(No description.)',
+            subtitle: '${material.title} · ${material.kindLabel}'
+                '${material.sizeBytes != null ? " · ${formatBytes(material.sizeBytes)}" : ""}',
+          );
+        case 'thread':
+          final thread = await ref.read(forumRepositoryProvider).getThread(r.targetId);
+          if (!mounted) return;
+          await _showContentPreview(
+            title: 'Forum thread',
+            author: thread.authorName,
+            when: thread.createdAt,
+            body: thread.openingPost?.content ?? '(No opening post.)',
+            subtitle: thread.title,
+          );
+        case 'comment':
+          final found = await ref.read(forumRepositoryProvider).getComment(r.targetId);
+          if (!mounted) return;
+          await _showContentPreview(
+            title: 'Forum comment',
+            author: found.comment.authorName,
+            when: found.comment.createdAt,
+            body: found.comment.content ?? '(This comment was removed.)',
+            subtitle: 'In thread: ${found.threadTitle}',
+          );
+        case 'interview_experience':
+          final interview = await ref.read(placementRepositoryProvider).getInterview(r.targetId);
+          if (!mounted) return;
+          await _showContentPreview(
+            title: 'Interview experience',
+            author: interview.authorName ?? (interview.isAnonymous ? 'Anonymous' : null),
+            when: interview.createdAt,
+            body: interview.content,
+            subtitle: [interview.companyName, if (interview.roleTitle != null) interview.roleTitle!].join(' · '),
+          );
         default:
           messenger.showSnackBar(SnackBar(
             content: Text('Opening "${r.targetType}" content isn\'t supported yet.'),
@@ -767,6 +831,45 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
       // so reload the queue.
       if (mounted) ref.invalidate(contentReportsProvider);
     }
+  }
+
+  /// A read-only look at reported content that has no detail dialog of its own (course feedback and
+  /// materials, forum threads and comments, interview experiences): just enough for the moderator to
+  /// judge the report, not the full editing UI those content types have on their own pages.
+  Future<void> _showContentPreview({
+    required String title,
+    String? author,
+    required DateTime when,
+    required String body,
+    String? subtitle,
+  }) {
+    final theme = Theme.of(context);
+    return showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (subtitle != null) ...[
+                  Text(subtitle, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                ],
+                Text('${author ?? 'Unknown'} · ${DateTimeFormatter.fullDateTime(when)}',
+                    style: TextStyle(fontSize: 12, color: theme.hintColor)),
+                const SizedBox(height: 12),
+                SelectableText(body),
+              ],
+            ),
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+      ),
+    );
   }
 
   Future<void> _handleResolveReport(ContentReport r, {required String action, required bool removeContent}) async {
