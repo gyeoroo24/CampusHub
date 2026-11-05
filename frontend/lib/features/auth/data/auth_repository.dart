@@ -9,6 +9,13 @@ import '../domain/account_status.dart';
 import 'cognito_hosted_ui.dart';
 import '../domain/user.dart';
 
+/// Signing in succeeded (a valid Cognito token), but the account was deactivated -- a suspension,
+/// not a deletion. Thrown instead of signing the person out outright, so the app can ask them to
+/// confirm reactivating it (see [IAuthRepository.consumePendingReactivation]).
+class AccountDeactivatedException implements Exception {
+  const AccountDeactivatedException();
+}
+
 abstract class IAuthRepository {
   Future<User?> getCurrentUser();
   Future<User> updateProfile({
@@ -36,6 +43,16 @@ abstract class IAuthRepository {
   Future<User> signInWithEmail(String email);
   Future<void> signOut();
   Stream<User?> get authStateChanges;
+
+  /// A sign-in that just completed for a deactivated account, awaiting confirmation to reactivate
+  /// it (consumed once; null otherwise, including when there's nothing pending).
+  AccountDeactivatedException? consumePendingReactivation();
+
+  /// Confirms reactivating the account from [consumePendingReactivation] and completes sign-in as it.
+  Future<User> confirmReactivation();
+
+  /// Declines it: signs out and discards the tokens from the attempted sign-in.
+  Future<void> declineReactivation();
 }
 
 /// In-memory mock authentication repository with session persistence via ITokenStorage.
@@ -261,6 +278,16 @@ class MockAuthRepository implements IAuthRepository {
     yield _currentUser;
     yield* _controller.stream;
   }
+
+  // Mock sign-in never talks to the real backend, so it can't hit a deactivated account.
+  @override
+  AccountDeactivatedException? consumePendingReactivation() => null;
+
+  @override
+  Future<User> confirmReactivation() => throw StateError('Nothing to reactivate.');
+
+  @override
+  Future<void> declineReactivation() => signOut();
 }
 
 /// Real HTTP backend authentication repository using Cognito ID token and FastAPI `/me`.
@@ -272,6 +299,7 @@ class ApiAuthRepository implements IAuthRepository {
   User? _cachedUser;
   bool _initialized = false;
   bool _retriedAfterRefresh = false;
+  AccountDeactivatedException? _pendingReactivation;
 
   ApiAuthRepository({
     required this.apiClient,
@@ -292,7 +320,13 @@ class ApiAuthRepository implements IAuthRepository {
           await tokenStorage.saveTokens(accessToken: tokens.idToken, refreshToken: tokens.refreshToken);
           // Load the profile now: this may be the only caller in the session, and nothing else
           // would ask the server who the user is.
-          await getCurrentUser();
+          try {
+            await getCurrentUser();
+          } on AccountDeactivatedException catch (e) {
+            // Keep the tokens: confirmReactivation() needs them. The app's root widget checks
+            // consumePendingReactivation() and asks before using them to reactivate the account.
+            _pendingReactivation = e;
+          }
         }
       } catch (_) {
         // A rejected code leaves the user signed out; they can try again.
@@ -338,6 +372,11 @@ class ApiAuthRepository implements IAuthRepository {
           _retriedAfterRefresh = false;
         }
       }
+      // Deactivation is a suspension, not a rejection: keep the tokens (confirmReactivation() needs
+      // them) and let the caller offer to reactivate instead of silently signing the person out.
+      if (e.statusCode == 403 && e.message.toLowerCase().contains('deactivated')) {
+        throw const AccountDeactivatedException();
+      }
       // Only a rejected sign-in ends the session; a network blip or server error keeps the
       // last known user so the app doesn't sign people out while the server restarts.
       if (e.statusCode == 401 || e.statusCode == 403) {
@@ -350,6 +389,25 @@ class ApiAuthRepository implements IAuthRepository {
     }
     return null;
   }
+
+  @override
+  AccountDeactivatedException? consumePendingReactivation() {
+    final pending = _pendingReactivation;
+    _pendingReactivation = null;
+    return pending;
+  }
+
+  @override
+  Future<User> confirmReactivation() async {
+    final response = await apiClient.post(ApiEndpoints.meReactivate);
+    _cachedUser = User.fromJson(response.data as Map<String, dynamic>);
+    await tokenStorage.saveUser(_cachedUser!.toJson());
+    _controller.add(_cachedUser);
+    return _cachedUser!;
+  }
+
+  @override
+  Future<void> declineReactivation() => signOut();
 
   @override
   Future<User> updateProfile({

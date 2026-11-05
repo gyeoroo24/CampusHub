@@ -20,6 +20,7 @@ import asyncpg
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from pydantic import AfterValidator, BaseModel, Field
 
+from .. import cache
 from ..alerts import found_report_alerts, push_alerts
 from ..auth import CurrentUser, current_user, optional_user
 from ..common import (MAX_INT_ID, CategoryId, CategoryRef, Contact, Page, PageParams, Photo, UserRef, forbidden,
@@ -243,22 +244,31 @@ def build_router(kind: Kind) -> APIRouter:
         page: PageParams = Depends(page_params),
         conn: asyncpg.Connection = Depends(get_conn),
     ):
-        order = "r.created_at DESC, r.id DESC" if sort == "newest" else "r.created_at ASC, r.id ASC"
-        rows = await conn.fetch(
-            select + f"""
-            WHERE r.deleted_at IS NULL
-              AND ($1::int IS NULL OR r.category_id = $1)
-              AND ($2::text[] IS NULL OR r.status::text = ANY($2::text[]))
-              AND ($3::text IS NULL OR r.description ILIKE '%' || $3 || '%' ESCAPE '\\'
-                   OR r.title ILIKE '%' || $3 || '%' ESCAPE '\\')
-              AND ($4::uuid IS NULL OR r.reporter_id = $4)
-              AND ($7::timestamptz IS NULL OR r.{kind.when} >= $7)
-              AND ($8::timestamptz IS NULL OR r.{kind.when} <= $8)
-            ORDER BY {order}
-            LIMIT $5 OFFSET $6""",
-            category_id, status, like_pattern(q) if (q := search_text(q)) else None, reporter_id,
-            page.limit + 1, page.offset, from_date, to_date)
-        return make_page(rows, page, summary)
+        search = search_text(q)
+
+        async def _fetch():
+            order = "r.created_at DESC, r.id DESC" if sort == "newest" else "r.created_at ASC, r.id ASC"
+            rows = await conn.fetch(
+                select + f"""
+                WHERE r.deleted_at IS NULL
+                  AND ($1::int IS NULL OR r.category_id = $1)
+                  AND ($2::text[] IS NULL OR r.status::text = ANY($2::text[]))
+                  AND ($3::text IS NULL OR r.description ILIKE '%' || $3 || '%' ESCAPE '\\'
+                       OR r.title ILIKE '%' || $3 || '%' ESCAPE '\\')
+                  AND ($4::uuid IS NULL OR r.reporter_id = $4)
+                  AND ($7::timestamptz IS NULL OR r.{kind.when} >= $7)
+                  AND ($8::timestamptz IS NULL OR r.{kind.when} <= $8)
+                ORDER BY {order}
+                LIMIT $5 OFFSET $6""",
+                category_id, status, like_pattern(search) if search else None, reporter_id,
+                page.limit + 1, page.offset, from_date, to_date)
+            return make_page(rows, page, summary)
+
+        # Not viewer-scoped: this listing doesn't depend on who's asking (no optional_user/current_user
+        # dependency above), so one cache entry safely covers every caller for a given filter set.
+        key = cache.build_key(f"lost-found:{kind.name}", None, category_id, status, q, reporter_id,
+                              from_date, to_date, sort, page.limit, page.offset)
+        return await cache.get_or_set(key, None, _fetch)
 
     @router.get("/{report_id}", response_model=ReportDetail, summary=f"One {kind.name} report")
     async def get_report(report_id: UUID, viewer: CurrentUser | None = Depends(optional_user),

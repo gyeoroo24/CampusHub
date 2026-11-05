@@ -80,42 +80,52 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Campus events',
-                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                            Text('Sports, culture, talks and more, posted by the Events team. Bookmark an event or follow a tag to get alerts.',
-                                style: TextStyle(fontSize: 12, color: theme.hintColor)),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      OutlinedButton.icon(
-                        onPressed: () => context.push('/mess'),
-                        icon: const Icon(Icons.restaurant_menu_rounded, size: 18),
-                        label: const Text('Mess menu'),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.outlined(
-                        tooltip: 'Follow tags: get alerts for new events',
-                        onPressed: () => _followTags(context, ref),
-                        icon: const Icon(Icons.notifications_none_rounded),
-                      ),
-                      // Only Events moderators and the admin add events.
-                      if (ref.watch(currentUserProvider)?.canModerateModule('events') ?? false) ...[
-                        const SizedBox(width: 8),
-                        FilledButton.icon(
-                          onPressed: () => _create(context, ref),
-                          icon: const Icon(Icons.add_rounded, size: 18),
-                          label: const Text('Add event'),
-                        ),
+                  LayoutBuilder(builder: (context, constraints) {
+                    final title = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Campus events',
+                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                        Text('Sports, culture, talks and more, posted by the Events team. Bookmark an event or follow a tag to get alerts.',
+                            style: TextStyle(fontSize: 12, color: theme.hintColor)),
                       ],
-                    ],
-                  ),
+                    );
+                    final actions = Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () => context.push('/mess'),
+                          icon: const Icon(Icons.restaurant_menu_rounded, size: 18),
+                          label: const Text('Mess menu'),
+                        ),
+                        IconButton.outlined(
+                          tooltip: 'Follow tags: get alerts for new events',
+                          onPressed: () => _followTags(context, ref),
+                          icon: const Icon(Icons.notifications_none_rounded),
+                        ),
+                        // Only Events moderators and the admin add events.
+                        if (ref.watch(currentUserProvider)?.canModerateModule('events') ?? false)
+                          FilledButton.icon(
+                            onPressed: () => _create(context, ref),
+                            icon: const Icon(Icons.add_rounded, size: 18),
+                            label: const Text('Add event'),
+                          ),
+                      ],
+                    );
+                    // Below ~560px the buttons don't fit beside the title without squeezing it to
+                    // nothing (letter-by-letter wrapping) -- stack them instead.
+                    if (constraints.maxWidth < 560) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [title, const SizedBox(height: 10), actions],
+                      );
+                    }
+                    return Row(
+                      children: [Expanded(child: title), const SizedBox(width: 8), actions],
+                    );
+                  }),
                   const SizedBox(height: 10),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,

@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from pydantic import BaseModel, ConfigDict, Field
 
 from .. import otp
-from ..auth import CurrentUser, current_user, optional_user
+from ..auth import CurrentUser, current_user, current_user_allow_deactivated, optional_user
 from ..common import Contact, forbidden, like_pattern, not_found, search_text, set_clause, text
 from ..config import get_settings
 from ..db import get_conn
@@ -215,9 +215,10 @@ async def update_account(user_id: UUID, body: AccountUpdate, user: CurrentUser =
 
 
 async def _deactivate(conn: asyncpg.Connection, user_id: UUID, by: UUID) -> asyncpg.Record | None:
-    """Deactivate an account and end its moderator roles. A deactivated person can't sign in, and an admin
-    has to grant any role again after reactivating them. Their posts and messages stay, marked as coming
-    from a deactivated account. Call inside a transaction."""
+    """Deactivate an account (a suspension, not a deletion: the owner can reactivate it by signing
+    in again, see reactivate_me) and end its moderator roles -- an admin has to grant any role again
+    after reactivation. Their posts and messages stay, marked as coming from a deactivated account.
+    Call inside a transaction."""
     row = await conn.fetchrow(
         f"""UPDATE users SET is_active = false WHERE id = $1 RETURNING {_STATUS_COLUMNS}""", user_id)
     if row is not None:
@@ -228,7 +229,7 @@ async def _deactivate(conn: asyncpg.Connection, user_id: UUID, by: UUID) -> asyn
 
 
 @router.post("/me/deactivate", status_code=204,
-             summary="Deactivate my own account: I can't sign in afterwards; my posts stay, marked as deactivated")
+             summary="Deactivate my own account: a suspension, not a deletion -- signing in again reactivates it")
 async def deactivate_me(user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
     if user.is_admin:
         raise HTTPException(422, "The admin can't deactivate their own account. Hand the admin role over first.")
@@ -236,6 +237,24 @@ async def deactivate_me(user: CurrentUser = Depends(current_user), conn: asyncpg
         await _deactivate(conn, user.id, by=user.id)
         await log_moderation(conn, user.id, "deactivate_user", "user", user.id)
     return Response(status_code=204)
+
+
+# Registered in main.py WITHOUT the blanket `optional_user` dependency every other router gets:
+# that dependency 403s a deactivated account outright, which is exactly the one request that has
+# to work for it anyway, so it can sign back in.
+reactivate_router = APIRouter(tags=["Users"])
+
+
+@reactivate_router.post("/me/reactivate", response_model=MyProfile,
+             summary="Reactivate my deactivated account and sign me back in (after I confirm)")
+async def reactivate_me(pair: tuple[CurrentUser, bool] = Depends(current_user_allow_deactivated),
+                        conn: asyncpg.Connection = Depends(get_conn)):
+    user, was_deactivated = pair
+    if was_deactivated:
+        async with conn.transaction():
+            await conn.execute("UPDATE users SET is_active = true WHERE id = $1", user.id)
+            await log_moderation(conn, user.id, "reactivate_user", "user", user.id)
+    return await _my_profile(conn, user.id)
 
 
 @router.post("/users/{user_id}/make-admin", response_model=AccountStatus,

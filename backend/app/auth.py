@@ -160,7 +160,10 @@ async def _create_user(conn: asyncpg.Connection, sub: str, email: str, name: str
     return row
 
 
-async def _load_or_create_user(conn: asyncpg.Connection, identity: dict) -> CurrentUser:
+async def _load_or_create_row(conn: asyncpg.Connection, identity: dict) -> asyncpg.Record:
+    """Loads or creates the caller's row, without enforcing is_active. Used by _load_or_create_user
+    (which does enforce it, for every normal request) and by the one request that deliberately
+    doesn't: reactivate_me (routers/users.py), so a deactivated person can sign back in."""
     row = await conn.fetchrow(f"SELECT {_USER_COLUMNS} FROM users WHERE cognito_sub = $1", identity["sub"])
     if row is None:
         email = (identity.get("email") or "").strip()
@@ -171,6 +174,11 @@ async def _load_or_create_user(conn: asyncpg.Connection, identity: dict) -> Curr
                                      "then sign in again.")
         name = (identity.get("name") or email.split("@")[0]).strip()[:100]
         row = await _create_user(conn, identity["sub"], email, name)
+    return row
+
+
+async def _load_or_create_user(conn: asyncpg.Connection, identity: dict) -> CurrentUser:
+    row = await _load_or_create_row(conn, identity)
     if not row["is_active"]:
         raise HTTPException(403, "This account has been deactivated.")
     return CurrentUser(id=row["id"], email=row["email"], name=row["name"], is_admin=row["base_role"] == "admin")
@@ -190,3 +198,17 @@ async def current_user(user: CurrentUser | None = Depends(optional_user)) -> Cur
     if user is None:
         raise HTTPException(401, "Sign in to do this.", headers={"WWW-Authenticate": "Bearer"})
     return user
+
+
+async def current_user_allow_deactivated(
+        request: Request, conn: asyncpg.Connection = Depends(get_conn)) -> tuple[CurrentUser, bool]:
+    """Like current_user, but for POST /me/reactivate only: a deactivated account is merely
+    suspended, not deleted, so its owner must be able to sign back in by confirming reactivation
+    -- which means this one request has to authenticate them *despite* is_active being false.
+    Returns (user, was_deactivated) instead of 403ing."""
+    identity = await _identity_from_request(request)
+    if identity is None:
+        raise HTTPException(401, "Sign in to do this.", headers={"WWW-Authenticate": "Bearer"})
+    row = await _load_or_create_row(conn, identity)
+    user = CurrentUser(id=row["id"], email=row["email"], name=row["name"], is_admin=row["base_role"] == "admin")
+    return user, not row["is_active"]

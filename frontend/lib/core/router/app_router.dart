@@ -37,7 +37,12 @@ const _shellPageKey = ValueKey('app-shell');
 // Same idea for the inbox and an open conversation: opening a chat swaps the pane, no slide.
 const _messagesPageKey = ValueKey('messages');
 
+/// For dialogs raised outside the routed widget tree (e.g. SessionKeeper, which wraps
+/// MaterialApp.router's `builder` and so sits above the Router/Navigator it builds, not inside it).
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 final GoRouter appRouter = GoRouter(
+  navigatorKey: rootNavigatorKey,
   initialLocation: '/buy',
   routes: [
     GoRoute(

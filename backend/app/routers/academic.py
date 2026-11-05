@@ -24,6 +24,7 @@ import asyncpg
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
+from .. import cache
 from ..auth import CurrentUser, current_user, optional_user
 from ..common import Page, PageParams, UserRef, forbidden, make_page, not_found, page_params, set_clause, text
 from ..course_updates import notify_course_followers
@@ -152,7 +153,11 @@ FROM departments d
 
 @router.get("/departments", response_model=list[Department], summary="All departments")
 async def list_departments(conn: asyncpg.Connection = Depends(get_conn)):
-    return [Department(**dict(r)) for r in await conn.fetch(_DEPT_SELECT + " ORDER BY d.name")]
+    async def _fetch():
+        return [Department(**dict(r)) for r in await conn.fetch(_DEPT_SELECT + " ORDER BY d.name")]
+
+    # Not viewer-scoped: static reference data, same for every caller.
+    return await cache.get_or_set(cache.build_key("academics:departments", None), None, _fetch)
 
 
 @router.post("/departments", response_model=Department, status_code=201, summary="Add a department (admin)")
@@ -218,15 +223,20 @@ async def _course_department(conn: asyncpg.Connection, course_id: UUID) -> UUID:
             summary="Courses in a department, with whether each has content (FR-11)")
 async def list_courses(department_id: UUID, viewer: CurrentUser | None = Depends(optional_user),
                        conn: asyncpg.Connection = Depends(get_conn)):
-    if not await conn.fetchval("SELECT EXISTS (SELECT 1 FROM departments WHERE id = $1)", department_id):
-        raise not_found("Department")
-    rows = await conn.fetch(_COURSE_SELECT + " WHERE c.department_id = $1 ORDER BY c.code", department_id)
-    followed = set()
-    if viewer is not None and rows:
-        followed = {r["course_id"] for r in await conn.fetch(
-            "SELECT course_id FROM course_follows WHERE user_id = $1 AND course_id = ANY($2::uuid[])",
-            viewer.id, [r["id"] for r in rows])}
-    return [_course(r, following=r["id"] in followed) for r in rows]
+    async def _fetch():
+        if not await conn.fetchval("SELECT EXISTS (SELECT 1 FROM departments WHERE id = $1)", department_id):
+            raise not_found("Department")
+        rows = await conn.fetch(_COURSE_SELECT + " WHERE c.department_id = $1 ORDER BY c.code", department_id)
+        followed = set()
+        if viewer is not None and rows:
+            followed = {r["course_id"] for r in await conn.fetch(
+                "SELECT course_id FROM course_follows WHERE user_id = $1 AND course_id = ANY($2::uuid[])",
+                viewer.id, [r["id"] for r in rows])}
+        return [_course(r, following=r["id"] in followed) for r in rows]
+
+    # Viewer-scoped: "following" depends on who's asking.
+    key = cache.build_key("academics:courses", viewer.id if viewer else None, department_id)
+    return await cache.get_or_set(key, None, _fetch)
 
 
 @router.get("/courses/{course_id}", response_model=Course, summary="One course")

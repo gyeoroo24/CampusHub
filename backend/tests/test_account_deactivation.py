@@ -40,6 +40,32 @@ def test_a_person_deactivates_their_own_account(client):
         asha_id)] == [1]
 
 
+def test_a_deactivated_account_can_reactivate_by_signing_in_again(client):
+    sign_in(client, ASHA)
+    assert client.post(f"{API}/me/deactivate", headers=ASHA).status_code == 204
+    assert client.get(f"{API}/me", headers=ASHA).status_code == 403
+
+    # /me still 403s -- reactivating is a separate, deliberate step, not automatic
+    r = client.post(f"{API}/me/reactivate", headers=ASHA)
+    assert r.status_code == 200 and r.json()["email"] == "asha@iisc.ac.in"
+    assert client.get(f"{API}/me", headers=ASHA).status_code == 200
+
+    asha_id = r.json()["id"]
+    assert [r["n"] for r in sql(
+        "SELECT count(*) AS n FROM moderation_log WHERE action = 'reactivate_user' AND target_id = $1::uuid",
+        asha_id)] == [1]
+
+
+def test_reactivating_an_already_active_account_is_a_no_op(client):
+    sign_in(client, ASHA)
+    r = client.post(f"{API}/me/reactivate", headers=ASHA)
+    assert r.status_code == 200
+    asha_id = r.json()["id"]
+    assert [r["n"] for r in sql(
+        "SELECT count(*) AS n FROM moderation_log WHERE action = 'reactivate_user' AND target_id = $1::uuid",
+        asha_id)] == [0]
+
+
 def test_active_listings_are_not_marked(client):
     sign_in(client, ASHA)
     listing = _listing(client, ASHA)
