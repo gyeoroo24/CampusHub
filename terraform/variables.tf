@@ -67,6 +67,24 @@ variable "db_username" {
   default     = "campushub_admin"
 }
 
+variable "enable_elasticache" {
+  description = "Set to true to provision ElastiCache Redis in front of RDS for the Lambdas' read-heavy list endpoints (Note: cache.t3.micro is Free Tier eligible for the first 750 hrs/month for 12 months, then billed). Turning it off just unsets the Lambdas' CAMPUSHUB_REDIS_* env vars; app/cache.py then serves everything uncached."
+  type        = bool
+  default     = true
+}
+
+variable "redis_node_type" {
+  description = "ElastiCache node type"
+  type        = string
+  default     = "cache.t3.micro"
+}
+
+variable "redis_num_cache_clusters" {
+  description = "Number of Redis cache nodes (1 = single node; >1 adds read replicas with automatic failover)"
+  type        = number
+  default     = 1
+}
+
 variable "enable_rds_proxy" {
   description = "Set to true to provision RDS Proxy in front of the database, for load/perf testing. NOT Free Tier (~$0.015/vCPU-hour, 2 vCPU minimum, so ~$0.03/hour / ~$22/month if left running) — turn it off again (terraform apply) once testing is done. Switching it on or off only changes the Lambdas' CAMPUSHUB_DATABASE_URL env var, not their code, so no rebuild/redeploy is needed either way."
   type        = bool

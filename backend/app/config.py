@@ -122,12 +122,15 @@ class Settings(BaseSettings):
     # Swagger and ReDoc. Default: on locally and on EC2, off inside Lambda.
     docs_enabled: bool | None = None
 
-    # --- Redis cache (ElastiCache on EC2; unset means "no cache", every call below is a no-op) ---
+    # --- Redis cache (ElastiCache; unset means "no cache", every call below is a no-op) ---
     # A short-TTL cache-aside layer (app/cache.py) for the read-heavy list/browse endpoints that
     # queued up on the DB connection pool under load testing. redis_host unset => caching is off.
     redis_host: str | None = None
     redis_port: int = 6379
     redis_auth_token: str | None = None
+    # Lambda: the AUTH token's Secrets Manager ARN instead of the token itself (read once per
+    # container by app/cache.py, same as database_secret_arn). Ignored if redis_auth_token is set.
+    redis_auth_secret_arn: str | None = None
     redis_tls: bool = False
     redis_default_ttl_seconds: int = 20
     redis_connect_timeout_seconds: float = 1.0

@@ -92,3 +92,7 @@ output "data_tools_function_name" {
   value       = module.data_tools.data_tools_function_name
 }
 
+output "redis_primary_endpoint" {
+  description = "ElastiCache Redis primary endpoint the Lambdas cache against. Null unless enable_elasticache is true."
+  value       = var.enable_elasticache ? module.elasticache[0].primary_endpoint_address : null
+}

@@ -106,3 +106,27 @@ variable "warm_schedule" {
   type        = string
   default     = "rate(5 minutes)"
 }
+
+variable "redis_enabled" {
+  description = "Whether ElastiCache Redis is provisioned; when false the CAMPUSHUB_REDIS_* env vars are left unset and app/cache.py is a no-op"
+  type        = bool
+  default     = false
+}
+
+variable "redis_host" {
+  description = "ElastiCache Redis primary endpoint hostname (CAMPUSHUB_REDIS_HOST)"
+  type        = string
+  default     = ""
+}
+
+variable "redis_port" {
+  description = "ElastiCache Redis port (CAMPUSHUB_REDIS_PORT)"
+  type        = number
+  default     = 6379
+}
+
+variable "redis_auth_secret_arn" {
+  description = "Secrets Manager secret ARN holding the Redis AUTH token (CAMPUSHUB_REDIS_AUTH_SECRET_ARN)"
+  type        = string
+  default     = ""
+}

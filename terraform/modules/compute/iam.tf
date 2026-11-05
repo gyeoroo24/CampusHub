@@ -70,7 +70,8 @@ resource "aws_iam_policy" "lambda_app_permissions" {
         Action = [
           "secretsmanager:GetSecretValue"
         ]
-        Resource = var.db_secret_arn
+        # The Redis AUTH token secret too, when ElastiCache is enabled (app/cache.py).
+        Resource = compact([var.db_secret_arn, var.redis_auth_secret_arn])
       },
       {
         Sid    = "KMSDecryptAccess"

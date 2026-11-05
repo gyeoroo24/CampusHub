@@ -28,6 +28,18 @@ module "database" {
   enable_rds_proxy      = var.enable_rds_proxy
 }
 
+# 2b. CACHE TIER (ElastiCache Redis in front of RDS for the Lambdas' read-heavy list endpoints)
+module "elasticache" {
+  count  = var.enable_elasticache ? 1 : 0
+  source = "./modules/elasticache"
+
+  environment             = var.environment
+  app_subnet_ids          = module.networking.lambda_subnet_ids
+  redis_security_group_id = module.networking.redis_security_group_id
+  node_type               = var.redis_node_type
+  num_cache_clusters      = var.redis_num_cache_clusters
+}
+
 # 3. STORAGE TIER (Frontend S3 Bucket, Media/Docs S3 Bucket, CORS, Encryption)
 module "storage" {
   source = "./modules/storage"
@@ -68,6 +80,10 @@ module "compute" {
   tesseract_layer_zip          = var.tesseract_layer_zip
   ml_layer_zip                 = var.ml_layer_zip
   community_events_memory_size = var.community_events_memory_size
+  redis_enabled                = var.enable_elasticache
+  redis_host                   = var.enable_elasticache ? module.elasticache[0].primary_endpoint_address : ""
+  redis_port                   = var.enable_elasticache ? module.elasticache[0].port : 6379
+  redis_auth_secret_arn        = var.enable_elasticache ? module.elasticache[0].auth_token_secret_arn : ""
 }
 
 # 6. API GATEWAY TIER (HTTP API v2, Cognito JWT Authorizer, Routes, Throttling)

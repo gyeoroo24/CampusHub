@@ -24,3 +24,4 @@ pydantic-settings==2.7.1
 PyJWT[crypto]==2.10.1
 cryptography==50.0.2
 boto3==1.37.38
+redis==5.2.1   # ElastiCache cache-aside layer (app/cache.py); a no-op wherever CAMPUSHUB_REDIS_HOST isn't set

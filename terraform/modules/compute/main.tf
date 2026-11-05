@@ -175,6 +175,14 @@ resource "aws_lambda_function" "services" {
       # rule, and auto-flagging's text checks skip the embedding-similarity part. Nothing crashes;
       # see app/config.py and app/categories_suggest.py's own "if missing, returns None" design.
       },
+      # ElastiCache Redis (app/cache.py). Like the DB password, the AUTH token itself is never set
+      # here -- only its secret's ARN, read from Secrets Manager at startup.
+      var.redis_enabled ? {
+        CAMPUSHUB_REDIS_HOST            = var.redis_host
+        CAMPUSHUB_REDIS_PORT            = tostring(var.redis_port)
+        CAMPUSHUB_REDIS_TLS             = "true"
+        CAMPUSHUB_REDIS_AUTH_SECRET_ARN = var.redis_auth_secret_arn
+      } : {},
       each.key == "community_events" && var.tesseract_layer_zip != "" ? { TESSDATA_PREFIX = "/opt/share/tessdata" } : {},
       # The ML layer's model sits in /opt/models. Only the bge category model is there, so Lost & Found
       # matching still resolves to "off" (it needs the matching models too).

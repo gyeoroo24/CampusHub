@@ -27,6 +27,21 @@ _client_loop: asyncio.AbstractEventLoop | None = None
 _lock: asyncio.Lock | None = None
 _lock_loop: asyncio.AbstractEventLoop | None = None
 _warned_unavailable = False
+_auth_token: str | None = None
+
+
+def _secret_auth_token(secret_arn: str) -> str:
+    """The Redis AUTH token from its Secrets Manager secret (fetched once per container, like
+    app/db.py's DB credentials). The secret holds the raw token string, not JSON."""
+    global _auth_token
+    if _auth_token is None:
+        import os
+
+        import boto3
+        region = os.environ.get("AWS_REGION") or get_settings().cognito_region
+        _auth_token = (boto3.client("secretsmanager", region_name=region)
+                       .get_secret_value(SecretId=secret_arn)["SecretString"])
+    return _auth_token
 
 
 async def _get_client() -> Any | None:
@@ -43,10 +58,13 @@ async def _get_client() -> Any | None:
     async with _lock:
         if _client is None or _client_loop is not loop:
             import redis.asyncio as redis
+            auth_token = s.redis_auth_token
+            if not auth_token and s.redis_auth_secret_arn:
+                auth_token = await asyncio.to_thread(_secret_auth_token, s.redis_auth_secret_arn)
             _client = redis.Redis(
                 host=s.redis_host,
                 port=s.redis_port,
-                password=s.redis_auth_token or None,
+                password=auth_token or None,
                 ssl=s.redis_tls,
                 socket_connect_timeout=s.redis_connect_timeout_seconds,
                 socket_timeout=s.redis_connect_timeout_seconds,
