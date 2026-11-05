@@ -21,6 +21,7 @@ import asyncpg
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, model_validator
 
+from .. import cache
 from ..auth import CurrentUser, current_user, optional_user
 from ..common import (MAX_INT_ID, CategoryRef, Page, PageParams, UserRef, forbidden, like_pattern, make_page,
                       not_found, page_params, search_text, set_clause, text)
@@ -349,26 +350,33 @@ async def list_events(
         raise HTTPException(422, "tag_id is out of range.")
     phases = list(dict.fromkeys(when or ["present", "upcoming"]))
     q = search_text(q)
-    rows = await conn.fetch(
-        f"""SELECT * FROM ({_SELECT} WHERE e.deleted_at IS NULL) x
-        WHERE x.phase = ANY($2::text[])
-          AND ($3::int[] IS NULL OR EXISTS (SELECT 1 FROM event_tag_map m
-                                            WHERE m.event_id = x.id AND m.tag_id = ANY($3::int[])))
-          AND ($4::text IS NULL OR x.title ILIKE '%' || $4 || '%' ESCAPE '\\'
-                                OR x.description ILIKE '%' || $4 || '%' ESCAPE '\\'
-                                OR x.location ILIKE '%' || $4 || '%' ESCAPE '\\')
-          AND ($5::timestamptz IS NULL OR x.end_time >= $5)
-          AND ($6::timestamptz IS NULL OR x.start_time <= $6)
-          AND ($7::uuid IS NULL OR x.created_by = $7)
-          AND (NOT $8::bool OR x.is_bookmarked)
-        ORDER BY CASE x.phase WHEN 'present' THEN 0 WHEN 'upcoming' THEN 1 ELSE 2 END,
-                 CASE WHEN x.phase = 'past' THEN NULL ELSE x.start_time END ASC,
-                 x.start_time DESC, x.id
-        LIMIT $9 OFFSET $10""",
-        viewer.id if viewer else None, phases, tag_id or None, like_pattern(q) if q else None,
-        from_time, to_time, organizer_id, bookmarked, page.limit + 1, page.offset)
-    moderator = await _is_moderator(conn, viewer)
-    return make_page(rows, page, lambda r: _event(r, viewer, moderator))
+
+    async def _fetch():
+        rows = await conn.fetch(
+            f"""SELECT * FROM ({_SELECT} WHERE e.deleted_at IS NULL) x
+            WHERE x.phase = ANY($2::text[])
+              AND ($3::int[] IS NULL OR EXISTS (SELECT 1 FROM event_tag_map m
+                                                WHERE m.event_id = x.id AND m.tag_id = ANY($3::int[])))
+              AND ($4::text IS NULL OR x.title ILIKE '%' || $4 || '%' ESCAPE '\\'
+                                    OR x.description ILIKE '%' || $4 || '%' ESCAPE '\\'
+                                    OR x.location ILIKE '%' || $4 || '%' ESCAPE '\\')
+              AND ($5::timestamptz IS NULL OR x.end_time >= $5)
+              AND ($6::timestamptz IS NULL OR x.start_time <= $6)
+              AND ($7::uuid IS NULL OR x.created_by = $7)
+              AND (NOT $8::bool OR x.is_bookmarked)
+            ORDER BY CASE x.phase WHEN 'present' THEN 0 WHEN 'upcoming' THEN 1 ELSE 2 END,
+                     CASE WHEN x.phase = 'past' THEN NULL ELSE x.start_time END ASC,
+                     x.start_time DESC, x.id
+            LIMIT $9 OFFSET $10""",
+            viewer.id if viewer else None, phases, tag_id or None, like_pattern(q) if q else None,
+            from_time, to_time, organizer_id, bookmarked, page.limit + 1, page.offset)
+        moderator = await _is_moderator(conn, viewer)
+        return make_page(rows, page, lambda r: _event(r, viewer, moderator))
+
+    # Viewer-scoped: bookmark state and moderator-only can_edit/can_delete flags depend on who's asking.
+    key = cache.build_key("events:list", viewer.id if viewer else None, when, tag_id, q, from_time,
+                          to_time, organizer_id, bookmarked, page.limit, page.offset)
+    return await cache.get_or_set(key, None, _fetch)
 
 
 @router.get("/events/{event_id}", response_model=Event, summary="One event")

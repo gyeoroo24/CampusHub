@@ -482,4 +482,4 @@ def test_lambda_defaults(monkeypatch):
     assert (inside.db_pool_max_size, inside.docs_enabled) == (2, False)
     monkeypatch.delenv("AWS_LAMBDA_FUNCTION_NAME")
     outside = Settings()
-    assert (outside.db_pool_max_size, outside.docs_enabled) == (5, True)
+    assert (outside.db_pool_max_size, outside.docs_enabled) == (20, True)

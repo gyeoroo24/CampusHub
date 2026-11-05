@@ -35,23 +35,23 @@ resource "aws_db_parameter_group" "postgres16" {
 
 # PostgreSQL RDS Instance (Single-AZ by default for Free Tier; Multi-AZ configurable for benchmarks)
 resource "aws_db_instance" "postgres" {
-  identifier                  = "campushub-${var.environment}-db"
-  engine                      = "postgres"
-  engine_version              = var.engine_version
-  instance_class              = var.instance_class
-  allocated_storage           = var.allocated_storage
-  max_allocated_storage       = var.max_allocated_storage
-  storage_type                = "gp3"
-  storage_encrypted           = true
-  
-  db_name                     = var.db_name
-  username                    = var.db_username
-  password                    = random_password.db_password.result
-  port                        = 5432
+  identifier            = "campushub-${var.environment}-db"
+  engine                = "postgres"
+  engine_version        = var.engine_version
+  instance_class        = var.instance_class
+  allocated_storage     = var.allocated_storage
+  max_allocated_storage = var.max_allocated_storage
+  storage_type          = "gp3"
+  storage_encrypted     = true
 
-  db_subnet_group_name        = aws_db_subnet_group.main.name
-  parameter_group_name        = aws_db_parameter_group.postgres16.name
-  vpc_security_group_ids      = [var.db_security_group_id]
+  db_name  = var.db_name
+  username = var.db_username
+  password = random_password.db_password.result
+  port     = 5432
+
+  db_subnet_group_name   = aws_db_subnet_group.main.name
+  parameter_group_name   = aws_db_parameter_group.postgres16.name
+  vpc_security_group_ids = [var.db_security_group_id]
 
   # Free Tier vs High Availability toggle
   multi_az                    = var.multi_az
@@ -59,13 +59,13 @@ resource "aws_db_instance" "postgres" {
   auto_minor_version_upgrade  = true
   allow_major_version_upgrade = false
 
-  backup_retention_period     = var.backup_retention_period
-  backup_window               = "20:00-21:00"
-  maintenance_window          = "Sun:21:00-Sun:22:00"
-  skip_final_snapshot         = var.skip_final_snapshot
-  final_snapshot_identifier   = var.skip_final_snapshot ? null : "campushub-${var.environment}-db-final-snapshot"
+  backup_retention_period   = var.backup_retention_period
+  backup_window             = "20:00-21:00"
+  maintenance_window        = "Sun:21:00-Sun:22:00"
+  skip_final_snapshot       = var.skip_final_snapshot
+  final_snapshot_identifier = var.skip_final_snapshot ? null : "campushub-${var.environment}-db-final-snapshot"
 
-  deletion_protection         = false
+  deletion_protection = false
 
   tags = {
     Name = "campushub-${var.environment}-db"

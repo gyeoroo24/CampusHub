@@ -57,7 +57,7 @@ resource "aws_iam_role_policy" "ec2_app_policy" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret"
         ]
-        Resource = var.db_secret_arn
+        Resource = compact([var.db_secret_arn, var.redis_auth_secret_arn])
       },
       {
         # Moderator grants check the person's sign-in account still exists and is enabled (backend/app/cognito_accounts.py)
@@ -235,6 +235,10 @@ resource "aws_launch_template" "app" {
     origin_verify_header  = var.origin_verify_header
     tesseract_key         = var.tesseract_layer_zip == "" ? "" : aws_s3_object.tesseract_layer[0].key
     ml_models_key         = var.ml_models_zip == "" ? "" : aws_s3_object.ml_models[0].key
+    redis_enabled         = var.redis_enabled
+    redis_host            = var.redis_host
+    redis_port            = var.redis_port
+    redis_auth_secret_arn = var.redis_auth_secret_arn
   }))
 
   block_device_mappings {

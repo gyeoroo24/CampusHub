@@ -12,6 +12,7 @@ import asyncpg
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from pydantic import AfterValidator, BaseModel, Field
 
+from .. import cache
 from ..alerts import listing_alerts, push_alerts
 from ..auth import CurrentUser, current_user, optional_user
 from ..common import (MAX_INT_ID, CategoryId, CategoryRef, Contact, Page, PageParams, Photo, UserRef, forbidden,
@@ -188,24 +189,33 @@ async def list_listings(
     viewer: CurrentUser | None = Depends(optional_user),
     conn: asyncpg.Connection = Depends(get_conn),
 ):
-    rows = await conn.fetch(
-        _SELECT + f"""
-        WHERE l.deleted_at IS NULL
-          AND ((l.hidden_by_strike_id IS NULL AND l.held_for_review_at IS NULL)
-               OR (l.seller_id = $6 AND $6::uuid = $9::uuid))
-          AND ($1::int IS NULL OR l.category_id = $1)
-          AND ($2::numeric IS NULL OR l.price >= $2)
-          AND ($3::numeric IS NULL OR l.price <= $3)
-          AND ($4::text[] IS NULL OR l.status::text = ANY($4::text[]))
-          AND ($5::text IS NULL OR numnode(websearch_to_tsquery('english', $5)) = 0
-               OR l.search_vector @@ websearch_to_tsquery('english', $5))
-          AND ($6::uuid IS NULL OR l.seller_id = $6)
-        ORDER BY {_ORDER[sort]}
-        LIMIT $7 OFFSET $8""",
-        category_id, min_price, max_price, status, search_text(q), seller_id, page.limit + 1, page.offset,
-        viewer.id if viewer else None)
-    tags = await seller_trust_tags(conn, {r["seller_id"] for r in rows})
-    return make_page(rows, page, lambda r: _summary(r, tags.get(r["seller_id"])))
+    async def _fetch():
+        rows = await conn.fetch(
+            _SELECT + f"""
+            WHERE l.deleted_at IS NULL
+              AND ((l.hidden_by_strike_id IS NULL AND l.held_for_review_at IS NULL)
+                   OR (l.seller_id = $6 AND $6::uuid = $9::uuid))
+              AND ($1::int IS NULL OR l.category_id = $1)
+              AND ($2::numeric IS NULL OR l.price >= $2)
+              AND ($3::numeric IS NULL OR l.price <= $3)
+              AND ($4::text[] IS NULL OR l.status::text = ANY($4::text[]))
+              AND ($5::text IS NULL OR numnode(websearch_to_tsquery('english', $5)) = 0
+                   OR l.search_vector @@ websearch_to_tsquery('english', $5))
+              AND ($6::uuid IS NULL OR l.seller_id = $6)
+            ORDER BY {_ORDER[sort]}
+            LIMIT $7 OFFSET $8""",
+            category_id, min_price, max_price, status, search_text(q), seller_id, page.limit + 1, page.offset,
+            viewer.id if viewer else None)
+        tags = await seller_trust_tags(conn, {r["seller_id"] for r in rows})
+        return make_page(rows, page, lambda r: _summary(r, tags.get(r["seller_id"])))
+
+    # Cache key covers every filter plus the viewer (hidden/held listings are only visible to
+    # their own seller, see the WHERE clause above): a shared key across two different viewers
+    # would leak one seller's held listing into another viewer's results.
+    key = cache.build_key("buy-sell:listings", viewer.id if viewer else None,
+                          q, category_id, min_price, max_price, status, seller_id, sort,
+                          page.limit, page.offset)
+    return await cache.get_or_set(key, None, _fetch)
 
 
 @router.get("/{listing_id}", response_model=ListingDetail, summary="One listing with all photos")

@@ -28,6 +28,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from .. import cache
 from ..auth import CurrentUser, current_user, optional_user
 from ..common import UserRef, forbidden, not_found
 from ..db import get_conn
@@ -216,9 +217,14 @@ async def _mess_detail(conn: asyncpg.Connection, mess_id: int, viewer: CurrentUs
 
 @router.get("/messes", response_model=MessList, summary="Every mess with today's meals (guests allowed)")
 async def list_messes(viewer: CurrentUser | None = Depends(optional_user), conn: asyncpg.Connection = Depends(get_conn)):
-    day = _today()
-    rows = await conn.fetch(_MESS_SELECT + " ORDER BY m.name", viewer.id if viewer else None, day, day.isoweekday())
-    return MessList(messes=[_mess(r) for r in rows], can_manage=await _can_manage(conn, viewer))
+    async def _fetch():
+        day = _today()
+        rows = await conn.fetch(_MESS_SELECT + " ORDER BY m.name", viewer.id if viewer else None, day, day.isoweekday())
+        return MessList(messes=[_mess(r) for r in rows], can_manage=await _can_manage(conn, viewer))
+
+    # Keyed by today's date too: the menu is the same all day, but must not stay cached past midnight.
+    key = cache.build_key("mess:list", viewer.id if viewer else None, _today())
+    return await cache.get_or_set(key, None, _fetch)
 
 
 def _times(body: MealTimes) -> list[time]:

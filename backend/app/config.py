@@ -122,10 +122,24 @@ class Settings(BaseSettings):
     # Swagger and ReDoc. Default: on locally and on EC2, off inside Lambda.
     docs_enabled: bool | None = None
 
+    # --- Redis cache (ElastiCache on EC2; unset means "no cache", every call below is a no-op) ---
+    # A short-TTL cache-aside layer (app/cache.py) for the read-heavy list/browse endpoints that
+    # queued up on the DB connection pool under load testing. redis_host unset => caching is off.
+    redis_host: str | None = None
+    redis_port: int = 6379
+    redis_auth_token: str | None = None
+    redis_tls: bool = False
+    redis_default_ttl_seconds: int = 20
+    redis_connect_timeout_seconds: float = 1.0
+
     @model_validator(mode="after")
     def _environment_defaults(self):
         if self.db_pool_max_size is None:
-            self.db_pool_max_size = 2 if in_lambda() else 5
+            # In Lambda, RDS Proxy does the real pooling, so each container only needs a couple of
+            # connections of its own. On EC2 there's one long-lived process: size its pool for real
+            # concurrency (a db.t4g.micro's default max_connections is well above this) rather than
+            # the old default of 5, which queued requests behind the pool itself under load testing.
+            self.db_pool_max_size = 2 if in_lambda() else 20
         if self.docs_enabled is None:
             self.docs_enabled = not in_lambda()
         return self

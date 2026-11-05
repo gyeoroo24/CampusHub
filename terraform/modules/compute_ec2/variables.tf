@@ -125,3 +125,27 @@ variable "ml_models_zip" {
   default     = ""
 }
 
+variable "redis_enabled" {
+  description = "Whether ElastiCache Redis is provisioned; gates whether user_data writes CAMPUSHUB_REDIS_* into the app's .env"
+  type        = bool
+  default     = false
+}
+
+variable "redis_host" {
+  description = "ElastiCache Redis primary endpoint hostname"
+  type        = string
+  default     = ""
+}
+
+variable "redis_port" {
+  description = "ElastiCache Redis port"
+  type        = number
+  default     = 6379
+}
+
+variable "redis_auth_secret_arn" {
+  description = "Secrets Manager secret ARN holding the Redis AUTH token"
+  type        = string
+  default     = ""
+}
+

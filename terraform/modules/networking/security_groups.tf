@@ -77,6 +77,15 @@ resource "aws_security_group" "app_sg" {
     security_groups = [aws_security_group.db_sg.id]
   }
 
+  # Allow outbound Redis traffic to the ElastiCache Security Group
+  egress {
+    description     = "Allow outbound Redis traffic to ElastiCache"
+    from_port       = 6379
+    to_port         = 6379
+    protocol        = "tcp"
+    security_groups = [aws_security_group.redis_sg.id]
+  }
+
   tags = {
     Name = "campushub-${var.environment}-app-sg"
   }
@@ -101,6 +110,28 @@ resource "aws_security_group_rule" "db_ingress_from_app" {
   to_port                  = 5432
   protocol                 = "tcp"
   security_group_id        = aws_security_group.db_sg.id
+  source_security_group_id = aws_security_group.app_sg.id
+}
+
+# Security Group for ElastiCache Redis (query/session cache for the EC2 app tier)
+resource "aws_security_group" "redis_sg" {
+  name        = "campushub-${var.environment}-redis-sg"
+  description = "Security group for ElastiCache Redis cluster"
+  vpc_id      = aws_vpc.main.id
+
+  tags = {
+    Name = "campushub-${var.environment}-redis-sg"
+  }
+}
+
+# Ingress Rule for Redis from Application Tier only (least privilege)
+resource "aws_security_group_rule" "redis_ingress_from_app" {
+  type                     = "ingress"
+  description              = "Allow Redis inbound from the App Tier"
+  from_port                = 6379
+  to_port                  = 6379
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.redis_sg.id
   source_security_group_id = aws_security_group.app_sg.id
 }
 

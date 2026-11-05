@@ -43,6 +43,11 @@ output "db_security_group_id" {
   value       = aws_security_group.db_sg.id
 }
 
+output "redis_security_group_id" {
+  description = "Security Group ID for ElastiCache Redis"
+  value       = aws_security_group.redis_sg.id
+}
+
 output "s3_endpoint_id" {
   description = "The ID of the S3 VPC Gateway Endpoint"
   value       = aws_vpc_endpoint.s3.id

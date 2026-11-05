@@ -31,6 +31,24 @@ variable "enable_waf" {
   default     = false
 }
 
+variable "enable_elasticache" {
+  description = "Set to true to provision ElastiCache Redis in front of RDS for the EC2 app tier (Note: cache.t3.micro is Free Tier eligible for the first 750 hrs/month for 12 months, then billed)"
+  type        = bool
+  default     = true
+}
+
+variable "redis_node_type" {
+  description = "ElastiCache node type"
+  type        = string
+  default     = "cache.t3.micro"
+}
+
+variable "redis_num_cache_clusters" {
+  description = "Number of Redis cache nodes (1 = single node; >1 adds read replicas with automatic failover)"
+  type        = number
+  default     = 1
+}
+
 variable "multi_az_db" {
   description = "Set to true for Multi-AZ PostgreSQL RDS (Note: Free Tier covers 750 hrs/month of Single-AZ only. Keep false for Free Tier)"
   type        = bool

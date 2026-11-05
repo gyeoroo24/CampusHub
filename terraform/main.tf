@@ -26,6 +26,18 @@ module "database" {
   multi_az             = var.multi_az_db
 }
 
+# 2b. CACHE TIER (ElastiCache Redis in front of RDS for the EC2 app tier)
+module "elasticache" {
+  count  = var.enable_elasticache ? 1 : 0
+  source = "./modules/elasticache"
+
+  environment             = var.environment
+  app_subnet_ids          = module.networking.app_subnet_ids
+  redis_security_group_id = module.networking.redis_security_group_id
+  node_type               = var.redis_node_type
+  num_cache_clusters      = var.redis_num_cache_clusters
+}
+
 # 3. STORAGE TIER (Frontend S3 Bucket, Media/Docs S3 Bucket, CORS, Encryption)
 module "storage" {
   source = "./modules/storage"
@@ -72,6 +84,10 @@ module "compute_ec2" {
   asg_desired_capacity  = var.asg_desired_capacity
   tesseract_layer_zip   = var.tesseract_layer_zip
   ml_models_zip         = var.ml_models_zip
+  redis_enabled         = var.enable_elasticache
+  redis_host            = var.enable_elasticache ? module.elasticache[0].primary_endpoint_address : ""
+  redis_port            = var.enable_elasticache ? module.elasticache[0].port : 6379
+  redis_auth_secret_arn = var.enable_elasticache ? module.elasticache[0].auth_token_secret_arn : ""
 }
 
 # 6. OPTIONAL EDGE SECURITY TIER (AWS WAFv2 - Toggleable to preserve Free Tier)
