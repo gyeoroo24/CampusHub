@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/router/app_router.dart';
 import '../../../core/utils/error_text.dart';
 import '../data/auth_repository.dart';
 import '../domain/user.dart';
@@ -72,14 +73,25 @@ class _SessionKeeperState extends ConsumerState<SessionKeeper> with WidgetsBindi
   /// deactivated account and, if so, ask before reactivating it. `authStateProvider` only reaches
   /// AsyncData/AsyncError once the repository's `_init()` -- which sets this -- has finished, so
   /// there's no race with [IAuthRepository.consumePendingReactivation].
+  ///
+  /// SessionKeeper wraps MaterialApp.router's `builder`, so it sits ABOVE the Router/Navigator
+  /// go_router builds -- its own `context` has no Navigator ancestor, so dialogs here must go
+  /// through `rootNavigatorKey` instead of `context`.
   Future<void> _checkPendingReactivation() async {
     if (_reactivationChecked) return;
     _reactivationChecked = true;
     final AccountDeactivatedException? pending = ref.read(authRepositoryProvider).consumePendingReactivation();
-    if (pending == null || !mounted) return;
+    if (pending == null) return;
+
+    // The Navigator may not have finished its first build yet when this fires.
+    for (var i = 0; i < 20 && rootNavigatorKey.currentContext == null; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    final navContext = rootNavigatorKey.currentContext;
+    if (navContext == null || !navContext.mounted) return;
 
     final reactivate = await showDialog<bool>(
-      context: context,
+      context: navContext,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: const Text('Reactivate your account?'),
@@ -93,14 +105,14 @@ class _SessionKeeperState extends ConsumerState<SessionKeeper> with WidgetsBindi
         ],
       ),
     );
-    if (!mounted) return;
 
     if (reactivate == true) {
       try {
         await ref.read(authRepositoryProvider).confirmReactivation();
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context)
+        final messengerContext = rootNavigatorKey.currentContext;
+        if (messengerContext != null && messengerContext.mounted) {
+          ScaffoldMessenger.of(messengerContext)
               .showSnackBar(SnackBar(content: Text("Couldn't reactivate your account: ${errorText(e)}")));
         }
       }
