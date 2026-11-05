@@ -177,6 +177,16 @@ resource "aws_s3_object" "backend_code" {
   source_hash = data.archive_file.backend_code.output_base64sha256
 }
 
+# Tesseract OCR layer for reading mess menus: the same layer the Lambdas use, unpacked on the instance by
+# user data. Optional: empty = no layer, and the app says mess menus can't be read from files.
+resource "aws_s3_object" "tesseract_layer" {
+  count       = var.tesseract_layer_zip == "" ? 0 : 1
+  bucket      = var.media_bucket_id
+  key         = "_layers/tesseract-${filemd5(var.tesseract_layer_zip)}.zip"
+  source      = var.tesseract_layer_zip
+  source_hash = filemd5(var.tesseract_layer_zip)
+}
+
 # ==========================================
 # EC2 Launch Template & Auto Scaling Group
 # ==========================================
@@ -185,7 +195,7 @@ resource "aws_launch_template" "app" {
   image_id      = data.aws_ami.al2023.id
   instance_type = var.instance_type
 
-  depends_on = [aws_s3_object.backend_code]
+  depends_on = [aws_s3_object.backend_code, aws_s3_object.tesseract_layer]
 
   network_interfaces {
     associate_public_ip_address = true
@@ -206,6 +216,7 @@ resource "aws_launch_template" "app" {
     cognito_user_pool_id  = var.cognito_user_pool_id
     cognito_app_client_id = var.cognito_app_client_id
     origin_verify_header  = var.origin_verify_header
+    tesseract_key         = var.tesseract_layer_zip == "" ? "" : aws_s3_object.tesseract_layer[0].key
   }))
 
   block_device_mappings {

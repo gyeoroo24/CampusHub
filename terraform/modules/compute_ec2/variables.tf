@@ -113,3 +113,9 @@ variable "asg_desired_capacity" {
   default     = 1
 }
 
+variable "tesseract_layer_zip" {
+  description = "Path to tesseract-layer.zip (from modules/compute/tesseract_layer/build.sh). Empty = no OCR on the instances."
+  type        = string
+  default     = ""
+}
+

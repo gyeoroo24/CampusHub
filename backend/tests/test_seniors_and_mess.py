@@ -266,6 +266,19 @@ def test_interview_schedule_without_times(client, people):
     assert r.json()["time_tbd"] is False
 
 
+def test_reader_counts_as_available_with_only_the_library():
+    # On EC2 the Tesseract command is under /opt/bin, which isn't on the service's PATH. The in-process
+    # libtesseract is what the reader uses, so it must count as available without the command.
+    from app import mess_extract
+    mp = pytest.MonkeyPatch()
+    try:
+        mp.setattr(mess_extract, "_tess", object())
+        mp.setattr(mess_extract.shutil, "which", lambda name: None)
+        assert mess_extract.ocr_available()
+    finally:
+        mp.undo()
+
+
 # ---------------------------------------------------------------- rev 21: roles and compensation
 def test_parse_inr_formats():
     from app.placement_roles import parse_inr

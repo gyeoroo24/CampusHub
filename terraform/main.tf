@@ -70,6 +70,7 @@ module "compute_ec2" {
   asg_min_size          = var.asg_min_size
   asg_max_size          = var.asg_max_size
   asg_desired_capacity  = var.asg_desired_capacity
+  tesseract_layer_zip   = var.tesseract_layer_zip
 }
 
 # 6. OPTIONAL EDGE SECURITY TIER (AWS WAFv2 - Toggleable to preserve Free Tier)
