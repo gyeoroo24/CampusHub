@@ -27,6 +27,7 @@ class WantedPost {
   final double? maxPrice;
   final WantedStatus status;
   final UserRef author;
+  final bool authorDeactivated;
 
   /// Only for signed-in viewers.
   final Contact? authorContact;
@@ -43,6 +44,7 @@ class WantedPost {
     this.maxPrice,
     this.status = WantedStatus.open,
     required this.author,
+    this.authorDeactivated = false,
     this.authorContact,
     required this.createdAt,
     this.possibleMatches = const [],
@@ -57,6 +59,7 @@ class WantedPost {
       maxPrice: json['max_price'] == null ? null : double.tryParse(json['max_price'].toString()),
       status: WantedStatus.fromString(json['status']?.toString()),
       author: UserRef.fromJson(json['author'] as Map<String, dynamic>),
+      authorDeactivated: json['author_deactivated'] == true,
       authorContact: json['author_contact'] is Map<String, dynamic>
           ? Contact.fromJson(json['author_contact'] as Map<String, dynamic>)
           : null,
@@ -76,6 +79,7 @@ class WantedPost {
       maxPrice: maxPrice ?? this.maxPrice,
       status: status ?? this.status,
       author: author,
+      authorDeactivated: authorDeactivated,
       authorContact: authorContact,
       createdAt: createdAt,
     );

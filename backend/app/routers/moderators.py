@@ -13,6 +13,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from pydantic import BaseModel, Field, model_validator
 
 from ..auth import CurrentUser, current_user, is_iisc_email
+from ..cognito_accounts import AccountCheckUnavailable, signin_account_problem
 from ..common import forbidden, not_found
 from ..db import get_conn
 from ..notify import create_notifications, deliver_push
@@ -107,9 +108,18 @@ async def grant(body: GrantCreate, background: BackgroundTasks, user: CurrentUse
                 conn: asyncpg.Connection = Depends(get_conn)):
     if not await _may_manage_grant(conn, user, body.module, body.scope_type, body.course_id):
         raise forbidden("Only admins, or department moderators for courses in their department, can grant this.")
-    target = await conn.fetchval("SELECT id FROM users WHERE email = $1", body.email)
+    target = await conn.fetchrow("SELECT id, cognito_sub, is_active FROM users WHERE email = $1", body.email)
     if target is None:
         raise HTTPException(404, "No user with that email yet. They need to sign in to CampusHub once first.")
+    if not target["is_active"]:
+        raise HTTPException(422, "This account is deactivated. Reactivate it before granting a role.")
+    try:
+        problem = await signin_account_problem(target["cognito_sub"])
+    except AccountCheckUnavailable as exc:
+        raise HTTPException(503, "Couldn't check this person's sign-in account just now. Try again.") from exc
+    if problem is not None:
+        raise HTTPException(422, problem)
+    target = target["id"]
     try:
         async with conn.transaction():
             grant_id = await conn.fetchval(

@@ -79,6 +79,9 @@ class ListingSummary(BaseModel):
     location: str | None
     category: CategoryRef
     seller: UserRef
+    seller_deactivated: bool = Field(
+        False, description="The seller has deactivated their account. The listing stays, marked as coming "
+                           "from a deactivated account; the seller can't be messaged.")
     seller_trust_tag: Tag | None = Field(
         None, description="'negative' or 'blocked', from moderator-confirmed removals against this "
                           "seller (future plan §1.5). Null for everyone else - never a positive badge.")
@@ -119,6 +122,7 @@ def _summary(r: asyncpg.Record, tag: Tag | None = None) -> ListingSummary:
         id=r["id"], title=r["title"], price=r["price"], status=r["status"], location=r["location"],
         category=CategoryRef(id=r["category_id"], name=r["category_name"]),
         seller=UserRef(id=r["seller_id"], name=r["seller_name"]), seller_trust_tag=tag,
+        seller_deactivated=not r["seller_active"],
         hidden=r["hidden_by_strike_id"] is not None,
         held_for_review=r["held_for_review_at"] is not None, negotiable=r["negotiable"],
         cover_photo_url=file_url(r["cover_key"]) if r["cover_key"] else None,

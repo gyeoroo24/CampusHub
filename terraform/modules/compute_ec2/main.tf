@@ -60,6 +60,13 @@ resource "aws_iam_role_policy" "ec2_app_policy" {
         Resource = var.db_secret_arn
       },
       {
+        # Moderator grants check the person's sign-in account still exists and is enabled (backend/app/cognito_accounts.py)
+        Sid      = "AllowCognitoAccountCheck"
+        Effect   = "Allow"
+        Action   = ["cognito-idp:AdminGetUser"]
+        Resource = "arn:aws:cognito-idp:${var.aws_region}:*:userpool/${var.cognito_user_pool_id}"
+      },
+      {
         Sid    = "AllowMediaS3BucketOperations"
         Effect = "Allow"
         Action = [

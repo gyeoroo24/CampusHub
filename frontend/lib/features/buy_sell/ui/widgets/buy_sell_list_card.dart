@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../../../core/widgets/deactivated_seller_badge.dart';
 import '../../../../core/utils/date_time_formatter.dart';
 import '../../../../core/widgets/no_photo_placeholder.dart';
 import '../../../../core/widgets/seller_trust_badge.dart';
@@ -298,6 +300,10 @@ class _BuySellListCardState extends State<BuySellListCard> {
                     ),
                   ],
                 ),
+                if (item.sellerDeactivated) ...[
+                  DeactivatedSellerBadge(fontSize: 9),
+                  const SizedBox(width: 4),
+                ],
                 if (item.sellerTrustTag != null) ...[
                   const SizedBox(height: 6),
                   SellerTrustBadge(tag: item.sellerTrustTag, fontSize: 9),
