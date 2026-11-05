@@ -14,6 +14,7 @@ class ApiEndpoints {
   // --- Profile & Users ---
   static const String me = '$version/me';
   static const String meDeactivate = '$version/me/deactivate';
+  static const String meReactivate = '$version/me/reactivate';
   static const String phoneCode = '$version/me/phone/code';
   static const String phoneVerify = '$version/me/phone/verify';
   static const String myPosts = '$version/me/posts';

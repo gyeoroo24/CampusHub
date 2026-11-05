@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/api/api_endpoints.dart';
 import '../../../core/utils/error_text.dart';
 import '../../../core/utils/phone_countries.dart';
 import 'package:go_router/go_router.dart';
@@ -192,8 +193,11 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                 // ── My Activity & Postings Hub ──
                 _buildPostingsSection(currentUser, isDark, theme),
 
-                // ── Account: self-deactivation is hidden for now (ask before re-enabling: _buildDeactivateCard
-                //    and _confirmDeactivate below are unused but left in place) ──
+                // ── Account: only people can deactivate their own account (the admin hands the role over first) ──
+                if (!currentUser.isAdmin) ...[
+                  const SizedBox(height: 32),
+                  _buildDeactivateCard(theme),
+                ],
               ],
             ),
           ),
@@ -1088,6 +1092,77 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
       }
       _showToast('Report deleted.');
     }
+  }
+
+  Widget _buildDeactivateCard(ThemeData theme) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.red.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Deactivate my account',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade700)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'You will be signed out. This is a suspension, not a deletion: your posts stay up with a '
+                    '"Deactivated account" tag and nobody can message you, but you can reactivate it any time '
+                    'by signing in again.',
+                    style: TextStyle(fontSize: 12, color: theme.hintColor),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.red.shade700),
+              onPressed: _confirmDeactivate,
+              child: const Text('Deactivate'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDeactivate() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Deactivate your account?'),
+        content: const Text(
+          'You will be signed out. Your listings, reports and wanted posts stay up with a "Deactivated '
+          'account" tag, nobody can message you, and your moderator roles end.\n\n'
+          'You can reactivate it any time by signing in again and confirming.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Deactivate'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await ref.read(apiClientProvider).post(ApiEndpoints.meDeactivate);
+    } catch (e) {
+      _showToast('Failed to deactivate your account: ${errorText(e)}', isError: true);
+      return;
+    }
+    await ref.read(authRepositoryProvider).signOut();
+    ref.invalidate(currentUserProvider);
+    if (mounted) context.go('/buy');
   }
 
   Future<void> _confirmSignOut() async {

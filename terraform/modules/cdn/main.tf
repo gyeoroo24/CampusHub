@@ -104,13 +104,13 @@ resource "aws_cloudfront_distribution" "distribution" {
     origin_request_policy_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac"
   }
 
-  # SPA Routing Fallback: Redirect S3 403 to index.html with 0 min TTL (does NOT rewrite 404 API responses)
-  custom_error_response {
-    error_code            = 403
-    response_code         = 200
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 0
-  }
+  # No custom_error_response here: a CloudFront distribution's custom_error_response applies to
+  # EVERY origin, not just the one it's commented for. A 403 fallback meant for S3 (deep links
+  # like /events, now handled instead by the spa_rewrite function above, which only touches the
+  # default/S3 behavior) also silently rewrote every real 403 the API origin returns -- e.g. a
+  # deactivated account calling GET /me -- into a 200 response body containing index.html's raw
+  # HTML, which the app then failed to parse as JSON. Removed rather than re-added, since the
+  # function already covers the SPA routing case without touching /api/*.
 
   restrictions {
     geo_restriction {

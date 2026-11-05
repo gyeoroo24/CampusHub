@@ -1,9 +1,12 @@
 import 'dart:async';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/utils/error_text.dart';
+import '../data/auth_repository.dart';
+import '../domain/user.dart';
 import '../providers/auth_providers.dart';
 
 /// Keeps the signed-in user (and their roles) in step with the server.
@@ -63,6 +66,54 @@ class _SessionKeeperState extends ConsumerState<SessionKeeper> with WidgetsBindi
     super.dispose();
   }
 
+  bool _reactivationChecked = false;
+
+  /// Right after sign-in resolves (success, guest or error), check whether it was for a
+  /// deactivated account and, if so, ask before reactivating it. `authStateProvider` only reaches
+  /// AsyncData/AsyncError once the repository's `_init()` -- which sets this -- has finished, so
+  /// there's no race with [IAuthRepository.consumePendingReactivation].
+  Future<void> _checkPendingReactivation() async {
+    if (_reactivationChecked) return;
+    _reactivationChecked = true;
+    final AccountDeactivatedException? pending = ref.read(authRepositoryProvider).consumePendingReactivation();
+    if (pending == null || !mounted) return;
+
+    final reactivate = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reactivate your account?'),
+        content: const Text(
+          'This account was deactivated. Signing in again will reactivate it and make your profile '
+          'and posts visible again. Continue?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Reactivate and sign in')),
+        ],
+      ),
+    );
+    if (!mounted) return;
+
+    if (reactivate == true) {
+      try {
+        await ref.read(authRepositoryProvider).confirmReactivation();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text("Couldn't reactivate your account: ${errorText(e)}")));
+        }
+      }
+    } else {
+      await ref.read(authRepositoryProvider).declineReactivation();
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    ref.listen<AsyncValue<User?>>(authStateProvider, (previous, next) {
+      if (!next.isLoading) _checkPendingReactivation();
+    });
+    return widget.child;
+  }
 }
