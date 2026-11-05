@@ -194,6 +194,16 @@ resource "aws_s3_object" "tesseract_layer" {
   source_hash = filemd5(var.tesseract_layer_zip)
 }
 
+# Category-suggestion (Buy & Sell, Lost & Found) and course-feedback sentiment ONNX models: static data,
+# not an architecture-specific build like the Tesseract layer, so one zip serves any instance type.
+resource "aws_s3_object" "ml_models" {
+  count       = var.ml_models_zip == "" ? 0 : 1
+  bucket      = var.media_bucket_id
+  key         = "_layers/ml-models-${filemd5(var.ml_models_zip)}.zip"
+  source      = var.ml_models_zip
+  source_hash = filemd5(var.ml_models_zip)
+}
+
 # ==========================================
 # EC2 Launch Template & Auto Scaling Group
 # ==========================================
@@ -202,7 +212,7 @@ resource "aws_launch_template" "app" {
   image_id      = data.aws_ami.al2023.id
   instance_type = var.instance_type
 
-  depends_on = [aws_s3_object.backend_code, aws_s3_object.tesseract_layer]
+  depends_on = [aws_s3_object.backend_code, aws_s3_object.tesseract_layer, aws_s3_object.ml_models]
 
   network_interfaces {
     associate_public_ip_address = true
@@ -224,6 +234,7 @@ resource "aws_launch_template" "app" {
     cognito_app_client_id = var.cognito_app_client_id
     origin_verify_header  = var.origin_verify_header
     tesseract_key         = var.tesseract_layer_zip == "" ? "" : aws_s3_object.tesseract_layer[0].key
+    ml_models_key         = var.ml_models_zip == "" ? "" : aws_s3_object.ml_models[0].key
   }))
 
   block_device_mappings {

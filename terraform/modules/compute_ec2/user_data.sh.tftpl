@@ -41,6 +41,19 @@ else
 fi
 %{ endif ~}
 
+# 3c. ONNX models for category suggestion (Buy & Sell, Lost & Found) and course-feedback sentiment:
+#     static data, unpacked straight into backend/models (app/categories_suggest.py's model_dir()).
+%{ if ml_models_key != "" ~}
+echo "Installing the category-suggestion/sentiment models..."
+if aws s3 cp "s3://${media_bucket_id}/${ml_models_key}" /tmp/ml-models.zip --region "${aws_region}"; then
+  mkdir -p "$APP_DIR/backend/models"
+  unzip -q -o /tmp/ml-models.zip -d "$APP_DIR/backend/models"
+  echo "Category-suggestion/sentiment models installed."
+else
+  echo "WARNING: could not download the ML models; category suggestion and sentiment analysis are unavailable."
+fi
+%{ endif ~}
+
 # 4. Retrieve database credentials from Secrets Manager
 echo "Retrieving database credentials from Secrets Manager..."
 SECRET_JSON=$(aws secretsmanager get-secret-value \

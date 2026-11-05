@@ -3,13 +3,20 @@ import 'dart:math';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/models/page.dart';
 import '../domain/placement_models.dart';
 
 /// Placement Hub: company pages, JDs, PPTs, hiring statistics, interview experiences, the company
 /// forum, and (moderators) the placement sheet import.
 abstract class IPlacementRepository {
   /// [sort] is `name`, `most_hired` or `upcoming_ppt`. [limit] null = every company (fetched 50 a page).
+  /// Only for bounded lookups (search typeahead); the Companies tab uses [fetchCompaniesPage] instead,
+  /// so opening the hub doesn't fetch the whole company list up front.
   Future<List<Company>> fetchCompanies({String? query, String sort = 'name', int? limit});
+
+  /// One page of companies, for the Companies tab's infinite scroll.
+  Future<PaginatedResponse<Company>> fetchCompaniesPage(
+      {String? query, String sort = 'name', int limit = 20, int offset = 0});
 
   Future<Company> getCompany(String companyId);
 
@@ -90,6 +97,19 @@ class ApiPlacementRepository implements IPlacementRepository {
       companies.addAll(_items(data).map(Company.fromJson));
       if (data['has_more'] != true || (limit != null && companies.length >= limit)) return companies;
     }
+  }
+
+  @override
+  Future<PaginatedResponse<Company>> fetchCompaniesPage(
+      {String? query, String sort = 'name', int limit = 20, int offset = 0}) async {
+    final response = await apiClient.get(ApiEndpoints.companies, queryParameters: {
+      if (_blankToNull(query) != null) 'q': query!.trim(),
+      'sort': sort,
+      'limit': limit,
+      'offset': offset,
+    });
+    return PaginatedResponse.fromJson(
+        response.data as Map<String, dynamic>, (j) => Company.fromJson(j as Map<String, dynamic>));
   }
 
   @override
@@ -331,6 +351,14 @@ class MockPlacementRepository implements IPlacementRepository {
       list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     }
     return limit == null ? list : list.take(limit).toList();
+  }
+
+  @override
+  Future<PaginatedResponse<Company>> fetchCompaniesPage(
+      {String? query, String sort = 'name', int limit = 20, int offset = 0}) async {
+    final all = await fetchCompanies(query: query, sort: sort);
+    final page = all.skip(offset).take(limit).toList();
+    return PaginatedResponse(items: page, limit: limit, offset: offset, hasMore: offset + page.length < all.length);
   }
 
   @override

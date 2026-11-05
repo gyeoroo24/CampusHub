@@ -132,7 +132,7 @@ class CompanyScreen extends ConsumerWidget {
     if (ok != true || !context.mounted) return;
     try {
       await ref.read(placementRepositoryProvider).deleteCompany(company.id);
-      ref.invalidate(companiesProvider);
+      ref.read(companiesPaginationProvider.notifier).loadInitial();
       ref.invalidate(placementOverviewProvider);
       ref.invalidate(upcomingPptsProvider);
       ref.invalidate(scheduleProvider);

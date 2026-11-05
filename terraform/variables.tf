@@ -97,6 +97,12 @@ variable "tesseract_layer_zip" {
   default     = ""
 }
 
+variable "ml_models_zip" {
+  description = "Path (relative to the terraform directory) to a zip of backend/models from scripts/fetch_match_models.py --suggest-only. Empty = no category suggestion or course-feedback sentiment analysis."
+  type        = string
+  default     = ""
+}
+
 variable "ml_layer_zip" {
   description = "Path (relative to the terraform directory) to ml-layer.zip from modules/compute/ml_layer/build.sh. Empty = no ML layer; Buy & Sell and Lost & Found category suggestions are off."
   type        = string

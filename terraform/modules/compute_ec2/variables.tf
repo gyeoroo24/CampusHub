@@ -119,3 +119,9 @@ variable "tesseract_layer_zip" {
   default     = ""
 }
 
+variable "ml_models_zip" {
+  description = "Path to a zip of backend/models (from scripts/fetch_match_models.py --suggest-only): the category suggestion and course-feedback sentiment ONNX models. Empty = those features stay unavailable."
+  type        = string
+  default     = ""
+}
+

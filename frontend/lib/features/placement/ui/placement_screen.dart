@@ -125,7 +125,7 @@ Future<void> _runManageAction(BuildContext context, WidgetRef ref, String action
     },
   );
   if (saved == true) {
-    container.invalidate(companiesProvider);
+    container.read(companiesPaginationProvider.notifier).loadInitial();
     container.invalidate(placementOverviewProvider);
     container.invalidate(upcomingPptsProvider);
     container.invalidate(scheduleProvider);
@@ -318,33 +318,62 @@ String _countdown(DateTime at) {
 }
 
 // ---------------------------------------------------------------- companies (landing)
-class _CompaniesTab extends ConsumerWidget {
+class _CompaniesTab extends ConsumerStatefulWidget {
   final TextEditingController search;
   final VoidCallback onSeeSchedule;
 
   const _CompaniesTab({required this.search, required this.onSeeSchedule});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CompaniesTab> createState() => _CompaniesTabState();
+}
+
+class _CompaniesTabState extends ConsumerState<_CompaniesTab> {
+  final _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    if (_scrollController.position.pixels >= maxScroll - 250) {
+      ref.read(companiesPaginationProvider.notifier).loadMore();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     if (ref.watch(isGuestUserProvider)) {
       return const SignInForPlacementRecords(
         message: 'Sign in to browse companies, their hiring numbers and pay.');
     }
-    final companiesAsync = ref.watch(companiesProvider);
+    final page = ref.watch(companiesPaginationProvider);
     final query = ref.watch(companySearchProvider);
     // Keep the box and the filter in step (the filter is cleared whenever the page opens).
-    if (search.text != query) search.text = query;
+    if (widget.search.text != query) widget.search.text = query;
 
     return RefreshIndicator(
       onRefresh: () async {
-        ref.invalidate(companiesProvider);
+        ref.read(companiesPaginationProvider.notifier).loadInitial();
         ref.invalidate(upcomingPptsProvider);
       },
       child: CustomScrollView(
+        controller: _scrollController,
         slivers: [
-          SliverToBoxAdapter(child: _ComingUp(onSeeAll: onSeeSchedule)),
+          SliverToBoxAdapter(child: _ComingUp(onSeeAll: widget.onSeeSchedule)),
           SliverToBoxAdapter(
             child: Container(
               margin: const EdgeInsets.only(top: 8),
@@ -359,7 +388,7 @@ class _CompaniesTab extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: TextField(
-                      controller: search,
+                      controller: widget.search,
                       decoration: InputDecoration(
                         prefixIcon: const Icon(Icons.search_rounded, size: 18),
                         hintText: 'Search companies or industries',
@@ -392,47 +421,54 @@ class _CompaniesTab extends ConsumerWidget {
               ),
             ),
           ),
-          companiesAsync.when(
-            skipLoadingOnReload: true,
-            loading: () => const SliverToBoxAdapter(child: SkeletonList(itemCount: 4)),
-            error: (e, _) => SliverToBoxAdapter(
-              child: ErrorState(message: errorText(e), onRetry: () => ref.invalidate(companiesProvider)),
-            ),
-            data: (companies) {
-              if (companies.isEmpty) {
-                return SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        query.trim().isEmpty
-                            ? 'No companies yet. Placement moderators add them, or import a CSV.'
-                            : 'No companies match “${query.trim()}”.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: theme.hintColor),
-                      ),
-                    ),
-                  ),
-                );
-              }
-              return SliverPadding(
-                padding: const EdgeInsets.all(16),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 400,
-                    mainAxisExtent: 128,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) => CompanyTile(company: companies[i]),
-                    childCount: companies.length,
+          if (page.isLoadingInitial)
+            const SliverToBoxAdapter(child: SkeletonList(itemCount: 4))
+          else if (page.errorMessage != null && page.items.isEmpty)
+            SliverToBoxAdapter(
+              child: ErrorState(
+                  message: page.errorMessage!,
+                  onRetry: () => ref.read(companiesPaginationProvider.notifier).loadInitial()),
+            )
+          else if (page.items.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    query.trim().isEmpty
+                        ? 'No companies yet. Placement moderators add them, or import a CSV.'
+                        : 'No companies match “${query.trim()}”.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: theme.hintColor),
                   ),
                 ),
-              );
-            },
-          ),
+              ),
+            )
+          else ...[
+            SliverPadding(
+              padding: const EdgeInsets.all(16),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 400,
+                  mainAxisExtent: 128,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) => CompanyTile(company: page.items[i]),
+                  childCount: page.items.length,
+                ),
+              ),
+            ),
+            if (page.isLoadingMore)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: 16),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              ),
+          ],
         ],
       ),
     );

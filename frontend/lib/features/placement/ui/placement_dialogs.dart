@@ -516,13 +516,13 @@ class _ImportSheetDialogState extends ConsumerState<ImportSheetDialog> {
       final repo = ref.read(placementRepositoryProvider);
       if (_roles) {
         final result = await repo.importRoles(_sheet.text, placementYear: _year);
-        ref.invalidate(companiesProvider);
+        ref.read(companiesPaginationProvider.notifier).loadInitial();
         ref.invalidate(placementOverviewProvider);
         if (mounted) setState(() => _rolesResult = result);
         return;
       }
       final result = await repo.importSheet(_year, _sheet.text);
-      ref.invalidate(companiesProvider);
+      ref.read(companiesPaginationProvider.notifier).loadInitial();
       ref.invalidate(placementOverviewProvider);
       if (mounted) setState(() => _result = result);
     } catch (e) {
