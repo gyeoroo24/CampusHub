@@ -4,10 +4,11 @@
 # cuts most of that traffic before it ever reaches the database.
 
 resource "random_password" "redis_auth_token" {
-  # ElastiCache AUTH tokens must be 16-128 printable ASCII characters, excluding @ " / and space.
+  # ElastiCache AUTH tokens must be 16-128 printable ASCII characters, and the only special
+  # characters it accepts are ! & # $ ^ < > - (anything else fails with "Invalid AuthToken provided").
   length           = 32
   special          = true
-  override_special = "!#$%&*()-_=+[]{}<>:?"
+  override_special = "!&#$^<>-"
 }
 
 resource "aws_elasticache_subnet_group" "main" {
