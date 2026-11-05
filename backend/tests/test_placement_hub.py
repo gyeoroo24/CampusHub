@@ -94,7 +94,7 @@ def test_job_descriptions_and_ppts(client, s3, placement):
     assert (upcoming["when"], past["when"]) == ("upcoming", "past")
     page = client.get(f"{API}/companies/{company['id']}", headers=RAVI).json()
     assert page["role_count"] == 1 and page["next_ppt_at"] is not None and len(page["ppts"]) == 2
-    feed = client.get(f"{API}/placement/ppts").json()["items"]
+    feed = client.get(f"{API}/placement/ppts", headers=RAVI).json()["items"]
     assert [p["id"] for p in feed] == [upcoming["id"]] and feed[0]["company_name"] == "Walmart Global Tech"
     assert client.delete(f"{API}/ppts/{past['id']}", headers=RAVI).status_code == 204
     assert client.delete(f"{API}/jds/{jd['id']}", headers=RAVI).status_code == 204

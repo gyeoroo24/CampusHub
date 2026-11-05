@@ -589,11 +589,12 @@ async def _ppt_detail(conn: asyncpg.Connection, ppt_id: UUID) -> Ppt:
 
 
 @router.get("/placement/ppts", response_model=Page[Ppt],
-            summary="The placement schedule across companies: talks, online tests, interviews")
+            summary="The placement schedule across companies: talks, online tests, interviews (signed in only)")
 async def list_ppts(when: Literal["upcoming", "past", "all"] = Query(
                         "upcoming", description="upcoming: soonest first; past: latest first"),
                     kind: list[PptKind] | None = Query(None, description="Only these kinds (repeat for several)"),
-                    page: PageParams = Depends(page_params), conn: asyncpg.Connection = Depends(get_conn)):
+                    page: PageParams = Depends(page_params), user: CurrentUser = Depends(current_user),
+                    conn: asyncpg.Connection = Depends(get_conn)):
     where, order = {
         "upcoming": ("p.scheduled_at >= now()", "p.scheduled_at ASC"),
         "past": ("p.scheduled_at < now()", "p.scheduled_at DESC"),

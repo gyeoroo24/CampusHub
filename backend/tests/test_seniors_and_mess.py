@@ -44,7 +44,7 @@ def test_sheet_with_a_title_row_and_an_office_schedule(client, people):
     r = client.post(f"{API}/placement/schedule/import", headers=RAVI, json={"csv": schedule})
     assert r.status_code == 201, r.text
     assert (r.json()["rows_created"], r.json()["rows_rejected"]) == (2, 0)
-    rows = {p["company_name"]: p for p in client.get(f"{API}/placement/ppts").json()["items"]}
+    rows = {p["company_name"]: p for p in client.get(f"{API}/placement/ppts", headers=RAVI).json()["items"]}
     accenture = rows["Accenture"]
     assert accenture["kind"] == "oa" and accenture["venue"] is None       # "Test ..." columns: online tests
     assert accenture["details"] == "Mock Assessment · Mode: Online · Status: Confirmed · Postponed, OCCaP Will communicate"
@@ -259,7 +259,7 @@ def test_interview_schedule_without_times(client, people):
     r = client.post(f"{API}/placement/schedule/import", headers=RAVI, json={"csv": sheet})
     assert r.status_code == 201, r.text
     assert r.json()["kinds"] == {"interview": 2} and r.json()["past_rows"] == 0
-    dates = client.get(f"{API}/placement/ppts", params={"kind": "interview"}).json()["items"]
+    dates = client.get(f"{API}/placement/ppts", headers=RAVI, params={"kind": "interview"}).json()["items"]
     assert [(d["company_name"], d["time_tbd"]) for d in dates] == [("HPE", True), ("Chevron", True)]
     # A moderator setting the time makes it exact.
     r = client.patch(f"{API}/ppts/{dates[0]['id']}", headers=RAVI, json={"scheduled_at": "2030-10-19T10:30:00+05:30"})
@@ -340,7 +340,8 @@ def test_moderators_delete_a_withdrawn_company(client, people):
     assert client.delete(f"{API}/companies/{company['id']}", headers=KIRAN).status_code == 403
     assert client.delete(f"{API}/companies/{company['id']}", headers=RAVI).status_code == 204
     assert client.get(f"{API}/companies/{company['id']}", headers=RAVI).status_code == 404
-    assert not [p for p in client.get(f"{API}/placement/ppts").json()["items"] if p["company_name"] == "Retracted Co"]
+    assert not [p for p in client.get(f"{API}/placement/ppts", headers=RAVI).json()["items"]
+               if p["company_name"] == "Retracted Co"]
     assert sql("SELECT count(*) FROM interview_experiences")[0][0] == 0
 
 

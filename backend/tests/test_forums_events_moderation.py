@@ -151,9 +151,11 @@ def test_schedule_kinds(client, people):
         assert r.status_code == 201 and r.json()["kind"] == kind
     assert client.post(f"{API}/companies/{company['id']}/ppts", headers=RAVI,
                        json={"kind": "lunch", "venue": "x"}).status_code == 422
-    upcoming = client.get(f"{API}/placement/ppts").json()["items"]
+    assert client.get(f"{API}/placement/ppts").status_code == 401   # the schedule needs sign-in (rev 33)
+    upcoming = client.get(f"{API}/placement/ppts", headers=RAVI).json()["items"]
     assert [p["kind"] for p in upcoming] == ["ppt", "oa", "interview"]
-    assert [p["kind"] for p in client.get(f"{API}/placement/ppts", params={"kind": ["oa", "interview"]})
+    assert [p["kind"] for p in client.get(f"{API}/placement/ppts", headers=RAVI,
+                                          params={"kind": ["oa", "interview"]})
             .json()["items"]] == ["oa", "interview"]
     summary = client.get(f"{API}/companies", headers=RAVI).json()["items"][0]
     assert summary["next_date_kind"] == "ppt" and summary["next_date_at"] == summary["next_ppt_at"]
@@ -188,7 +190,7 @@ def test_csv_imports(client, people):
     # Importing the same file again updates instead of duplicating.
     assert client.post(f"{API}/placement/schedule/import", headers=RAVI,
                        json={"csv": schedule}).json()["rows_updated"] == 2
-    oa = [p for p in client.get(f"{API}/placement/ppts").json()["items"] if p["kind"] == "oa"][0]
+    oa = [p for p in client.get(f"{API}/placement/ppts", headers=RAVI).json()["items"] if p["kind"] == "oa"][0]
     at = datetime.fromisoformat(oa["scheduled_at"]).astimezone(timezone(timedelta(hours=5, minutes=30)))
     assert (oa["company_name"], at.hour, oa["venue"]) == ("IBM", 18, "HackerRank")
     r = client.post(f"{API}/placement/schedule/import", headers=RAVI, json={"csv": "Venue\nx\n"})

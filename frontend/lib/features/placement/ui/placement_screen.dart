@@ -650,6 +650,10 @@ class _ScheduleTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    if (ref.watch(isGuestUserProvider)) {
+      return const SignInForPlacementRecords(
+        message: 'Sign in to see which companies are visiting and when.');
+    }
     final kinds = ref.watch(scheduleKindsProvider);
     final past = ref.watch(schedulePastProvider);
     void setKinds(Set<PptKind> k) => ref.read(scheduleKindsProvider.notifier).state = k;
