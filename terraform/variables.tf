@@ -167,41 +167,47 @@ variable "origin_verify_header" {
 }
 
 variable "asg_min_size" {
-  # Kept at 1, not raised: EC2 Free Tier is 750 instance-hours/month shared across every running
-  # t4g.micro/t3.micro combined, and a single instance running 24/7 already uses ~730-744 of those
-  # hours by itself. Raising the always-on floor to 2 would roughly double that baseline burn and
-  # blow the monthly Free Tier budget well before the end of the month; the max/target-tracking
-  # policy below gives burst capacity for a load test instead, without raising steady-state cost.
+  # Raised to 3 so asg_desired_capacity=3 is a real floor target-tracking won't scale below, not
+  # just an initial value it can drift down from. This is a deliberate move off Free Tier: 3
+  # t4g.micro running 24/7 is ~2190 instance-hours/month against the 750-hour combined Free Tier
+  # budget, i.e. real ongoing cost -- accepted here in exchange for availability margin.
   description = "Minimum instances in EC2 Auto Scaling Group"
   type        = number
-  default     = 1
+  default     = 3
 }
 
 variable "asg_max_size" {
-  # Headroom for a short Locust burst only -- extra instances only run (and only cost
-  # instance-hours) while the target-tracking policy judges them needed, then scale back to
-  # asg_min_size. Capped at 8 so that at ec2_db_pool_max_size=10 each, 8 * 10 = 80 connections
-  # stays safely under db.t4g.micro's ~100-110 max_connections, leaving headroom for the
-  # data_tools Lambda and any manual psql session.
+  # Ceiling for scale-out -- extra instances beyond asg_desired_capacity only run (and only cost
+  # instance-hours) while the target-tracking policy judges them needed, then scale back toward
+  # asg_desired_capacity (not asg_min_size, which floors scale-IN too -- see its own comment).
+  # Capped at 5 so that at ec2_db_pool_max_size=16 each, 5 * 16 = 80 connections stays safely under
+  # db.t4g.micro's ~100-110 max_connections, leaving headroom for the data_tools Lambda and any
+  # manual psql session.
   description = "Maximum instances in EC2 Auto Scaling Group"
   type        = number
-  default     = 8
+  default     = 5
 }
 
 variable "asg_desired_capacity" {
   description = "Desired instances in EC2 Auto Scaling Group"
   type        = number
-  default     = 1
+  default     = 3
 }
 
 variable "asg_target_cpu_utilization" {
-  description = "Target-tracking scaling policy: average ASG CPU% it tries to hold. Kept at 50 (not closer to 100) so the ASG scales out to asg_max_size while a t4g.micro still has burstable CPU credits left, instead of after they're already exhausted."
+  description = "Target-tracking scaling policy: average ASG CPU% it tries to hold."
   type        = number
-  default     = 50
+  default     = 60
+}
+
+variable "asg_target_requests_per_instance" {
+  description = "Target-tracking scaling policy: ALB requests per target per minute each instance should handle."
+  type        = number
+  default     = 200
 }
 
 variable "ec2_db_pool_max_size" {
-  description = "Max asyncpg pool connections each EC2 instance opens to RDS (CAMPUSHUB_DB_POOL_MAX_SIZE). Lowered from the single-instance default of 20 to 10 so that scaling out under asg_max_size doesn't exceed db.t4g.micro's connection ceiling -- see asg_max_size."
+  description = "Max asyncpg pool connections each EC2 instance opens to RDS (CAMPUSHUB_DB_POOL_MAX_SIZE). Must satisfy (this * asg_max_size) <= db.t4g.micro's ~100-110 max_connections, with headroom for the data_tools Lambda and any manual psql session -- see asg_max_size."
   type        = number
-  default     = 10
+  default     = 16
 }

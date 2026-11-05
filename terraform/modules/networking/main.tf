@@ -175,20 +175,15 @@ resource "aws_vpc_endpoint" "secretsmanager" {
   }
 }
 
-# VPC Interface Endpoint for Cognito Identity Provider. The API verifies Cognito ID tokens itself
-# (app/auth.py) by fetching https://cognito-idp.<region>.amazonaws.com/<pool-id>/.well-known/jwks.json
-# directly - a plain HTTPS call, not an AWS SDK call - but private DNS on this endpoint still
-# resolves that hostname to it from inside the VPC, so Lambda never needs public internet access
-# (no NAT Gateway) just to validate a sign-in token.
-resource "aws_vpc_endpoint" "cognito_idp" {
-  vpc_id              = aws_vpc.main.id
-  service_name        = "com.amazonaws.${var.aws_region}.cognito-idp"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = aws_subnet.app[*].id
-  security_group_ids  = [aws_security_group.vpce_sg.id]
-  private_dns_enabled = true
-
-  tags = {
-    Name = "campushub-${var.environment}-cognito-idp-endpoint"
-  }
-}
+# No VPC Interface Endpoint for Cognito Identity Provider (removed): AWS unconditionally blocks
+# cognito-idp management-API calls (e.g. AdminGetUser, used by app/cognito_accounts.py to check a
+# moderator candidate's sign-in account is still enabled) over PrivateLink once a user pool has any
+# domain assigned for Hosted UI -- confirmed live, this pool's domain made every AdminGetUser call
+# through this endpoint fail with "PrivateLink access is disabled for the user pool that has
+# ManagedLogin configured", regardless of ManagedLoginVersion. There's no setting that re-enables
+# it; the only fix is to not route this traffic through PrivateLink. The app subnets already have a
+# direct IGW route (aws_route_table.app, below -- added for zero-cost pip/PyPI access), so dropping
+# this endpoint just lets cognito-idp.<region>.amazonaws.com resolve publicly instead, which also
+# still works fine for app/auth.py's plain-HTTPS JWKS fetch (that endpoint was never subject to the
+# PrivateLink restriction above -- it's a public, unauthenticated well-known endpoint). Keeping an
+# endpoint that can never work for this pool would just be a permanent ~$7-8/month for nothing.

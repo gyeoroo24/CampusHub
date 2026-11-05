@@ -308,3 +308,20 @@ resource "aws_autoscaling_policy" "cpu_target_tracking" {
   }
 }
 
+# Complements CPU: this app is largely I/O-bound (DB/Redis/S3 waits), so request queuing can build
+# up while CPU% still looks fine, especially on a burstable t4g.micro near its credit limit. The
+# ASG scales to whichever of the two policies currently demands more capacity.
+resource "aws_autoscaling_policy" "request_count_target_tracking" {
+  name                   = "${var.project_name}-${var.environment}-request-count-target-tracking"
+  autoscaling_group_name = aws_autoscaling_group.app.name
+  policy_type            = "TargetTrackingScaling"
+
+  target_tracking_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ALBRequestCountPerTarget"
+      resource_label         = "${aws_lb.app.arn_suffix}/${aws_lb_target_group.app.arn_suffix}"
+    }
+    target_value = var.asg_target_requests_per_instance
+  }
+}
+

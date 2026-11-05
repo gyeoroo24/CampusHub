@@ -119,6 +119,12 @@ variable "asg_target_cpu_utilization" {
   default     = 50
 }
 
+variable "asg_target_requests_per_instance" {
+  description = "Target-tracking scaling policy: ALB requests per target per minute each instance should handle. Complements CPU -- this app is I/O-bound, so request queuing can build up while CPU% still looks fine."
+  type        = number
+  default     = 200
+}
+
 variable "db_pool_max_size" {
   description = "Max asyncpg pool connections each EC2 instance opens to RDS, written into the app's .env as CAMPUSHUB_DB_POOL_MAX_SIZE. Must satisfy (this * asg_max_size) <= the RDS instance class's max_connections, with headroom for the data_tools Lambda and manual psql sessions -- db.t4g.micro caps out around ~110 connections."
   type        = number

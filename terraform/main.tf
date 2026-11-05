@@ -61,35 +61,36 @@ module "auth" {
 module "compute_ec2" {
   source = "./modules/compute_ec2"
 
-  environment                = var.environment
-  project_name               = var.project_name
-  aws_region                 = var.aws_region
-  vpc_id                     = module.networking.vpc_id
-  public_subnet_ids          = module.networking.public_subnet_ids
-  app_subnet_ids             = module.networking.app_subnet_ids
-  app_security_group_id      = module.networking.app_security_group_id
-  alb_security_group_id      = module.networking.alb_security_group_id
-  instance_type              = var.ec2_instance_type
-  db_host                    = module.database.db_address
-  db_name                    = module.database.db_name
-  db_user                    = module.database.db_username
-  db_secret_arn              = module.database.db_secret_arn
-  media_bucket_id            = module.storage.media_bucket_id
-  media_bucket_arn           = module.storage.media_bucket_arn
-  cognito_user_pool_id       = module.auth.user_pool_id
-  cognito_app_client_id      = module.auth.user_pool_client_id
-  origin_verify_header       = var.origin_verify_header
-  asg_min_size               = var.asg_min_size
-  asg_max_size               = var.asg_max_size
-  asg_desired_capacity       = var.asg_desired_capacity
-  asg_target_cpu_utilization = var.asg_target_cpu_utilization
-  db_pool_max_size           = var.ec2_db_pool_max_size
-  tesseract_layer_zip        = var.tesseract_layer_zip
-  ml_models_zip              = var.ml_models_zip
-  redis_enabled              = var.enable_elasticache
-  redis_host                 = var.enable_elasticache ? module.elasticache[0].primary_endpoint_address : ""
-  redis_port                 = var.enable_elasticache ? module.elasticache[0].port : 6379
-  redis_auth_secret_arn      = var.enable_elasticache ? module.elasticache[0].auth_token_secret_arn : ""
+  environment                      = var.environment
+  project_name                     = var.project_name
+  aws_region                       = var.aws_region
+  vpc_id                           = module.networking.vpc_id
+  public_subnet_ids                = module.networking.public_subnet_ids
+  app_subnet_ids                   = module.networking.app_subnet_ids
+  app_security_group_id            = module.networking.app_security_group_id
+  alb_security_group_id            = module.networking.alb_security_group_id
+  instance_type                    = var.ec2_instance_type
+  db_host                          = module.database.db_address
+  db_name                          = module.database.db_name
+  db_user                          = module.database.db_username
+  db_secret_arn                    = module.database.db_secret_arn
+  media_bucket_id                  = module.storage.media_bucket_id
+  media_bucket_arn                 = module.storage.media_bucket_arn
+  cognito_user_pool_id             = module.auth.user_pool_id
+  cognito_app_client_id            = module.auth.user_pool_client_id
+  origin_verify_header             = var.origin_verify_header
+  asg_min_size                     = var.asg_min_size
+  asg_max_size                     = var.asg_max_size
+  asg_desired_capacity             = var.asg_desired_capacity
+  asg_target_cpu_utilization       = var.asg_target_cpu_utilization
+  asg_target_requests_per_instance = var.asg_target_requests_per_instance
+  db_pool_max_size                 = var.ec2_db_pool_max_size
+  tesseract_layer_zip              = var.tesseract_layer_zip
+  ml_models_zip                    = var.ml_models_zip
+  redis_enabled                    = var.enable_elasticache
+  redis_host                       = var.enable_elasticache ? module.elasticache[0].primary_endpoint_address : ""
+  redis_port                       = var.enable_elasticache ? module.elasticache[0].port : 6379
+  redis_auth_secret_arn            = var.enable_elasticache ? module.elasticache[0].auth_token_secret_arn : ""
 }
 
 # 6. OPTIONAL EDGE SECURITY TIER (AWS WAFv2 - Toggleable to preserve Free Tier)
