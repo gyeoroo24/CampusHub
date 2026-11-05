@@ -155,7 +155,7 @@ def test_schedule_kinds(client, people):
     assert [p["kind"] for p in upcoming] == ["ppt", "oa", "interview"]
     assert [p["kind"] for p in client.get(f"{API}/placement/ppts", params={"kind": ["oa", "interview"]})
             .json()["items"]] == ["oa", "interview"]
-    summary = client.get(f"{API}/companies").json()["items"][0]
+    summary = client.get(f"{API}/companies", headers=RAVI).json()["items"][0]
     assert summary["next_date_kind"] == "ppt" and summary["next_date_at"] == summary["next_ppt_at"]
 
 

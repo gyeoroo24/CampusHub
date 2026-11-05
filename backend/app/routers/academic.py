@@ -216,11 +216,17 @@ async def _course_department(conn: asyncpg.Connection, course_id: UUID) -> UUID:
 
 @router.get("/departments/{department_id}/courses", response_model=list[Course],
             summary="Courses in a department, with whether each has content (FR-11)")
-async def list_courses(department_id: UUID, conn: asyncpg.Connection = Depends(get_conn)):
+async def list_courses(department_id: UUID, viewer: CurrentUser | None = Depends(optional_user),
+                       conn: asyncpg.Connection = Depends(get_conn)):
     if not await conn.fetchval("SELECT EXISTS (SELECT 1 FROM departments WHERE id = $1)", department_id):
         raise not_found("Department")
     rows = await conn.fetch(_COURSE_SELECT + " WHERE c.department_id = $1 ORDER BY c.code", department_id)
-    return [_course(r) for r in rows]
+    followed = set()
+    if viewer is not None and rows:
+        followed = {r["course_id"] for r in await conn.fetch(
+            "SELECT course_id FROM course_follows WHERE user_id = $1 AND course_id = ANY($2::uuid[])",
+            viewer.id, [r["id"] for r in rows])}
+    return [_course(r, following=r["id"] in followed) for r in rows]
 
 
 @router.get("/courses/{course_id}", response_model=Course, summary="One course")

@@ -64,7 +64,7 @@ def test_seniors_to_contact(client, people):
     client.post(f"{API}/placement/imports", headers=RAVI, json={
         "placement_year": this_year - 3, "sheet": "Company,Email,Role\nNvidia,ancient@iisc.ac.in,SDE\n"})
     sql("UPDATE users SET phone = '+919876543210' WHERE email = 'asha@iisc.ac.in'")
-    nvidia = client.get(f"{API}/companies", params={"q": "nvidia"}).json()["items"][0]["id"]
+    nvidia = client.get(f"{API}/companies", headers=RAVI, params={"q": "nvidia"}).json()["items"][0]["id"]
 
     assert client.get(f"{API}/companies/{nvidia}/seniors").status_code == 401        # guests see nobody
     added = client.post(f"{API}/companies/{nvidia}/seniors", headers=RAVI, json={
@@ -309,23 +309,26 @@ def test_roles_and_compensation_import(client, people):
                    '"Observe ai","Full Time Placement","NLP","-","Refer below table","-","Check JD"\n')
     r = client.post(f"{API}/placement/roles/import", headers=RAVI, json={"csv": this_season, "placement_year": 2026})
     assert (r.json()["rows_created"], r.json()["rows_updated"]) == (2, 0)   # the repeated NLP row merges
-    company = client.get(f"{API}/companies", params={"q": "observe"}).json()["items"][0]
+    company = client.get(f"{API}/companies", headers=RAVI, params={"q": "observe"}).json()["items"][0]
     assert (company["ctc_year"], company["ctc_min"], company["ctc_max"]) == (2026, 4800000, 4800000)  # interns don't count
     roles = {(j["role_title"], j["placement_year"], j["job_type"]): j
-             for j in client.get(f"{API}/companies/{company['id']}").json()["job_descriptions"]}
+             for j in client.get(f"{API}/companies/{company['id']}", headers=RAVI).json()["job_descriptions"]}
     nlp = roles[("NLP", 2026, "full_time")]
     assert (nlp["compensation"], nlp["ctc_min"], nlp["base_annual"], nlp["skills"]) == \
         ("₹ 48,00,000", 4800000, 3000000, "Python, PyTorch")
     assert roles[("Intern", 2026, "internship")]["ctc_min"] == 960000
     assert "someone@iisc.ac.in" not in str(roles) and "call back" not in str(roles)   # never imported
-    stats = client.get(f"{API}/placement/stats").json()
+    # Guests get no pay data at all (rev 32); signed-in users see top_paying.
+    assert client.get(f"{API}/placement/stats").json()["top_paying"] == []
+    stats = client.get(f"{API}/placement/stats", headers=RAVI).json()
     assert stats["pay_year"] == 2026 and stats["top_paying"][0]["ctc_max"] == 4800000
 
     # A role typed in by hand reads its amount too.
     r = client.post(f"{API}/companies/{company['id']}/jds", headers=RAVI, json={
         "role_title": "Research Scientist", "compensation": "₹52 LPA", "placement_year": 2026})
     assert r.status_code == 201 and r.json()["ctc_min"] == 5200000
-    assert client.get(f"{API}/companies", params={"sort": "highest_pay"}).json()["items"][0]["ctc_max"] == 5200000
+    assert client.get(f"{API}/companies", headers=RAVI,
+                      params={"sort": "highest_pay"}).json()["items"][0]["ctc_max"] == 5200000
 
 
 def test_moderators_delete_a_withdrawn_company(client, people):
@@ -336,7 +339,7 @@ def test_moderators_delete_a_withdrawn_company(client, people):
         "role_title": "SDE", "content": "Two rounds", "placement_year": 2026})
     assert client.delete(f"{API}/companies/{company['id']}", headers=KIRAN).status_code == 403
     assert client.delete(f"{API}/companies/{company['id']}", headers=RAVI).status_code == 204
-    assert client.get(f"{API}/companies/{company['id']}").status_code == 404
+    assert client.get(f"{API}/companies/{company['id']}", headers=RAVI).status_code == 404
     assert not [p for p in client.get(f"{API}/placement/ppts").json()["items"] if p["company_name"] == "Retracted Co"]
     assert sql("SELECT count(*) FROM interview_experiences")[0][0] == 0
 

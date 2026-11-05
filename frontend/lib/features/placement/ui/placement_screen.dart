@@ -6,6 +6,7 @@ import '../../../core/utils/error_text.dart';
 import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/skeleton_loader.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../auth/ui/auth_dialog.dart';
 import '../domain/placement_models.dart';
 import '../providers/placement_providers.dart';
 import 'placement_dialogs.dart';
@@ -206,6 +207,38 @@ Widget _centered(Widget child) => Align(
       child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 980), child: child),
     );
 
+/// Shown to guests in place of company records and detailed stats: a reason, and a way to sign in
+/// right there instead of hunting for the button in the app bar.
+class SignInForPlacementRecords extends StatelessWidget {
+  final String message;
+
+  const SignInForPlacementRecords({super.key, this.message = 'Sign in to see company records, hiring numbers and pay.'});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.lock_outline_rounded, size: 40, color: theme.hintColor),
+            const SizedBox(height: 10),
+            Text(message, textAlign: TextAlign.center, style: TextStyle(color: theme.hintColor)),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: () => showDialog(context: context, builder: (_) => const AuthDialog()),
+              icon: const Icon(Icons.login_rounded, size: 18),
+              label: const Text('Sign in'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ---------------------------------------------------------------- shared pieces
 /// Square badge with the company's initials (no logos are stored).
 class CompanyAvatar extends StatelessWidget {
@@ -295,6 +328,10 @@ class _CompaniesTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    if (ref.watch(isGuestUserProvider)) {
+      return const SignInForPlacementRecords(
+        message: 'Sign in to browse companies, their hiring numbers and pay.');
+    }
     final companiesAsync = ref.watch(companiesProvider);
     final query = ref.watch(companySearchProvider);
     // Keep the box and the filter in step (the filter is cleared whenever the page opens).
@@ -907,6 +944,11 @@ class _StatisticsTab extends ConsumerWidget {
                         ),
                     ],
                   ),
+                  if (ref.watch(isGuestUserProvider)) ...[
+                    const SizedBox(height: 16),
+                    const SignInForPlacementRecords(
+                      message: 'That\'s the season total. Sign in to see top recruiters, pay and every company\'s record.'),
+                  ],
                   const SizedBox(height: 16),
                   section(
                     'Seasons at a glance',

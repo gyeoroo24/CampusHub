@@ -27,12 +27,15 @@ def _company(client, name="Walmart Global Tech", **fields):
 # ---------------------------------------------------------------- companies, JDs, PPTs (FR-15)
 def test_company_page_has_explicit_empty_states(client, placement):
     company = _company(client, industry="Retail technology", website="https://careers.walmart.com")
-    page = client.get(f"{API}/companies/{company['id']}").json()      # guest
+    # Company records are detailed placement stats: guests sign in to see them (rev 32).
+    assert client.get(f"{API}/companies/{company['id']}").status_code == 401
+    assert client.get(f"{API}/companies/{company['id']}/hiring-stats").status_code == 401
+    page = client.get(f"{API}/companies/{company['id']}", headers=ASHA).json()
     assert page["job_descriptions"] == [] and page["ppts"] == []
     assert page["latest_year"] is None and page["total_selected"] == 0
     assert page["viewer_can_manage"] is False
     assert client.get(f"{API}/companies/{company['id']}", headers=RAVI).json()["viewer_can_manage"] is True
-    stats = client.get(f"{API}/companies/{company['id']}/hiring-stats").json()
+    stats = client.get(f"{API}/companies/{company['id']}/hiring-stats", headers=ASHA).json()
     assert stats["years"] == [] and stats["total_selected"] == 0
 
 
@@ -54,7 +57,7 @@ def test_only_placement_moderators_manage_companies(client, placement):
     assert r.status_code == 200 and r.json()["industry"] == "Search and cloud"
     assert client.delete(f"{API}/companies/{company['id']}", headers=ASHA).status_code == 403
     assert client.delete(f"{API}/companies/{company['id']}", headers=RAVI).status_code == 204   # moderators too (rev 21)
-    assert client.get(f"{API}/companies/{company['id']}").status_code == 404
+    assert client.get(f"{API}/companies/{company['id']}", headers=RAVI).status_code == 404
 
 
 def test_revoked_moderator_loses_access(client, placement):
@@ -89,20 +92,22 @@ def test_job_descriptions_and_ppts(client, s3, placement):
     past = client.post(f"{API}/companies/{company['id']}/ppts", headers=RAVI,
                        json={"venue": "CDS 102", "scheduled_at": long_ago}).json()
     assert (upcoming["when"], past["when"]) == ("upcoming", "past")
-    page = client.get(f"{API}/companies/{company['id']}").json()
+    page = client.get(f"{API}/companies/{company['id']}", headers=RAVI).json()
     assert page["role_count"] == 1 and page["next_ppt_at"] is not None and len(page["ppts"]) == 2
     feed = client.get(f"{API}/placement/ppts").json()["items"]
     assert [p["id"] for p in feed] == [upcoming["id"]] and feed[0]["company_name"] == "Walmart Global Tech"
     assert client.delete(f"{API}/ppts/{past['id']}", headers=RAVI).status_code == 204
     assert client.delete(f"{API}/jds/{jd['id']}", headers=RAVI).status_code == 204
-    assert client.get(f"{API}/companies/{company['id']}").json()["job_descriptions"] == []
+    assert client.get(f"{API}/companies/{company['id']}", headers=RAVI).json()["job_descriptions"] == []
 
 
 def test_company_search_and_sort(client, placement):
     _company(client, "Goldman Sachs", industry="Finance")
     _company(client, "Google", industry="Software")
     _company(client, "Qualcomm", industry="Semiconductors")
-    names = lambda **p: [c["name"] for c in client.get(f"{API}/companies", params=p).json()["items"]]  # noqa: E731
+    assert client.get(f"{API}/companies").status_code == 401   # browsing companies needs sign-in (rev 32)
+    names = lambda **p: [c["name"] for c in
+                         client.get(f"{API}/companies", headers=ASHA, params=p).json()["items"]]  # noqa: E731
     assert names() == ["Goldman Sachs", "Google", "Qualcomm"]
     assert names(q="goo") == ["Google"]
     assert names(q="finance") == ["Goldman Sachs"]
@@ -159,17 +164,23 @@ def test_import_creates_updates_and_rejects(client, s3, placement):
     client.post(f"{API}/placement/imports", headers=RAVI, json={"placement_year": 2025, "sheet":
         "Company,Student email,Role\nWalmart Global Tech,old@iisc.ac.in,Software Engineer\n"})
 
-    stats = client.get(f"{API}/companies/{walmart['id']}/hiring-stats").json()
+    # Guests get season totals only; no company names, no top recruiters (rev 32).
+    guest_overview = client.get(f"{API}/placement/stats").json()
+    assert [(s["year"], s["students_selected"], s["companies"]) for s in guest_overview["seasons"]] == \
+        [(2026, 5, 2), (2025, 1, 1)]
+    assert guest_overview["top_companies"] == [] and guest_overview["top_paying"] == []
+
+    stats = client.get(f"{API}/companies/{walmart['id']}/hiring-stats", headers=ASHA).json()
     assert stats["total_selected"] == 2
     assert [(y["year"], y["students_selected"]) for y in stats["years"]] == [(2026, 1), (2025, 1)]
     assert stats["years"][0]["roles"] == [{"role_title": "Data Scientist", "students_selected": 1}]
     assert "chandu" not in str(stats) and "asha" not in str(stats)       # totals only, never students
 
-    overview = client.get(f"{API}/placement/stats").json()
+    overview = client.get(f"{API}/placement/stats", headers=ASHA).json()
     assert [(s["year"], s["students_selected"], s["companies"]) for s in overview["seasons"]] == [(2026, 5, 2), (2025, 1, 1)]
     assert overview["year"] == 2026 and overview["top_companies"][0]["company_name"] == "google"
     assert overview["top_companies"][0]["students_selected"] == 4
-    page = client.get(f"{API}/companies/{walmart['id']}").json()
+    page = client.get(f"{API}/companies/{walmart['id']}", headers=ASHA).json()
     assert (page["latest_year"], page["latest_year_selected"], page["total_selected"]) == (2026, 1, 2)
     history = client.get(f"{API}/placement/imports", headers=RAVI).json()["items"]
     assert len(history) == 3 and history[0]["moderator"]["name"] == "Ravi"
@@ -217,7 +228,7 @@ def test_interview_experiences(client, placement):
     assert [i["id"] for i in feed] == [named["id"], anon["id"]]
     assert feed[0]["author"]["name"] == "Meera" and feed[1]["author"] is None
     assert all(i["author"] is None for i in client.get(f"{API}/interviews").json()["items"])
-    assert client.get(f"{API}/companies/{company['id']}").json()["interview_count"] == 2
+    assert client.get(f"{API}/companies/{company['id']}", headers=ASHA).json()["interview_count"] == 2
     assert [i["id"] for i in client.get(f"{API}/interviews", params={"q": "case study"}).json()["items"]] == [named["id"]]
     assert [i["id"] for i in client.get(f"{API}/interviews", params={"mine": True}, headers=ASHA).json()["items"]] == [anon["id"]]
 

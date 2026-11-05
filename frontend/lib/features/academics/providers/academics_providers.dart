@@ -55,6 +55,13 @@ final allCoursesProvider = FutureProvider<List<CourseWithDepartment>>((ref) asyn
   return [for (final l in lists) ...l];
 });
 
+/// Courses the signed-in viewer follows, across every department (the Courses tab's "Following" tab).
+final followingCoursesProvider = FutureProvider<List<CourseWithDepartment>>((ref) async {
+  ref.watch(currentUserProvider); // refetch when who's signed in changes
+  final all = await ref.watch(allCoursesProvider.future);
+  return all.where((c) => c.course.following).toList();
+});
+
 String _squash(String s) => s.toLowerCase().replaceAll(RegExp(r'[\s\-_.]'), '');
 
 /// Course search: the code matches ignoring spaces, dashes and case ("ds252", "DS-252" and
