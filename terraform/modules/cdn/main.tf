@@ -17,15 +17,26 @@ locals {
   # the requests that still get to the origin, including ones CloudFront can't share across users.
   # POST/PUT/PATCH/DELETE to these same paths are untouched: cached_methods below is GET/HEAD only,
   # so mutations always pass straight through to the origin, cached or not.
+  #
+  # These are the routers' actual top-level paths (none of them share a module-name prefix like
+  # "/buy-sell" or "/academics" -- see each router's APIRouter(prefix=...) in backend/app/routers),
+  # matched against what app/cache.py also caches at the Redis layer:
+  #   listings.py -> /listings            academic.py -> /departments, /courses
+  #   lost_found.py -> /lost-reports,     mess.py -> /messes
+  #                    /found-reports     placement.py -> /companies, /placement/stats
+  #   wanted.py -> /wanted                events.py -> /events, /event-tags
   cacheable_api_path_patterns = [
-    "/api/v1/buy-sell/*",
-    "/api/v1/lost-found/*",
-    "/api/v1/wanted/*",
-    "/api/v1/events/*",
-    "/api/v1/academics/*",
-    "/api/v1/mess/*",
-    "/api/v1/forums/*",
-    "/api/v1/placement/*",
+    "/api/v1/listings*",
+    "/api/v1/lost-reports*",
+    "/api/v1/found-reports*",
+    "/api/v1/wanted*",
+    "/api/v1/events*",
+    "/api/v1/event-tags*",
+    "/api/v1/departments*",
+    "/api/v1/courses*",
+    "/api/v1/messes*",
+    "/api/v1/companies*",
+    "/api/v1/placement/stats*",
   ]
 }
 
