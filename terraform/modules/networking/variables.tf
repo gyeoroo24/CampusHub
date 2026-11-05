@@ -34,14 +34,3 @@ variable "aws_region" {
   default     = "ap-south-1"
 }
 
-variable "enable_ec2_baseline" {
-  description = "Provision the networking (subnets, IGW, security groups) the EC2 baseline deployment needs, alongside the Lambda path. See the root variable of the same name."
-  type        = bool
-  default     = false
-}
-
-variable "ec2_baseline_subnet_cidrs" {
-  description = "CIDR blocks for the EC2 baseline's subnets (hosts both the ALB and the Auto Scaling Group) across 3 AZs. Distinct from lambda_subnet_cidrs/db_subnet_cidrs so nothing collides."
-  type        = list(string)
-  default     = ["10.0.20.0/24", "10.0.21.0/24", "10.0.22.0/24"]
-}

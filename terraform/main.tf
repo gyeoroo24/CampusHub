@@ -7,9 +7,8 @@
 module "networking" {
   source = "./modules/networking"
 
-  environment         = var.environment
-  aws_region          = var.aws_region
-  enable_ec2_baseline = var.enable_ec2_baseline
+  environment = var.environment
+  aws_region  = var.aws_region
 }
 
 # 2. DATABASE TIER (RDS PostgreSQL, Subnet Group, Parameter Group, SSM Params)
@@ -150,52 +149,6 @@ module "monitoring" {
   api_id                = module.api_gateway.api_id
   db_instance_id        = module.database.db_instance_id
   lambda_function_names = module.compute.lambda_function_names
-  enable_alb_alarm      = var.enable_ec2_baseline
-  alb_arn_suffix        = var.enable_ec2_baseline ? module.compute_ec2[0].alb_arn_suffix : ""
-}
-
-# 11. EC2 BASELINE TIER (optional, toggle with enable_ec2_baseline): an Auto Scaling Group running
-# the same FastAPI backend behind an ALB, sharing this stack's RDS, Cognito and media bucket -- an
-# apples-to-apples alternative deployment target for benchmarking against the serverless path above.
-# Nothing above this point is read by or modified because of this block; when the flag is off these
-# resources simply don't exist (see modules/compute_ec2, modules/cdn_baseline, and the matching
-# additive resources in modules/networking/ec2_baseline.tf).
-module "compute_ec2" {
-  count  = var.enable_ec2_baseline ? 1 : 0
-  source = "./modules/compute_ec2"
-
-  environment           = var.environment
-  project_name          = var.project_name
-  aws_region            = var.aws_region
-  vpc_id                = module.networking.vpc_id
-  public_subnet_ids     = module.networking.ec2_baseline_subnet_ids
-  app_subnet_ids        = module.networking.ec2_baseline_subnet_ids
-  app_security_group_id = module.networking.ec2_app_security_group_id
-  alb_security_group_id = module.networking.alb_security_group_id
-  instance_type         = var.ec2_instance_type
-  db_host               = module.database.db_address
-  db_name               = module.database.db_name
-  db_user               = module.database.db_username
-  db_secret_arn         = module.database.db_secret_arn
-  media_bucket_id       = module.storage.media_bucket_id
-  media_bucket_arn      = module.storage.media_bucket_arn
-  cognito_user_pool_id  = module.auth.user_pool_id
-  cognito_app_client_id = module.auth.user_pool_client_id
-  origin_verify_header  = var.ec2_baseline_origin_verify_header
-  asg_min_size          = var.ec2_baseline_asg_min_size
-  asg_max_size          = var.ec2_baseline_asg_max_size
-  asg_desired_capacity  = var.ec2_baseline_asg_desired_capacity
-}
-
-# Standalone CloudFront distribution fronting only the ALB above -- never the same distribution or
-# origin as module.cdn, so the live serverless site's CDN is never touched by this toggle.
-module "cdn_baseline" {
-  count  = var.enable_ec2_baseline ? 1 : 0
-  source = "./modules/cdn_baseline"
-
-  environment          = var.environment
-  alb_dns_name         = module.compute_ec2[0].alb_dns_name
-  origin_verify_header = var.ec2_baseline_origin_verify_header
 }
 
 # 10. DATA TOOLS: database snapshot export/restore, run inside the VPC (see modules/data_tools)
