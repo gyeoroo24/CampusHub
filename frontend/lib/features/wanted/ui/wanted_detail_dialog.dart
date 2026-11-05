@@ -136,7 +136,7 @@ class _WantedDetailDialogState extends ConsumerState<WantedDetailDialog> {
                       style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal.shade700)),
                   const Spacer(),
                   Text(
-                    '${_post.author.name} · ${DateTimeFormatter.timeAgo(_post.createdAt)}',
+                    '${_post.author.name}${_post.authorDeactivated ? ' (deactivated account)' : ''} · ${DateTimeFormatter.timeAgo(_post.createdAt)}',
                     style: TextStyle(fontSize: 12, color: theme.hintColor),
                   ),
                 ],

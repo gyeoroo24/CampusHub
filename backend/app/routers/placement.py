@@ -1,8 +1,11 @@
 """Placement Hub (FR-15, FR-16, FR-17): company pages, job descriptions, pre-placement talks,
 hiring statistics, interview experiences and the bulk import of placement sheets.
 
-  guest / user              read everything (hiring statistics are totals only, never students)
-  user                      post interview experiences (optionally anonymous); edit/delete their own
+  guest                     season totals only (students selected and companies hiring per year, no
+                            company names or pay) on GET /placement/stats; everything else needs sign-in
+  user                      read companies, their JDs/PPTs/hiring stats and interview experiences
+                            (hiring statistics are totals only, never students); post interview
+                            experiences (optionally anonymous); edit/delete their own
   placement_hub moderator   add/edit companies, JDs and the placement schedule (PPTs, online tests,
                             interviews); import placement sheets, company lists and schedules as CSV;
                             remove anyone's interview experience (and company forum posts)
@@ -387,7 +390,8 @@ async def _company_detail(conn: asyncpg.Connection, company_id: UUID, viewer: Cu
 
 
 # ---------------------------------------------------------------- companies
-@router.get("/companies", response_model=Page[CompanySummary], summary="Browse companies (guests allowed)")
+@router.get("/companies", response_model=Page[CompanySummary],
+            summary="Browse companies, with their hiring numbers and pay (signed in only)")
 async def list_companies(
     q: str | None = Query(None, max_length=200, description="Words in the company name or industry"),
     industry: str | None = Query(None, max_length=80),
@@ -396,6 +400,7 @@ async def list_companies(
                             "upcoming_ppt: companies with the soonest talk first; "
                             "highest_pay: by the top compensation of their latest season with pay data"),
     page: PageParams = Depends(page_params),
+    user: CurrentUser = Depends(current_user),
     conn: asyncpg.Connection = Depends(get_conn),
 ):
     order = {
@@ -416,10 +421,10 @@ async def list_companies(
 
 
 @router.get("/companies/{company_id}", response_model=CompanyDetail,
-            summary="A company page: details, JDs, PPTs and headline numbers")
-async def get_company(company_id: UUID, viewer: CurrentUser | None = Depends(optional_user),
+            summary="A company page: details, JDs, PPTs and headline numbers (signed in only)")
+async def get_company(company_id: UUID, user: CurrentUser = Depends(current_user),
                       conn: asyncpg.Connection = Depends(get_conn)):
-    return await _company_detail(conn, company_id, viewer)
+    return await _company_detail(conn, company_id, user)
 
 
 @router.post("/companies", response_model=CompanyDetail, status_code=201,
@@ -584,11 +589,12 @@ async def _ppt_detail(conn: asyncpg.Connection, ppt_id: UUID) -> Ppt:
 
 
 @router.get("/placement/ppts", response_model=Page[Ppt],
-            summary="The placement schedule across companies: talks, online tests, interviews")
+            summary="The placement schedule across companies: talks, online tests, interviews (signed in only)")
 async def list_ppts(when: Literal["upcoming", "past", "all"] = Query(
                         "upcoming", description="upcoming: soonest first; past: latest first"),
                     kind: list[PptKind] | None = Query(None, description="Only these kinds (repeat for several)"),
-                    page: PageParams = Depends(page_params), conn: asyncpg.Connection = Depends(get_conn)):
+                    page: PageParams = Depends(page_params), user: CurrentUser = Depends(current_user),
+                    conn: asyncpg.Connection = Depends(get_conn)):
     where, order = {
         "upcoming": ("p.scheduled_at >= now()", "p.scheduled_at ASC"),
         "past": ("p.scheduled_at < now()", "p.scheduled_at DESC"),
@@ -647,8 +653,9 @@ async def delete_ppt(ppt_id: UUID, user: CurrentUser = Depends(current_user),
 
 # ---------------------------------------------------------------- hiring statistics (totals only)
 @router.get("/companies/{company_id}/hiring-stats", response_model=HiringStats,
-            summary="Students selected per year and role (FR-15); never individual students")
-async def company_hiring_stats(company_id: UUID, conn: asyncpg.Connection = Depends(get_conn)):
+            summary="Students selected per year and role (FR-15); never individual students; signed in only")
+async def company_hiring_stats(company_id: UUID, user: CurrentUser = Depends(current_user),
+                               conn: asyncpg.Connection = Depends(get_conn)):
     name = await conn.fetchval("SELECT name FROM companies WHERE id = $1", company_id)
     if name is None:
         raise not_found("Company")
@@ -665,17 +672,20 @@ async def company_hiring_stats(company_id: UUID, conn: asyncpg.Connection = Depe
 
 
 @router.get("/placement/stats", response_model=PlacementOverview,
-            summary="Placement seasons at a glance: hires and companies per year, top recruiters")
+            summary="Placement seasons at a glance (guests: season totals only; signed in: top recruiters too)")
 async def placement_overview(years: int = Query(5, ge=1, le=30, description="How many recent seasons"),
                              year: int | None = Query(None, ge=2000, le=2100,
                                                       description="Season for top_companies (default: latest)"),
                              top: int = Query(10, ge=1, le=50),
+                             viewer: CurrentUser | None = Depends(optional_user),
                              conn: asyncpg.Connection = Depends(get_conn)):
     seasons = await conn.fetch(
         """SELECT placement_year AS year, count(*) AS students_selected, count(DISTINCT company_id) AS companies
            FROM placement_records GROUP BY placement_year ORDER BY placement_year DESC LIMIT $1""", years)
     season = year if year is not None else (seasons[0]["year"] if seasons else None)
-    top_rows = [] if season is None else await conn.fetch(
+    # Company names, per-company hire counts and pay are the "detailed records" guests sign in to see;
+    # season totals above are the free summary.
+    top_rows = [] if season is None or viewer is None else await conn.fetch(
         """SELECT c.id AS company_id, c.name AS company_name, count(*) AS students_selected,
                   (SELECT min(j.ctc_min) FROM job_descriptions j WHERE j.company_id = c.id AND j.placement_year = $1
                      AND j.job_type <> 'internship') AS ctc_min,
@@ -684,7 +694,7 @@ async def placement_overview(years: int = Query(5, ge=1, le=30, description="How
            FROM placement_records r JOIN companies c ON c.id = r.company_id
            WHERE r.placement_year = $1
            GROUP BY c.id, c.name ORDER BY students_selected DESC, lower(c.name) LIMIT $2""", season, top)
-    pay_year = await conn.fetchval(
+    pay_year = None if viewer is None else await conn.fetchval(
         "SELECT max(placement_year) FROM job_descriptions WHERE ctc_min IS NOT NULL AND job_type <> 'internship'")
     paying = [] if pay_year is None else await conn.fetch(
         """SELECT c.id AS company_id, c.name AS company_name, min(j.ctc_min) AS ctc_min, max(j.ctc_max) AS ctc_max,

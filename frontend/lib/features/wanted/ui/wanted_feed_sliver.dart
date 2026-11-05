@@ -234,7 +234,7 @@ class WantedCard extends StatelessWidget {
                     const Spacer(),
                     Flexible(
                       child: Text(
-                        '${post.author.name} · ${DateTimeFormatter.timeAgo(post.createdAt)}',
+                        '${post.author.name}${post.authorDeactivated ? ' (deactivated account)' : ''} · ${DateTimeFormatter.timeAgo(post.createdAt)}',
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 11, color: theme.hintColor),
                       ),

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../../../core/widgets/deactivated_seller_badge.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/utils/contact_actions.dart';
 import '../../../../core/utils/date_time_formatter.dart';
@@ -335,6 +337,10 @@ class _BuySellGridCardState extends State<BuySellGridCard> {
                           ),
                         ],
                       ),
+                      if (item.sellerDeactivated) ...[
+                        DeactivatedSellerBadge(fontSize: 9),
+                        const SizedBox(width: 4),
+                      ],
                       if (item.sellerTrustTag != null) ...[
                         const SizedBox(height: 6),
                         SellerTrustBadge(tag: item.sellerTrustTag, fontSize: 9),

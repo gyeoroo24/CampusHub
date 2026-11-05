@@ -44,6 +44,9 @@ class CourseGuideScreen extends ConsumerWidget {
     try {
       await ref.read(academicsRepositoryProvider).setFollowing(courseId, !following);
       ref.invalidate(courseProvider(courseId));
+      // So the Following tab and other departments' lists pick up the change too.
+      ref.invalidate(allCoursesProvider);
+      ref.invalidate(followingCoursesProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

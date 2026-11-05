@@ -21,6 +21,34 @@ const _mealIcons = {
 void _snack(BuildContext context, String text) =>
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text), behavior: SnackBarBehavior.floating));
 
+/// Confirms, then removes a mess with its menus and followers (Events moderator or admin). Shared by
+/// the mess tag's delete button and the mess header's own delete button.
+Future<void> deleteMess(BuildContext context, WidgetRef ref, Mess mess, {VoidCallback? onDeleted}) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: Text('Delete “${mess.name}”?'),
+      content: const Text('Its menus and anyone\'s meal alerts for it go with it. This can\'t be undone.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep it')),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+  try {
+    await ref.read(apiClientProvider).delete(ApiEndpoints.mess(mess.id));
+    ref.invalidate(messListProvider);
+    onDeleted?.call();
+  } catch (e) {
+    if (context.mounted) _snack(context, errorText(e));
+  }
+}
+
 /// `/mess`: each mess's menu for today and the week, and meal alerts. Events moderators post the menus.
 class MessScreen extends ConsumerStatefulWidget {
   final int? initialMessId;
@@ -109,13 +137,17 @@ class _MessScreenState extends ConsumerState<MessScreen> {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       for (final m in messes)
-                        ChoiceChip(
+                        InputChip(
                           showCheckmark: false,
                           avatar: Icon(Icons.restaurant_rounded, size: 16,
                               color: m.followingMeals != null ? Theme.of(context).colorScheme.primary : null),
                           label: Text(m.name),
                           selected: m.id == mess.id,
                           onSelected: (_) => setState(() => _messId = m.id),
+                          deleteIcon: list.canManage ? const Icon(Icons.close_rounded, size: 16) : null,
+                          onDeleted: list.canManage
+                              ? () => deleteMess(context, ref, m, onDeleted: () => setState(() => _messId = null))
+                              : null,
                         ),
                       // A mess's menu is posted from its own page ("Post a menu"); new messes start here.
                       if (list.canManage)
@@ -124,7 +156,7 @@ class _MessScreenState extends ConsumerState<MessScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  _MessHeader(mess: mess, canManage: list.canManage),
+                  _MessHeader(mess: mess, canManage: list.canManage, onDeleted: () => setState(() => _messId = null)),
                   const SizedBox(height: 12),
                   _TodayCard(mess: mess),
                   const SizedBox(height: 12),
@@ -143,7 +175,10 @@ class _MessHeader extends ConsumerWidget {
   final Mess mess;
   final bool canManage;
 
-  const _MessHeader({required this.mess, required this.canManage});
+  /// Called after the mess is deleted, so the screen can pick a different one to show.
+  final VoidCallback? onDeleted;
+
+  const _MessHeader({required this.mess, required this.canManage, this.onDeleted});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -170,6 +205,12 @@ class _MessHeader extends ConsumerWidget {
               final saved = await showDialog<bool>(context: context, builder: (_) => MessFormDialog(mess: mess));
               if (saved == true) ref.invalidate(messListProvider);
             },
+          ),
+        if (canManage)
+          IconButton(
+            tooltip: 'Delete mess',
+            icon: Icon(Icons.delete_outline_rounded, color: theme.colorScheme.error),
+            onPressed: () => deleteMess(context, ref, mess, onDeleted: onDeleted),
           ),
         const SizedBox(width: 4),
         following == null

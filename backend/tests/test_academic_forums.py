@@ -79,6 +79,10 @@ def test_course_moderator_manages_only_own_course_materials(client, s3, campus):
     material_id = r_id = client.get(f"{API}/courses/{hpca}/materials").json()["items"][0]["id"]
     assert client.patch(f"{API}/materials/{material_id}", headers=ASHA, json={"title": "x"}).status_code == 403
     assert client.patch(f"{API}/materials/{r_id}", headers=DEPTMOD, json={"title": "Lecture 1 (v2)"}).status_code == 200
+    # GET /materials/{id}: the Reports Queue's lookup for a course_material report.
+    fetched = client.get(f"{API}/materials/{material_id}").json()
+    assert fetched["title"] == "Lecture 1 (v2)" and fetched["uploaded_by"]["name"] == "Ravi"
+    assert client.get(f"{API}/materials/4b2f1e40-0000-0000-0000-000000000000").status_code == 404
 
 
 def test_feedback_permissions(client, campus):
@@ -91,6 +95,21 @@ def test_feedback_permissions(client, campus):
                         json={"content": "Tough but great."}).status_code == 200
     assert client.delete(f"{API}/feedback/{fb['id']}", headers=ASHA).status_code == 204
     assert client.get(f"{API}/courses/{hpca}/feedback").json()["items"] == []
+
+
+def test_single_feedback_lookup_for_the_reports_queue(client, campus):
+    """GET /feedback/{id}: the detail the Reports Queue opens a course_feedback report into."""
+    hpca = campus["hpca"]["id"]
+    anon = client.post(f"{API}/courses/{hpca}/feedback", headers=ASHA,
+                       json={"content": "Tough but great", "is_anonymous": True}).json()
+    guest = client.get(f"{API}/feedback/{anon['id']}").json()
+    assert guest["content"] == "Tough but great" and guest["author"] is None   # guests never see who wrote it
+    moderator_view = client.get(f"{API}/feedback/{anon['id']}", headers=DEPTMOD).json()
+    assert moderator_view["author"] is None   # anonymity holds even for the course's moderators
+    assert moderator_view["can_remove"] is True   # ... but they can still act on it
+    named = client.post(f"{API}/courses/{hpca}/feedback", headers=MEERA, json={"content": "Loved it"}).json()
+    assert client.get(f"{API}/feedback/{named['id']}", headers=DEPTMOD).json()["author"]["name"] == "Meera"
+    assert client.get(f"{API}/feedback/4b2f1e40-0000-0000-0000-000000000000").status_code == 404
 
 
 def test_forum_threads_order_and_notifications(client, campus):
@@ -106,6 +125,11 @@ def test_forum_threads_order_and_notifications(client, campus):
     # Asha got two reply notifications; Meera got one (Kiran's reply); Kiran none
     count = lambda h: len(client.get(f"{API}/me/notifications", headers=h).json()["items"])  # noqa: E731
     assert (count(ASHA), count(MEERA), count(KIRAN)) == (2, 1, 0)
+    # GET /comments/{id}: the Reports Queue's lookup for a comment report, with its thread for context.
+    reply_id = detail["comments"][1]["id"]
+    fetched = client.get(f"{API}/comments/{reply_id}").json()
+    assert fetched["content"] == "Yes" and fetched["thread_id"] == thread["id"] and fetched["thread_title"] == thread["title"]
+    assert client.get(f"{API}/comments/4b2f1e40-0000-0000-0000-000000000000").status_code == 404
 
 
 def test_thread_deletion_rules(client, campus):

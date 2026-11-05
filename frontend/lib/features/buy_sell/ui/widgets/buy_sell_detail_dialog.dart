@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../../../core/widgets/deactivated_seller_badge.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/utils/contact_actions.dart';
 import '../../../../core/utils/error_text.dart';
@@ -198,6 +200,10 @@ class BuySellDetailDialog extends ConsumerWidget {
                                 ),
                               ],
                             ),
+                            if (item.sellerDeactivated) ...[
+                              DeactivatedSellerBadge(fontSize: 10),
+                              const SizedBox(width: 4),
+                            ],
                             if (item.sellerTrustTag != null) ...[
                               const SizedBox(height: 4),
                               SellerTrustBadge(tag: item.sellerTrustTag, fontSize: 10),

@@ -85,6 +85,7 @@ class ReportSummary(BaseModel):
     location: str | None
     status: ReportStatus
     reporter: UserRef
+    reporter_deactivated: bool = Field(False, description="The reporter has deactivated their account")
     cover_photo_url: str | None
     created_at: datetime
 
@@ -163,6 +164,7 @@ def build_router(kind: Kind) -> APIRouter:
             category=CategoryRef(id=r["category_id"], name=r["category_name"]),
             occurred_at=r["occurred_at"], location=r["location"], status=r["status"],
             reporter=UserRef(id=r["reporter_id"], name=r["reporter_name"]),
+            reporter_deactivated=not r["reporter_active"],
             cover_photo_url=file_url(r["cover_key"]) if r["cover_key"] else None,
             created_at=r["created_at"])
 

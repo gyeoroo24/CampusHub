@@ -104,7 +104,9 @@ class Extracted:
 
 
 def ocr_available() -> bool:
-    return shutil.which("tesseract") is not None
+    # The in-process libtesseract is enough. The tesseract command is only the fallback, and it isn't
+    # on PATH on EC2 (the layer puts it under /opt/bin, which the service's PATH doesn't include).
+    return _tess is not None or shutil.which("tesseract") is not None
 
 
 def _pages(data: bytes, content_type: str) -> list[Image.Image]:

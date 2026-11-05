@@ -3,13 +3,20 @@ import 'dart:math';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/models/page.dart';
 import '../domain/placement_models.dart';
 
 /// Placement Hub: company pages, JDs, PPTs, hiring statistics, interview experiences, the company
 /// forum, and (moderators) the placement sheet import.
 abstract class IPlacementRepository {
   /// [sort] is `name`, `most_hired` or `upcoming_ppt`. [limit] null = every company (fetched 50 a page).
+  /// Only for bounded lookups (search typeahead); the Companies tab uses [fetchCompaniesPage] instead,
+  /// so opening the hub doesn't fetch the whole company list up front.
   Future<List<Company>> fetchCompanies({String? query, String sort = 'name', int? limit});
+
+  /// One page of companies, for the Companies tab's infinite scroll.
+  Future<PaginatedResponse<Company>> fetchCompaniesPage(
+      {String? query, String sort = 'name', int limit = 20, int offset = 0});
 
   Future<Company> getCompany(String companyId);
 
@@ -23,6 +30,9 @@ abstract class IPlacementRepository {
 
   /// Newest first. [companyId] null = across all companies.
   Future<List<InterviewExperience>> fetchInterviews({String? companyId, String? query, int limit = 30});
+
+  /// One interview experience, by id (e.g. for the reports queue).
+  Future<InterviewExperience> getInterview(String interviewId);
 
   Future<InterviewExperience> postInterview(String companyId,
       {required String roleTitle, int? placementYear, required String content, bool anonymous = false});
@@ -93,6 +103,19 @@ class ApiPlacementRepository implements IPlacementRepository {
   }
 
   @override
+  Future<PaginatedResponse<Company>> fetchCompaniesPage(
+      {String? query, String sort = 'name', int limit = 20, int offset = 0}) async {
+    final response = await apiClient.get(ApiEndpoints.companies, queryParameters: {
+      if (_blankToNull(query) != null) 'q': query!.trim(),
+      'sort': sort,
+      'limit': limit,
+      'offset': offset,
+    });
+    return PaginatedResponse.fromJson(
+        response.data as Map<String, dynamic>, (j) => Company.fromJson(j as Map<String, dynamic>));
+  }
+
+  @override
   Future<Company> getCompany(String companyId) async {
     final response = await apiClient.get(ApiEndpoints.company(companyId));
     return Company.fromJson(response.data as Map<String, dynamic>);
@@ -128,6 +151,12 @@ class ApiPlacementRepository implements IPlacementRepository {
       'limit': limit,
     });
     return _items(response.data).map(InterviewExperience.fromJson).toList();
+  }
+
+  @override
+  Future<InterviewExperience> getInterview(String interviewId) async {
+    final response = await apiClient.get(ApiEndpoints.interview(interviewId));
+    return InterviewExperience.fromJson(response.data as Map<String, dynamic>);
   }
 
   @override
@@ -334,6 +363,14 @@ class MockPlacementRepository implements IPlacementRepository {
   }
 
   @override
+  Future<PaginatedResponse<Company>> fetchCompaniesPage(
+      {String? query, String sort = 'name', int limit = 20, int offset = 0}) async {
+    final all = await fetchCompanies(query: query, sort: sort);
+    final page = all.skip(offset).take(limit).toList();
+    return PaginatedResponse(items: page, limit: limit, offset: offset, hasMore: offset + page.length < all.length);
+  }
+
+  @override
   Future<Company> getCompany(String companyId) async {
     final match = _companies.where((c) => c.id == companyId);
     if (match.isEmpty) throw Exception('Company not found.');
@@ -376,6 +413,10 @@ class MockPlacementRepository implements IPlacementRepository {
         .take(limit)
         .toList();
   }
+
+  @override
+  Future<InterviewExperience> getInterview(String interviewId) async =>
+      _interviews.firstWhere((i) => i.id == interviewId, orElse: () => throw Exception('Interview not found.'));
 
   @override
   Future<InterviewExperience> postInterview(String companyId,

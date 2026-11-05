@@ -157,6 +157,9 @@ class _AuthDialogState extends ConsumerState<AuthDialog> {
         ),
       ),
       actions: _isOtpSent ? _buildOtpActions() : _buildEmailActions(),
+      // Cancel/Back sits in the bottom-left corner, away from the primary action, so it isn't
+      // mistaken for part of the same button group.
+      actionsAlignment: MainAxisAlignment.spaceBetween,
     );
   }
 

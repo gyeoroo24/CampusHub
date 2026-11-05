@@ -11,6 +11,9 @@ abstract class IForumRepository {
 
   Future<ForumThread> getThread(String threadId);
 
+  /// One comment, with the thread it's in (e.g. for the reports queue).
+  Future<({ForumComment comment, String threadId, String threadTitle})> getComment(String commentId);
+
   Future<ForumThread> createThread(String forumId, String title, String content);
 
   /// [parentId] is the reply being answered; null answers the opening post.
@@ -57,6 +60,14 @@ class ApiForumRepository implements IForumRepository {
   Future<ForumThread> getThread(String threadId) async {
     final response = await apiClient.get(ApiEndpoints.thread(threadId));
     return ForumThread.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  @override
+  Future<({ForumComment comment, String threadId, String threadTitle})> getComment(String commentId) async {
+    final response = await apiClient.get(ApiEndpoints.comment(commentId));
+    final json = response.data as Map<String, dynamic>;
+    return (comment: ForumComment.fromJson(json), threadId: '${json['thread_id']}',
+        threadTitle: '${json['thread_title'] ?? ''}');
   }
 
   @override
@@ -136,6 +147,16 @@ class MockForumRepository implements IForumRepository {
 
   @override
   Future<ForumThread> getThread(String threadId) async => _withVotes(_threads.firstWhere((t) => t.id == threadId));
+
+  @override
+  Future<({ForumComment comment, String threadId, String threadTitle})> getComment(String commentId) async {
+    for (final t in _threads) {
+      for (final c in t.comments) {
+        if (c.id == commentId) return (comment: c, threadId: t.id, threadTitle: t.title);
+      }
+    }
+    throw Exception('Comment not found.');
+  }
 
   @override
   Future<ForumThread> createThread(String forumId, String title, String content) async {

@@ -216,11 +216,17 @@ async def _course_department(conn: asyncpg.Connection, course_id: UUID) -> UUID:
 
 @router.get("/departments/{department_id}/courses", response_model=list[Course],
             summary="Courses in a department, with whether each has content (FR-11)")
-async def list_courses(department_id: UUID, conn: asyncpg.Connection = Depends(get_conn)):
+async def list_courses(department_id: UUID, viewer: CurrentUser | None = Depends(optional_user),
+                       conn: asyncpg.Connection = Depends(get_conn)):
     if not await conn.fetchval("SELECT EXISTS (SELECT 1 FROM departments WHERE id = $1)", department_id):
         raise not_found("Department")
     rows = await conn.fetch(_COURSE_SELECT + " WHERE c.department_id = $1 ORDER BY c.code", department_id)
-    return [_course(r) for r in rows]
+    followed = set()
+    if viewer is not None and rows:
+        followed = {r["course_id"] for r in await conn.fetch(
+            "SELECT course_id FROM course_follows WHERE user_id = $1 AND course_id = ANY($2::uuid[])",
+            viewer.id, [r["id"] for r in rows])}
+    return [_course(r, following=r["id"] in followed) for r in rows]
 
 
 @router.get("/courses/{course_id}", response_model=Course, summary="One course")
@@ -319,6 +325,18 @@ async def _material_course(conn: asyncpg.Connection, material_id: UUID) -> async
     if row is None:
         raise not_found("Material")
     return row
+
+
+@router.get("/materials/{material_id}", response_model=Material,
+            summary="One course material, by id (e.g. for the reports queue)")
+async def get_material(material_id: UUID, viewer: CurrentUser | None = Depends(optional_user),
+                       conn: asyncpg.Connection = Depends(get_conn)):
+    row = await conn.fetchrow(_MATERIAL_SELECT + " WHERE m.id = $1", material_id)
+    if row is None:
+        raise not_found("Material")
+    moderator = viewer is not None and await can_manage_course(conn, viewer, row["course_id"])
+    can_edit = moderator or (viewer is not None and viewer.id == row["uploader_id"])
+    return _material(row, can_edit)
 
 
 @router.get("/courses/{course_id}/materials", response_model=Page[Material], summary="A course's materials")
@@ -475,6 +493,17 @@ async def _may_change_feedback(conn: asyncpg.Connection, user: CurrentUser, feed
     elif not await can_manage_department(conn, user, row["department_id"]):
         raise forbidden("Only the author or this department's moderators can edit this feedback.")
     return row
+
+
+@router.get("/feedback/{feedback_id}", response_model=Feedback,
+            summary="One piece of feedback, by id (e.g. for the reports queue)")
+async def get_feedback(feedback_id: UUID, viewer: CurrentUser | None = Depends(optional_user),
+                       conn: asyncpg.Connection = Depends(get_conn)):
+    row = await conn.fetchrow(_FEEDBACK_SELECT + " WHERE f.id = $1", feedback_id)
+    if row is None:
+        raise not_found("Feedback")
+    moderator = viewer is not None and await can_manage_course(conn, viewer, row["course_id"])
+    return _feedback(row, viewer, moderator)
 
 
 @router.get("/courses/{course_id}/feedback", response_model=Page[Feedback], summary="A course's feedback")

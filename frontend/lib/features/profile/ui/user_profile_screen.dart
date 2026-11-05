@@ -191,6 +191,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
                 // ── My Activity & Postings Hub ──
                 _buildPostingsSection(currentUser, isDark, theme),
+
+                // ── Account: self-deactivation is hidden for now (ask before re-enabling: _buildDeactivateCard
+                //    and _confirmDeactivate below are unused but left in place) ──
               ],
             ),
           ),

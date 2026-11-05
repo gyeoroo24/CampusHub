@@ -16,6 +16,7 @@ class BuySellListingDto {
   final CategoryRef category;
   final UserRef seller;
   final String? sellerTrustTag;
+  final bool sellerDeactivated;
   final bool negotiable;
   final bool heldForReview;
   final bool watching;
@@ -35,6 +36,7 @@ class BuySellListingDto {
     required this.category,
     required this.seller,
     this.sellerTrustTag,
+    this.sellerDeactivated = false,
     this.negotiable = false,
     this.heldForReview = false,
     this.watching = false,
@@ -125,6 +127,7 @@ class BuySellListingDto {
       category: parsedCategory,
       seller: parsedSeller,
       sellerTrustTag: json['seller_trust_tag']?.toString(),
+      sellerDeactivated: json['seller_deactivated'] == true,
       negotiable: json['negotiable'] == true,
       heldForReview: json['held_for_review'] == true,
       watching: json['watching'] == true,
@@ -151,6 +154,7 @@ class BuySellListingDto {
       category: category,
       seller: seller,
       sellerTrustTag: sellerTrustTag,
+      sellerDeactivated: sellerDeactivated,
       negotiable: negotiable,
       heldForReview: heldForReview,
       watching: watching,
@@ -173,6 +177,7 @@ class BuySellListingDto {
       category: item.category,
       seller: item.seller,
       sellerTrustTag: item.sellerTrustTag,
+      sellerDeactivated: item.sellerDeactivated,
       negotiable: item.negotiable,
       heldForReview: item.heldForReview,
       watching: item.watching,

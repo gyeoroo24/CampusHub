@@ -14,7 +14,8 @@ import '../../forums/domain/forum_models.dart';
 import '../../forums/ui/forum_board.dart';
 import 'company_seniors.dart';
 import 'placement_dialogs.dart';
-import 'placement_screen.dart' show CompanyAvatar, ScheduleKindBadge, scheduleKindColor, scheduleKindIcon;
+import 'placement_screen.dart'
+    show CompanyAvatar, ScheduleKindBadge, SignInForPlacementRecords, scheduleKindColor, scheduleKindIcon;
 
 const _tabs = ['overview', 'interviews', 'stats', 'forum'];
 
@@ -28,6 +29,19 @@ class CompanyScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(isGuestUserProvider)) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: 'Back to Placement Hub',
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: () => context.canPop() ? context.pop() : context.go('/placements'),
+          ),
+          title: const Text('Company'),
+        ),
+        body: const SignInForPlacementRecords(),
+      );
+    }
     final companyAsync = ref.watch(companyProvider(companyId));
     final user = ref.watch(currentUserProvider);
     final isAdmin = user != null && !user.isGuest && user.isAdmin;
@@ -118,7 +132,7 @@ class CompanyScreen extends ConsumerWidget {
     if (ok != true || !context.mounted) return;
     try {
       await ref.read(placementRepositoryProvider).deleteCompany(company.id);
-      ref.invalidate(companiesProvider);
+      ref.read(companiesPaginationProvider.notifier).loadInitial();
       ref.invalidate(placementOverviewProvider);
       ref.invalidate(upcomingPptsProvider);
       ref.invalidate(scheduleProvider);

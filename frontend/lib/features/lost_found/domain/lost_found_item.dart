@@ -39,6 +39,7 @@ class LostFoundItem {
   final String location;
   final ReportStatus status;
   final UserRef reporter;
+  final bool reporterDeactivated;
   final String? coverPhotoUrl;
   final List<Photo> photos;
   final Contact? reporterContact;
@@ -56,6 +57,7 @@ class LostFoundItem {
     this.location = '',
     this.status = ReportStatus.open,
     required this.reporter,
+    this.reporterDeactivated = false,
     this.coverPhotoUrl,
     this.photos = const [],
     this.reporterContact,
@@ -104,6 +106,7 @@ class LostFoundItem {
     String? location,
     ReportStatus? status,
     UserRef? reporter,
+    bool? reporterDeactivated,
     String? coverPhotoUrl,
     List<Photo>? photos,
     Contact? reporterContact,
@@ -121,6 +124,7 @@ class LostFoundItem {
       location: location ?? this.location,
       status: status ?? this.status,
       reporter: reporter ?? this.reporter,
+      reporterDeactivated: reporterDeactivated ?? this.reporterDeactivated,
       coverPhotoUrl: coverPhotoUrl ?? this.coverPhotoUrl,
       photos: photos ?? this.photos,
       reporterContact: reporterContact ?? this.reporterContact,

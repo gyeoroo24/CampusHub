@@ -11,7 +11,7 @@ boto3==1.37.38
 # fetched into the image with scripts/fetch_match_models.py --suggest-only
 onnxruntime==1.31.1
 tokenizers==0.23.3
-numpy==2.4.6   # 2.5.x needs Python 3.12+; the EC2 baseline's Amazon Linux 2023 AMI ships 3.11
+numpy==2.4.6   # 2.5.x needs Python 3.12; the EC2 image runs Python 3.11
 # Reading mess menus from PDFs and photos (app/mess_extract.py); OCR itself is the `tesseract` program
 pillow==13.0.0
 pypdfium2==5.14.0

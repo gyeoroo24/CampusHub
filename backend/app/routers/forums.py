@@ -348,6 +348,28 @@ async def _live_comment(conn: asyncpg.Connection, comment_id: UUID) -> asyncpg.R
     return row
 
 
+class CommentWithThread(Comment):
+    thread_id: UUID
+    thread_title: str
+
+
+@router.get("/comments/{comment_id}", response_model=CommentWithThread,
+            summary="One comment, with its thread's id and title (e.g. for the reports queue)")
+async def get_comment(comment_id: UUID, viewer: CurrentUser | None = Depends(optional_user),
+                      conn: asyncpg.Connection = Depends(get_conn)):
+    r = await conn.fetchrow(
+        """SELECT c.id, c.seq, c.parent_id, c.user_id, u.name AS author_name, c.content, c.created_at, c.updated_at,
+                  c.deleted_at, c.thread_id, t.title AS thread_title,
+                  (SELECT coalesce(sum(v.value), 0)::int FROM comment_votes v WHERE v.comment_id = c.id) AS score,
+                  coalesce((SELECT v.value FROM comment_votes v WHERE v.comment_id = c.id AND v.user_id = $2), 0)
+                      AS viewer_vote
+           FROM comments c JOIN users u ON u.id = c.user_id JOIN threads t ON t.id = c.thread_id
+           WHERE c.id = $1""", comment_id, viewer.id if viewer else None)
+    if r is None:
+        raise not_found("Comment")
+    return CommentWithThread(**_comment(r).model_dump(), thread_id=r["thread_id"], thread_title=r["thread_title"])
+
+
 @router.patch("/comments/{comment_id}", response_model=Comment, summary="Edit a comment (author or admin)")
 async def update_comment(comment_id: UUID, body: CommentIn, user: CurrentUser = Depends(current_user),
                          conn: asyncpg.Connection = Depends(get_conn)):

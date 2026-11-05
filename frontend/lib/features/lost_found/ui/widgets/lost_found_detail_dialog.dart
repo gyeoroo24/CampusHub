@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../../../core/widgets/deactivated_seller_badge.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/utils/contact_actions.dart';
 import '../../../../core/utils/error_text.dart';
@@ -330,6 +332,10 @@ class LostFoundDetailDialog extends ConsumerWidget {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
+                                      if (item.reporterDeactivated) ...[
+                                        const DeactivatedSellerBadge(fontSize: 10),
+                                        const SizedBox(height: 4),
+                                      ],
                                       Text(
                                         item.reporter.name,
                                         style: const TextStyle(

@@ -16,6 +16,7 @@ class LostFoundReportDto {
   final String? location;
   final String status;
   final UserRef reporter;
+  final bool reporterDeactivated;
   final String? coverPhotoUrl;
   final List<Photo> photos;
   final Contact? reporterContact;
@@ -33,6 +34,7 @@ class LostFoundReportDto {
     this.location,
     required this.status,
     required this.reporter,
+    this.reporterDeactivated = false,
     this.coverPhotoUrl,
     this.photos = const [],
     this.reporterContact,
@@ -138,6 +140,7 @@ class LostFoundReportDto {
           json['lost_found_location']?.toString(),
       status: json['status']?.toString() ?? 'open',
       reporter: parsedReporter,
+      reporterDeactivated: json['reporter_deactivated'] == true,
       coverPhotoUrl: coverUrl,
       photos: parsedPhotos,
       reporterContact: parsedContact,
@@ -164,6 +167,7 @@ class LostFoundReportDto {
       location: location ?? '',
       status: ReportStatus.fromString(status),
       reporter: reporter,
+      reporterDeactivated: reporterDeactivated,
       coverPhotoUrl: coverPhotoUrl,
       photos: photos,
       reporterContact: reporterContact,

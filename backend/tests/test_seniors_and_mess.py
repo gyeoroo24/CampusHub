@@ -44,7 +44,7 @@ def test_sheet_with_a_title_row_and_an_office_schedule(client, people):
     r = client.post(f"{API}/placement/schedule/import", headers=RAVI, json={"csv": schedule})
     assert r.status_code == 201, r.text
     assert (r.json()["rows_created"], r.json()["rows_rejected"]) == (2, 0)
-    rows = {p["company_name"]: p for p in client.get(f"{API}/placement/ppts").json()["items"]}
+    rows = {p["company_name"]: p for p in client.get(f"{API}/placement/ppts", headers=RAVI).json()["items"]}
     accenture = rows["Accenture"]
     assert accenture["kind"] == "oa" and accenture["venue"] is None       # "Test ..." columns: online tests
     assert accenture["details"] == "Mock Assessment · Mode: Online · Status: Confirmed · Postponed, OCCaP Will communicate"
@@ -64,7 +64,7 @@ def test_seniors_to_contact(client, people):
     client.post(f"{API}/placement/imports", headers=RAVI, json={
         "placement_year": this_year - 3, "sheet": "Company,Email,Role\nNvidia,ancient@iisc.ac.in,SDE\n"})
     sql("UPDATE users SET phone = '+919876543210' WHERE email = 'asha@iisc.ac.in'")
-    nvidia = client.get(f"{API}/companies", params={"q": "nvidia"}).json()["items"][0]["id"]
+    nvidia = client.get(f"{API}/companies", headers=RAVI, params={"q": "nvidia"}).json()["items"][0]["id"]
 
     assert client.get(f"{API}/companies/{nvidia}/seniors").status_code == 401        # guests see nobody
     added = client.post(f"{API}/companies/{nvidia}/seniors", headers=RAVI, json={
@@ -259,11 +259,24 @@ def test_interview_schedule_without_times(client, people):
     r = client.post(f"{API}/placement/schedule/import", headers=RAVI, json={"csv": sheet})
     assert r.status_code == 201, r.text
     assert r.json()["kinds"] == {"interview": 2} and r.json()["past_rows"] == 0
-    dates = client.get(f"{API}/placement/ppts", params={"kind": "interview"}).json()["items"]
+    dates = client.get(f"{API}/placement/ppts", headers=RAVI, params={"kind": "interview"}).json()["items"]
     assert [(d["company_name"], d["time_tbd"]) for d in dates] == [("HPE", True), ("Chevron", True)]
     # A moderator setting the time makes it exact.
     r = client.patch(f"{API}/ppts/{dates[0]['id']}", headers=RAVI, json={"scheduled_at": "2030-10-19T10:30:00+05:30"})
     assert r.json()["time_tbd"] is False
+
+
+def test_reader_counts_as_available_with_only_the_library():
+    # On EC2 the Tesseract command is under /opt/bin, which isn't on the service's PATH. The in-process
+    # libtesseract is what the reader uses, so it must count as available without the command.
+    from app import mess_extract
+    mp = pytest.MonkeyPatch()
+    try:
+        mp.setattr(mess_extract, "_tess", object())
+        mp.setattr(mess_extract.shutil, "which", lambda name: None)
+        assert mess_extract.ocr_available()
+    finally:
+        mp.undo()
 
 
 # ---------------------------------------------------------------- rev 21: roles and compensation
@@ -296,23 +309,26 @@ def test_roles_and_compensation_import(client, people):
                    '"Observe ai","Full Time Placement","NLP","-","Refer below table","-","Check JD"\n')
     r = client.post(f"{API}/placement/roles/import", headers=RAVI, json={"csv": this_season, "placement_year": 2026})
     assert (r.json()["rows_created"], r.json()["rows_updated"]) == (2, 0)   # the repeated NLP row merges
-    company = client.get(f"{API}/companies", params={"q": "observe"}).json()["items"][0]
+    company = client.get(f"{API}/companies", headers=RAVI, params={"q": "observe"}).json()["items"][0]
     assert (company["ctc_year"], company["ctc_min"], company["ctc_max"]) == (2026, 4800000, 4800000)  # interns don't count
     roles = {(j["role_title"], j["placement_year"], j["job_type"]): j
-             for j in client.get(f"{API}/companies/{company['id']}").json()["job_descriptions"]}
+             for j in client.get(f"{API}/companies/{company['id']}", headers=RAVI).json()["job_descriptions"]}
     nlp = roles[("NLP", 2026, "full_time")]
     assert (nlp["compensation"], nlp["ctc_min"], nlp["base_annual"], nlp["skills"]) == \
         ("₹ 48,00,000", 4800000, 3000000, "Python, PyTorch")
     assert roles[("Intern", 2026, "internship")]["ctc_min"] == 960000
     assert "someone@iisc.ac.in" not in str(roles) and "call back" not in str(roles)   # never imported
-    stats = client.get(f"{API}/placement/stats").json()
+    # Guests get no pay data at all (rev 32); signed-in users see top_paying.
+    assert client.get(f"{API}/placement/stats").json()["top_paying"] == []
+    stats = client.get(f"{API}/placement/stats", headers=RAVI).json()
     assert stats["pay_year"] == 2026 and stats["top_paying"][0]["ctc_max"] == 4800000
 
     # A role typed in by hand reads its amount too.
     r = client.post(f"{API}/companies/{company['id']}/jds", headers=RAVI, json={
         "role_title": "Research Scientist", "compensation": "₹52 LPA", "placement_year": 2026})
     assert r.status_code == 201 and r.json()["ctc_min"] == 5200000
-    assert client.get(f"{API}/companies", params={"sort": "highest_pay"}).json()["items"][0]["ctc_max"] == 5200000
+    assert client.get(f"{API}/companies", headers=RAVI,
+                      params={"sort": "highest_pay"}).json()["items"][0]["ctc_max"] == 5200000
 
 
 def test_moderators_delete_a_withdrawn_company(client, people):
@@ -323,8 +339,9 @@ def test_moderators_delete_a_withdrawn_company(client, people):
         "role_title": "SDE", "content": "Two rounds", "placement_year": 2026})
     assert client.delete(f"{API}/companies/{company['id']}", headers=KIRAN).status_code == 403
     assert client.delete(f"{API}/companies/{company['id']}", headers=RAVI).status_code == 204
-    assert client.get(f"{API}/companies/{company['id']}").status_code == 404
-    assert not [p for p in client.get(f"{API}/placement/ppts").json()["items"] if p["company_name"] == "Retracted Co"]
+    assert client.get(f"{API}/companies/{company['id']}", headers=RAVI).status_code == 404
+    assert not [p for p in client.get(f"{API}/placement/ppts", headers=RAVI).json()["items"]
+               if p["company_name"] == "Retracted Co"]
     assert sql("SELECT count(*) FROM interview_experiences")[0][0] == 0
 
 

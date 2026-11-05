@@ -203,12 +203,39 @@ async def update_account(user_id: UUID, body: AccountUpdate, user: CurrentUser =
     if user_id == user.id:
         raise HTTPException(422, "You can't deactivate your own account; hand the admin role over first.")
     async with conn.transaction():
-        row = await conn.fetchrow(
-            f"""UPDATE users SET is_active = $2 WHERE id = $1 RETURNING {_STATUS_COLUMNS}""", user_id, body.is_active)
+        if not body.is_active:
+            row = await _deactivate(conn, user_id, by=user.id)
+        else:
+            row = await conn.fetchrow(
+                f"""UPDATE users SET is_active = true WHERE id = $1 RETURNING {_STATUS_COLUMNS}""", user_id)
         if row is None:
             raise not_found("User")
         await log_moderation(conn, user.id, "reactivate_user" if body.is_active else "deactivate_user", "user", user_id)
     return AccountStatus(**dict(row))
+
+
+async def _deactivate(conn: asyncpg.Connection, user_id: UUID, by: UUID) -> asyncpg.Record | None:
+    """Deactivate an account and end its moderator roles. A deactivated person can't sign in, and an admin
+    has to grant any role again after reactivating them. Their posts and messages stay, marked as coming
+    from a deactivated account. Call inside a transaction."""
+    row = await conn.fetchrow(
+        f"""UPDATE users SET is_active = false WHERE id = $1 RETURNING {_STATUS_COLUMNS}""", user_id)
+    if row is not None:
+        await conn.execute(
+            """UPDATE moderator_assignments SET revoked_at = now(), revoked_by = $2
+               WHERE user_id = $1 AND revoked_at IS NULL""", user_id, by)
+    return row
+
+
+@router.post("/me/deactivate", status_code=204,
+             summary="Deactivate my own account: I can't sign in afterwards; my posts stay, marked as deactivated")
+async def deactivate_me(user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
+    if user.is_admin:
+        raise HTTPException(422, "The admin can't deactivate their own account. Hand the admin role over first.")
+    async with conn.transaction():
+        await _deactivate(conn, user.id, by=user.id)
+        await log_moderation(conn, user.id, "deactivate_user", "user", user.id)
+    return Response(status_code=204)
 
 
 @router.post("/users/{user_id}/make-admin", response_model=AccountStatus,

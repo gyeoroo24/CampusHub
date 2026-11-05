@@ -58,6 +58,7 @@ class WantedSummary(BaseModel):
     max_price: Decimal | None
     status: WantedStatus
     author: UserRef
+    author_deactivated: bool = Field(False, description="The author has deactivated their account")
     created_at: datetime
 
 
@@ -82,7 +83,8 @@ JOIN users u ON u.id = w.author_id
 def _summary(r: asyncpg.Record) -> WantedSummary:
     return WantedSummary(id=r["id"], title=r["title"], max_price=r["max_price"], status=r["status"],
                          category=CategoryRef(id=r["category_id"], name=r["category_name"]),
-                         author=UserRef(id=r["author_id"], name=r["author_name"]), created_at=r["created_at"])
+                         author=UserRef(id=r["author_id"], name=r["author_name"]),
+                         author_deactivated=not r["author_active"], created_at=r["created_at"])
 
 
 async def _detail(conn: asyncpg.Connection, post_id: UUID, viewer: CurrentUser | None) -> WantedDetail:

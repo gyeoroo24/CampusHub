@@ -37,6 +37,7 @@ class ListingItem {
   /// 'negative' or 'blocked', from moderator-confirmed removals against this seller (future plan
   /// §1.5). Null for everyone else - there is no positive badge, only this warning.
   final String? sellerTrustTag;
+  final bool sellerDeactivated;
   /// Seller marked the price as open to offers (future plan §2.3).
   final bool negotiable;
   /// Flagged automatically as a possible prohibited item and hidden from others until a moderator
@@ -60,6 +61,7 @@ class ListingItem {
     required this.category,
     required this.seller,
     this.sellerTrustTag,
+    this.sellerDeactivated = false,
     this.negotiable = false,
     this.heldForReview = false,
     this.watching = false,
@@ -91,6 +93,7 @@ class ListingItem {
     CategoryRef? category,
     UserRef? seller,
     String? sellerTrustTag,
+    bool? sellerDeactivated,
     bool? negotiable,
     bool? heldForReview,
     bool? watching,
@@ -110,6 +113,7 @@ class ListingItem {
       category: category ?? this.category,
       seller: seller ?? this.seller,
       sellerTrustTag: sellerTrustTag ?? this.sellerTrustTag,
+      sellerDeactivated: sellerDeactivated ?? this.sellerDeactivated,
       negotiable: negotiable ?? this.negotiable,
       heldForReview: heldForReview ?? this.heldForReview,
       watching: watching ?? this.watching,

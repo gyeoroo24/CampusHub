@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/utils/error_text.dart';
 import '../../../core/widgets/skeleton_loader.dart';
+import '../../auth/providers/auth_providers.dart';
 import '../domain/academics_models.dart';
 import '../providers/academics_providers.dart';
 
-/// Courses tab: pick a department, find a course, open its survival guide.
+/// Courses tab: pick a department, find a course, open its survival guide — or see just the ones
+/// you follow (the "Following" chip), instead of having to open each course to check.
 class CoursesScreen extends ConsumerStatefulWidget {
   const CoursesScreen({super.key});
 
@@ -16,6 +18,7 @@ class CoursesScreen extends ConsumerStatefulWidget {
 
 class _CoursesScreenState extends ConsumerState<CoursesScreen> {
   String _search = '';
+  bool _showFollowing = false;
 
   @override
   Widget build(BuildContext context) {
@@ -23,6 +26,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
     final selectedId = ref.watch(selectedDepartmentIdProvider);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isGuest = ref.watch(isGuestUserProvider);
 
     return departmentsAsync.when(
       loading: () => const SkeletonList(itemCount: 6),
@@ -55,14 +59,29 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
+                          if (!isGuest)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                avatar: Icon(Icons.bookmark_rounded,
+                                    size: 16, color: _showFollowing ? null : theme.colorScheme.primary),
+                                label: const Text('Following'),
+                                selected: _showFollowing,
+                                visualDensity: VisualDensity.compact,
+                                onSelected: (v) => setState(() => _showFollowing = v),
+                              ),
+                            ),
                           for (final d in shown)
                             Padding(
                               padding: const EdgeInsets.only(right: 8),
                               child: ChoiceChip(
                                 label: Text('${d.name} (${d.courseCount})'),
-                                selected: d.id == department.id,
+                                selected: !_showFollowing && d.id == department.id,
                                 visualDensity: VisualDensity.compact,
-                                onSelected: (_) => ref.read(selectedDepartmentIdProvider.notifier).state = d.id,
+                                onSelected: (_) => setState(() {
+                                  _showFollowing = false;
+                                  ref.read(selectedDepartmentIdProvider.notifier).state = d.id;
+                                }),
                               ),
                             ),
                         ],
@@ -92,10 +111,14 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
                 ),
               ),
             ),
-            // Typing searches every department; otherwise the picked department is listed.
-            (_search.isNotEmpty
-                    ? ref.watch(allCoursesProvider).whenData((all) => all.where((c) => courseMatches(c, _search)).toList())
-                    : coursesAsync.whenData((cs) => [for (final c in cs) (course: c, departmentName: department.name)]))
+            // Following shows just the courses you follow; typing searches every department;
+            // otherwise the picked department is listed.
+            (_showFollowing
+                    ? ref.watch(followingCoursesProvider).whenData(
+                        (cs) => _search.isEmpty ? cs : cs.where((c) => courseMatches(c, _search)).toList())
+                    : _search.isNotEmpty
+                        ? ref.watch(allCoursesProvider).whenData((all) => all.where((c) => courseMatches(c, _search)).toList())
+                        : coursesAsync.whenData((cs) => [for (final c in cs) (course: c, departmentName: department.name)]))
                 .when(
               loading: () => const SliverToBoxAdapter(child: SkeletonList(itemCount: 6)),
               error: (e, _) => SliverToBoxAdapter(child: Padding(
@@ -104,9 +127,13 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
               )),
               data: (filtered) {
                 if (filtered.isEmpty) {
-                  return const SliverFillRemaining(
+                  return SliverFillRemaining(
                     hasScrollBody: false,
-                    child: Center(child: Text('No courses match.')),
+                    child: Center(
+                      child: Text(_showFollowing
+                          ? "You're not following any courses yet. Open a course and tap Follow to get updates here."
+                          : 'No courses match.'),
+                    ),
                   );
                 }
                 return SliverPadding(
@@ -121,7 +148,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
                     delegate: SliverChildBuilderDelegate(
                       (context, i) => _CourseTile(
                         course: filtered[i].course,
-                        departmentName: _search.isNotEmpty ? filtered[i].departmentName : null,
+                        departmentName: (_search.isNotEmpty || _showFollowing) ? filtered[i].departmentName : null,
                       ),
                       childCount: filtered.length,
                     ),

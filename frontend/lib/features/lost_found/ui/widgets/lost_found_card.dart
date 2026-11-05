@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../../../core/widgets/deactivated_seller_badge.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/utils/contact_actions.dart';
 import '../../../../core/utils/date_time_formatter.dart';
@@ -266,6 +268,10 @@ class _LostFoundCardState extends State<LostFoundCard> {
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  if (item.reporterDeactivated) ...[
+                                    const DeactivatedSellerBadge(fontSize: 9),
+                                    const SizedBox(width: 4),
+                                  ],
                                   Icon(Icons.person_outline_rounded, size: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]),
                                   const SizedBox(width: 3),
                                   Flexible(
