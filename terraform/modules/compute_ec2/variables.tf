@@ -113,6 +113,18 @@ variable "asg_desired_capacity" {
   default     = 1
 }
 
+variable "asg_target_cpu_utilization" {
+  description = "Target-tracking scaling policy: average ASG CPU% the scaling policy tries to hold. Kept well under 100 so it scales out before a t4g.micro's burstable CPU credits run out under sustained load."
+  type        = number
+  default     = 50
+}
+
+variable "db_pool_max_size" {
+  description = "Max asyncpg pool connections each EC2 instance opens to RDS, written into the app's .env as CAMPUSHUB_DB_POOL_MAX_SIZE. Must satisfy (this * asg_max_size) <= the RDS instance class's max_connections, with headroom for the data_tools Lambda and manual psql sessions -- db.t4g.micro caps out around ~110 connections."
+  type        = number
+  default     = 10
+}
+
 variable "tesseract_layer_zip" {
   description = "Path to tesseract-layer.zip (from modules/compute/tesseract_layer/build.sh). Empty = no OCR on the instances."
   type        = string

@@ -92,6 +92,7 @@ CAMPUSHUB_S3_REGION=${aws_region}
 CAMPUSHUB_S3_ENDPOINT_URL=https://s3.${aws_region}.amazonaws.com
 CAMPUSHUB_CORS_ALLOW_ORIGINS=["*"]
 CAMPUSHUB_ORIGIN_VERIFY_SECRET=${origin_verify_header}
+CAMPUSHUB_DB_POOL_MAX_SIZE=${db_pool_max_size}
 %{ if redis_enabled ~}
 CAMPUSHUB_REDIS_HOST=${redis_host}
 CAMPUSHUB_REDIS_PORT=${redis_port}

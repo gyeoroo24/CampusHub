@@ -167,19 +167,41 @@ variable "origin_verify_header" {
 }
 
 variable "asg_min_size" {
+  # Kept at 1, not raised: EC2 Free Tier is 750 instance-hours/month shared across every running
+  # t4g.micro/t3.micro combined, and a single instance running 24/7 already uses ~730-744 of those
+  # hours by itself. Raising the always-on floor to 2 would roughly double that baseline burn and
+  # blow the monthly Free Tier budget well before the end of the month; the max/target-tracking
+  # policy below gives burst capacity for a load test instead, without raising steady-state cost.
   description = "Minimum instances in EC2 Auto Scaling Group"
   type        = number
   default     = 1
 }
 
 variable "asg_max_size" {
+  # Headroom for a short Locust burst only -- extra instances only run (and only cost
+  # instance-hours) while the target-tracking policy judges them needed, then scale back to
+  # asg_min_size. Capped at 8 so that at ec2_db_pool_max_size=10 each, 8 * 10 = 80 connections
+  # stays safely under db.t4g.micro's ~100-110 max_connections, leaving headroom for the
+  # data_tools Lambda and any manual psql session.
   description = "Maximum instances in EC2 Auto Scaling Group"
   type        = number
-  default     = 2
+  default     = 8
 }
 
 variable "asg_desired_capacity" {
   description = "Desired instances in EC2 Auto Scaling Group"
   type        = number
   default     = 1
+}
+
+variable "asg_target_cpu_utilization" {
+  description = "Target-tracking scaling policy: average ASG CPU% it tries to hold. Kept at 50 (not closer to 100) so the ASG scales out to asg_max_size while a t4g.micro still has burstable CPU credits left, instead of after they're already exhausted."
+  type        = number
+  default     = 50
+}
+
+variable "ec2_db_pool_max_size" {
+  description = "Max asyncpg pool connections each EC2 instance opens to RDS (CAMPUSHUB_DB_POOL_MAX_SIZE). Lowered from the single-instance default of 20 to 10 so that scaling out under asg_max_size doesn't exceed db.t4g.micro's connection ceiling -- see asg_max_size."
+  type        = number
+  default     = 10
 }

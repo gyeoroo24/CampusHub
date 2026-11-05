@@ -238,6 +238,7 @@ resource "aws_launch_template" "app" {
     redis_enabled         = var.redis_enabled
     redis_host            = var.redis_host
     redis_port            = var.redis_port
+    db_pool_max_size      = var.db_pool_max_size
     redis_auth_secret_arn = var.redis_auth_secret_arn
   }))
 
@@ -287,6 +288,23 @@ resource "aws_autoscaling_group" "app" {
     key                 = "Name"
     value               = "${var.project_name}-${var.environment}-asg-instance"
     propagate_at_launch = true
+  }
+}
+
+# Target-tracking scaling: without this, asg_max_size is just an unused ceiling -- the ASG
+# otherwise never launches more than asg_desired_capacity regardless of load. Target set well
+# under 100% so it scales out while a t4g.micro still has burstable CPU credits left, rather than
+# after they're already exhausted.
+resource "aws_autoscaling_policy" "cpu_target_tracking" {
+  name                   = "${var.project_name}-${var.environment}-cpu-target-tracking"
+  autoscaling_group_name = aws_autoscaling_group.app.name
+  policy_type            = "TargetTrackingScaling"
+
+  target_tracking_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageCPUUtilization"
+    }
+    target_value = var.asg_target_cpu_utilization
   }
 }
 
