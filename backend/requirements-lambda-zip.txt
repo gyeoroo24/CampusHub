@@ -1,0 +1,27 @@
+# Dependencies for the zip-packaged API Lambda (terraform/modules/compute).
+#
+# A plain zip deployment is capped at 250 MB unzipped (function + layers combined). The full
+# requirements.txt — onnxruntime, numpy, tokenizers and pillow alone — already runs past that on
+# its own, so this file deliberately leaves out the ML/imaging stack:
+#   - onnxruntime, tokenizers, numpy: power category suggestion (app/categories_suggest.py), which
+#     already checks `importlib.util.find_spec("onnxruntime")` and returns no suggestion instead of
+#     failing when the package or its model file is missing — see that module's docstring.
+#   - pillow, pypdfium2: power reading a mess menu from an uploaded PDF/photo
+#     (app/mess_extract.py). That module now imports numpy/Pillow in a try/except too, and
+#     extract_menu() returns a "not set up on this server" warning instead of crashing the app.
+# Both features keep working everywhere else (local dev via requirements.txt, the Docker-based
+# deployment path in Dockerfile/Dockerfile.lambda, and the dedicated matcher Lambda in
+# Dockerfile.matcher, which already carries its own ML dependencies via requirements-matching.txt).
+#
+# Keep this file's package list and pins in sync with requirements.txt for everything it does
+# include; only the four packages above are intentionally dropped.
+
+fastapi==0.115.6
+mangum==0.19.0
+asyncpg==0.30.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+PyJWT[crypto]==2.10.1
+cryptography==50.0.2
+boto3==1.37.38
+redis==5.2.1   # ElastiCache cache-aside layer (app/cache.py); a no-op wherever CAMPUSHUB_REDIS_HOST isn't set

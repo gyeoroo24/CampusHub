@@ -1,0 +1,18 @@
+# Runtime dependencies (installed into the Lambda / EC2 image)
+fastapi==0.115.6
+mangum==0.19.0
+asyncpg==0.30.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+PyJWT[crypto]==2.10.1
+cryptography==50.0.2   # also used directly: chat keys made on the server (app/routers/chat.py)
+boto3==1.37.38
+redis==5.2.1   # ElastiCache cache-aside layer (app/cache.py); a no-op wherever CAMPUSHUB_REDIS_HOST isn't set
+# Category suggestion (app/categories_suggest.py) runs in the API: bge-small-en-v1.5 int8, 34 MB,
+# fetched into the image with scripts/fetch_match_models.py --suggest-only
+onnxruntime==1.31.1
+tokenizers==0.23.3
+numpy==2.4.6   # 2.5.x needs Python 3.12; the EC2 image runs Python 3.11
+# Reading mess menus from PDFs and photos (app/mess_extract.py); OCR itself is the `tesseract` program
+pillow==13.0.0
+pypdfium2==5.14.0

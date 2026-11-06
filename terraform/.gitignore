@@ -1,0 +1,43 @@
+# ==========================================
+# Terraform Git Ignore
+# ==========================================
+
+# Local .terraform directories
+.terraform/
+**/.terraform/
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Exclude sensitive variables files
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# Ignore override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ignore packaged lambda archives and the build staging directory build_lambda_zip.sh fills
+*.zip
+**/compute/build/
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Build outputs and personal-data snapshots (see docs/deployment errors resolution.md)
+data/snapshot/
+modules/data_tools/handler.zip
+modules/data_tools/pg_layer/pg-layer.zip
+modules/compute/tesseract_layer/tesseract-layer.zip
+modules/compute/ml_layer/ml-layer.zip
