@@ -42,13 +42,15 @@ def match_keys(name: str) -> set[str]:
 
 
 def display_name(name: str) -> str:
-    """A clean name to suggest for a group: the name without bracketed notes or a trailing step."""
+    """A clean name to suggest for a group: the name without bracketed notes, a trailing step or a legal ending."""
     text = re.sub(r"[\[({].*?[\])}]", " ", name)
     text = re.sub(r"\s[-–—:|/]\s.*$", " ", text)
     words = text.split()
-    while words and words[-1].lower().strip(".,") in _STEP_WORDS:
+    # Trailing step words and legal endings: "Accenture Final", "Wipro Limited", "Cisco India Pvt. Ltd."
+    trailing = _STEP_WORDS | (_LEGAL_WORDS - {"india"}) | {"pvt.ltd", "pvt.ltd.", "pvt.l", "priv", "priva", "pvt.l."}
+    while len(words) > 1 and words[-1].lower().strip(".,-") in trailing:
         words.pop()
-    return " ".join(words) or name.strip()
+    return " ".join(words).rstrip(" ,-") or name.strip()
 
 
 def _similar_key(a: str, b: str) -> bool:
