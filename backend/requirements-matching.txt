@@ -1,6 +1,0 @@
-# Lost & Found matcher (app/matching): the matcher Lambda (Dockerfile.matcher), or the API itself
-# when it runs the models in-process (CAMPUSHUB_MATCH_MODE=inline, local development).
-# The API Lambda image doesn't need these. Models: python scripts/fetch_match_models.py
--r requirements.txt   # already has onnxruntime, tokenizers and numpy
-pillow==13.0.0
-pillow-heif==1.8.1   # HEIC photos from iPhones

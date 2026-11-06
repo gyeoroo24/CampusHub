@@ -1,6 +1,0 @@
-# Local development and tests
--r requirements-matching.txt   # includes requirements.txt; tests use numpy, a few use the models
-uvicorn[standard]==0.34.0
-httpx==0.28.1
-pytest==8.3.4
-moto[s3]==5.1.4
