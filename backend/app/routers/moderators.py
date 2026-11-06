@@ -4,6 +4,7 @@ Admins can grant any role. A department moderator (Academic Help) can grant and 
 course moderators for courses in their own department. Any moderator can step down by
 revoking their own role. The person is notified when a role is given to them or taken away.
 """
+import logging
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
@@ -18,6 +19,8 @@ from ..common import forbidden, not_found
 from ..db import get_conn
 from ..notify import create_notifications, deliver_push
 from ..permissions import can_manage_department, log_moderation
+
+log = logging.getLogger("campushub.moderators")
 
 router = APIRouter(prefix="/moderators", tags=["Moderators"])
 
@@ -116,7 +119,11 @@ async def grant(body: GrantCreate, background: BackgroundTasks, user: CurrentUse
     try:
         problem = await signin_account_problem(target["cognito_sub"])
     except AccountCheckUnavailable as exc:
-        raise HTTPException(503, "Couldn't check this person's sign-in account just now. Try again.") from exc
+        # Their users row already shows they signed in once, so the grant goes ahead. In the cloud deployment
+        # Cognito admin calls can't go through the VPC endpoint (a pool with a hosted UI domain isn't supported
+        # over PrivateLink), so refusing here would block every grant.
+        log.warning("Cognito account check unavailable for %s, granting anyway: %s", body.email, exc)
+        problem = None
     if problem is not None:
         raise HTTPException(422, problem)
     target = target["id"]

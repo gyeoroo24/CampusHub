@@ -7,13 +7,13 @@ moderator role is granted. The pool signs people in by email, so Cognito's usern
 import asyncio
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 from .config import get_settings
 
 
 class AccountCheckUnavailable(Exception):
-    """Cognito couldn't be asked. The grant is refused rather than guessed."""
+    """Cognito couldn't be asked. The grant goes ahead and the failure is logged (routers/moderators.py)."""
 
 
 def _admin_get_user(pool_id: str, region: str, username: str) -> dict | None:
@@ -23,6 +23,8 @@ def _admin_get_user(pool_id: str, region: str, username: str) -> dict | None:
     except ClientError as exc:
         if exc.response.get("Error", {}).get("Code") == "UserNotFoundException":
             return None
+        raise AccountCheckUnavailable(str(exc)) from exc
+    except BotoCoreError as exc:   # no route to Cognito, timeouts, missing credentials
         raise AccountCheckUnavailable(str(exc)) from exc
 
 

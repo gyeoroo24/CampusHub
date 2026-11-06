@@ -80,7 +80,7 @@ def test_a_deactivated_account_cannot_get_a_moderator_role(client):
     assert r.status_code == 422 and "deactivated" in r.json()["detail"]
 
 
-def test_a_role_is_refused_when_the_cognito_account_is_gone(client, monkeypatch):
+def test_a_role_is_refused_when_the_cognito_account_is_gone_but_granted_when_cognito_is_unreachable(client, monkeypatch):
     make_admin(client, ADMIN)
     sign_in(client, RAVI)
 
@@ -93,7 +93,7 @@ def test_a_role_is_refused_when_the_cognito_account_is_gone(client, monkeypatch)
     async def unreachable(sub):
         raise AccountCheckUnavailable("throttled")
     monkeypatch.setattr(moderators, "signin_account_problem", unreachable)
-    assert grant(client, ADMIN, "ravi@iisc.ac.in", "buy_sell").status_code == 503
+    assert grant(client, ADMIN, "ravi@iisc.ac.in", "buy_sell").status_code == 201
 
 
 def test_the_cognito_check_reads_the_pool(monkeypatch):
