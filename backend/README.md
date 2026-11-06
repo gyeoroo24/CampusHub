@@ -515,7 +515,7 @@ data-tools Lambda's `run_sql` action (see the [root README](../README.md#57-load
 - `/docs` is on by default.
 - `app/otp.py` on this branch contains a `TEMP HARDCODED OTP` block that accepts `123456`. It affects
   phone verification on a deployed stack. Remove it before deploying (see the
-  [root README troubleshooting](../README.md#12-troubleshooting)).
+  [root README troubleshooting](../README.md#13-troubleshooting)).
 
 ### Push notifications
 
