@@ -42,11 +42,12 @@ final myCourseFeedbackProvider = FutureProvider.family<CourseFeedback?, String>(
   return ref.watch(academicsRepositoryProvider).fetchMyFeedback(courseId);
 });
 
-/// A follow / unfollow the viewer just made, shown at once while the server and the course lists catch up
-/// (null = nothing pending; use the course's own `following`). Reset when someone else signs in.
-final courseFollowOverrideProvider = StateProvider.family<bool?, String>((ref, courseId) {
+/// Follows / unfollows the viewer made in this session, by course id, shown at once and kept, so the
+/// course page and the Following tab agree without reloading every department's courses. Cleared when
+/// someone else signs in.
+final courseFollowOverridesProvider = StateProvider<Map<String, bool>>((ref) {
   ref.watch(currentUserProvider);
-  return null;
+  return const {};
 });
 
 /// A course with its department's name, for search across departments.
@@ -66,7 +67,8 @@ final allCoursesProvider = FutureProvider<List<CourseWithDepartment>>((ref) asyn
 final followingCoursesProvider = FutureProvider<List<CourseWithDepartment>>((ref) async {
   ref.watch(currentUserProvider); // refetch when who's signed in changes
   final all = await ref.watch(allCoursesProvider.future);
-  return all.where((c) => c.course.following).toList();
+  final overrides = ref.watch(courseFollowOverridesProvider);
+  return all.where((c) => overrides[c.course.id] ?? c.course.following).toList();
 });
 
 String _squash(String s) => s.toLowerCase().replaceAll(RegExp(r'[\s\-_.]'), '');

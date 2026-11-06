@@ -42,14 +42,10 @@ class CourseGuideScreen extends ConsumerWidget {
     );
     if (ok != true) return;
     // Flip the button straight away; put it back if the server refuses.
-    final override = ref.read(courseFollowOverrideProvider(courseId).notifier);
-    override.state = !following;
+    final overrides = ref.read(courseFollowOverridesProvider.notifier);
+    overrides.state = {...overrides.state, courseId: !following};
     try {
       await ref.read(academicsRepositoryProvider).setFollowing(courseId, !following);
-      ref.invalidate(courseProvider(courseId));
-      // So the Following tab and other departments' lists pick up the change too.
-      ref.invalidate(allCoursesProvider);
-      ref.invalidate(followingCoursesProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -63,7 +59,7 @@ class CourseGuideScreen extends ConsumerWidget {
         );
       }
     } catch (e) {
-      override.state = following;
+      overrides.state = {...overrides.state, courseId: following};
       if (context.mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(errorText(e)), behavior: SnackBarBehavior.floating));
@@ -76,7 +72,8 @@ class CourseGuideScreen extends ConsumerWidget {
     final guideAsync = ref.watch(survivalGuideProvider(courseId));
     final course = ref.watch(courseProvider(courseId)).valueOrNull;
     final code = course?.code ?? guideAsync.valueOrNull?.courseCode ?? 'this course';
-    final following = ref.watch(courseFollowOverrideProvider(courseId)) ?? course?.following ?? false;
+    final following =
+        ref.watch(courseFollowOverridesProvider.select((m) => m[courseId])) ?? course?.following ?? false;
     final theme = Theme.of(context);
 
     return DefaultTabController(

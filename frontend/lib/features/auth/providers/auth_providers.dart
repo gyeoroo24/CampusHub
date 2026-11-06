@@ -50,7 +50,9 @@ final authStateProvider = StreamProvider<User?>((ref) {
 
 /// Synchronous-like access to current user (can be null if Guest).
 final currentUserProvider = Provider<User?>((ref) {
-  return ref.watch(authStateProvider).value;
+  // select: only a real change of user (User compares by value) reaches the ~50 providers below; the
+  // session re-check every minute returns an equal user and changes nothing.
+  return ref.watch(authStateProvider.select((state) => state.value));
 });
 
 /// Whether the current session is an unauthenticated Guest.

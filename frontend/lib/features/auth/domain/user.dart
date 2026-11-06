@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// Roles defined in the 4-role permission model (PRD Sec 3.1 & FR-2).
 enum UserRole {
   guest,
@@ -187,6 +189,17 @@ class User {
   }
 
   bool isOwnerOf(String resourceOwnerId) => id.isNotEmpty && id == resourceOwnerId;
+
+  /// Two users are equal when every field is (compared through [toJson]). The session is re-checked with
+  /// the server every minute and whenever the window regains focus; without value equality each check
+  /// produced a "new" user, and everything that depends on who is signed in (feeds, course pages,
+  /// bookmark and follow state) reloaded, which showed as lag and flicker.
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || (other is User && jsonEncode(toJson()) == jsonEncode(other.toJson()));
+
+  @override
+  int get hashCode => Object.hash(id, email, isAdmin, isActive, moderatorGrants.length);
 
   Map<String, dynamic> toJson() {
     return {
