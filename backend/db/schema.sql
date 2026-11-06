@@ -5,6 +5,12 @@
 -- Permission modules (FR-2, NFR-6): buy_sell, lost_found, academic_help,
 -- placement_hub, events (rev 17: Community Events moderators).
 --
+-- Changes from rev. 25 (6 Nov 2026):
+--   1. seller_unblock_requests: a blocked seller asks to be unblocked; approving resets their strikes.
+--   2. listing_bookmarks: bookmarked Buy & Sell listings.
+--   3. lost_reports / found_reports.category_id nullable, for reports removed with their category.
+--   Upgrade: db/migrations/026_unblock_requests_bookmarks.sql.
+--
 -- Changes from rev. 24 (4 Nov 2026):
 --   1. companies.created_by: who added the company (by hand or by a CSV import), so a moderator's
 --      profile can list the companies they added. NULL for companies added before rev 25 and for
@@ -441,7 +447,8 @@ CREATE TABLE lost_reports (
     reporter_id        UUID NOT NULL REFERENCES users(id),
     title              TEXT CHECK (char_length(btrim(title)) BETWEEN 1 AND 120),   -- rev 25; NULL before
     description        TEXT NOT NULL,
-    category_id        INT NOT NULL REFERENCES lf_categories(id),   -- what the item is; matched on
+    category_id        INT REFERENCES lf_categories(id),   -- what the item is; matched on. NULL only on a
+                                                       -- report removed with its category (rev 26)
     lost_at            TIMESTAMPTZ NOT NULL,                -- when the item was lost (user-entered)
     location           TEXT,
     status             lost_found_status NOT NULL DEFAULT 'open',
@@ -471,7 +478,8 @@ CREATE TABLE found_reports (
     reporter_id        UUID NOT NULL REFERENCES users(id),
     title              TEXT CHECK (char_length(btrim(title)) BETWEEN 1 AND 120),   -- rev 25; NULL before
     description        TEXT NOT NULL,
-    category_id        INT NOT NULL REFERENCES lf_categories(id),   -- what the item is; matched on
+    category_id        INT REFERENCES lf_categories(id),   -- what the item is; matched on. NULL only on a
+                                                       -- report removed with its category (rev 26)
     found_at           TIMESTAMPTZ NOT NULL,                -- when the item was found (user-entered)
     location           TEXT,
     status             lost_found_status NOT NULL DEFAULT 'open',
@@ -1031,6 +1039,28 @@ CREATE TABLE listing_watches (
     PRIMARY KEY (user_id, listing_id)
 );
 CREATE INDEX idx_listing_watches_listing ON listing_watches(listing_id);
+
+-- Rev 26: bookmarked Buy & Sell listings (guests keep theirs on the device, not here).
+CREATE TABLE listing_bookmarks (
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    listing_id UUID NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, listing_id)
+);
+CREATE INDEX idx_listing_bookmarks_listing ON listing_bookmarks(listing_id);
+
+-- Rev 26: a blocked seller's request to be unblocked. Approving it resets their strikes (app/seller_trust.py).
+CREATE TABLE seller_unblock_requests (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    seller_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    message         TEXT NOT NULL CHECK (char_length(btrim(message)) BETWEEN 1 AND 1000),
+    status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    resolved_by     UUID REFERENCES users(id) ON DELETE SET NULL,
+    resolved_at     TIMESTAMPTZ,
+    resolution_note TEXT CHECK (char_length(resolution_note) <= 1000),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX uq_unblock_requests_one_pending ON seller_unblock_requests(seller_id) WHERE status = 'pending';
 
 -- ============================================================================
 -- PHASE 2 — COMMUNITY / CULTURE EVENTS  (FR-18, FR-19, FR-20, FR-21, FR-22)

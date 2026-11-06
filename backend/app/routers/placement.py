@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field, field_validator
 from ..auth import CurrentUser, current_user, optional_user
 from ..common import (Page, PageParams, UserRef, forbidden, like_pattern, make_page, not_found, page_params,
                       search_text, set_clause, text)
+from ..company_matching import group_similar, suggested_name
 from ..db import get_conn
 from ..permissions import close_reports, is_module_moderator, log_moderation
 from ..placement_csv import parse_companies, parse_schedule
@@ -264,6 +265,22 @@ class RejectedRowOut(BaseModel):
     reason: str
 
 
+class SimilarCompany(BaseModel):
+    id: UUID
+    name: str
+    records: int = Field(description="Placement records (selected students) under this name")
+
+
+class SimilarCompanyGroup(BaseModel):
+    suggested_name: str = Field(description="A clean name for the merged company; the reviewer can change it")
+    companies: list[SimilarCompany]
+
+
+class CompanyMerge(BaseModel):
+    company_ids: list[UUID] = Field(min_length=2, max_length=50)
+    name: str = Field(min_length=1, max_length=200, description="The merged company's name")
+
+
 class ImportResult(BaseModel):
     id: UUID
     placement_year: int
@@ -274,6 +291,9 @@ class ImportResult(BaseModel):
     companies_created: list[str]
     rejected_rows: list[RejectedRowOut]
     imported_at: datetime
+    similar_companies: list[SimilarCompanyGroup] = Field(
+        default_factory=list, description="Companies in this sheet that are probably the same as another company "
+                                          "(e.g. \"Accenture [Mock Assessment]\" and \"Accenture\"), for review")
 
 
 class CsvImportResult(BaseModel):
@@ -890,7 +910,8 @@ async def import_sheet(body: ImportRequest, user: CurrentUser = Depends(current_
                         rows_created=created, rows_updated=updated, rows_rejected=len(rejected),
                         companies_created=new_companies,
                         rejected_rows=[RejectedRowOut(line=r.line, reason=r.reason) for r in rejected],
-                        imported_at=imported_at)
+                        imported_at=imported_at,
+                        similar_companies=await _similar_groups(conn, set(company_ids.values())))
 
 
 @router.get("/placement/imports", response_model=Page[ImportSummary],
@@ -1230,3 +1251,94 @@ async def import_roles(body: RolesImportRequest, user: CurrentUser = Depends(cur
     return CsvImportResult(rows_total=len(rows) + len(rejected), rows_created=created, rows_updated=updated,
                            rows_rejected=len(rejected), companies_created=new_companies,
                            rejected_rows=[RejectedRowOut(line=r.line, reason=r.reason) for r in rejected])
+
+
+# ---------------------------------------------------------------- similar companies and merging them
+async def _similar_groups(conn: asyncpg.Connection, touching: set[UUID] | None = None) -> list[SimilarCompanyGroup]:
+    """Groups of companies whose names are probably one company (app/company_matching.py). With [touching],
+    only the groups that include one of those companies."""
+    rows = await conn.fetch(
+        """SELECT c.id, c.name, (SELECT count(*) FROM placement_records r WHERE r.company_id = c.id)::int AS records
+           FROM companies c ORDER BY records DESC, c.name""")
+    by_id = {r["id"]: r for r in rows}
+    groups = []
+    for ids in group_similar({r["id"]: r["name"] for r in rows}):
+        if touching is not None and not touching.intersection(ids):
+            continue
+        members = [by_id[i] for i in ids]
+        groups.append(SimilarCompanyGroup(
+            suggested_name=suggested_name([m["name"] for m in members], [m["records"] for m in members]),
+            companies=[SimilarCompany(id=m["id"], name=m["name"], records=m["records"]) for m in members]))
+    return groups
+
+
+@router.get("/placement/companies/similar", response_model=list[SimilarCompanyGroup],
+            summary="Companies that are probably the same one under different names (Placement Hub moderator or admin)")
+async def similar_companies(user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
+    await _require_moderator(conn, user)
+    return await _similar_groups(conn)
+
+
+@router.post("/placement/companies/merge", response_model=CompanyDetail,
+             summary="Merge companies into one under a common name (Placement Hub moderator or admin)")
+async def merge_companies(body: CompanyMerge, user: CurrentUser = Depends(current_user),
+                          conn: asyncpg.Connection = Depends(get_conn)):
+    """Everything under the other companies (placement records, roles, dates, interviews, seniors, forum
+    threads) moves to one of them, which takes [name]; the others are deleted. A role or senior that the kept
+    company already has (same role and season, or same email and year) is dropped rather than duplicated."""
+    await _require_moderator(conn, user)
+    ids = list(dict.fromkeys(body.company_ids))
+    name = " ".join(body.name.split())
+    if len(ids) < 2:
+        raise HTTPException(422, "Pick at least two different companies to merge.")
+    async with conn.transaction():
+        rows = await conn.fetch(
+            """SELECT c.id, c.name, c.name_key, (SELECT count(*) FROM placement_records r WHERE r.company_id = c.id) AS n
+               FROM companies c WHERE c.id = ANY($1::uuid[]) FOR UPDATE""", ids)
+        if len(rows) != len(ids):
+            raise not_found("Company")
+        clash = await conn.fetchval(
+            """SELECT name FROM companies WHERE name_key = lower(regexp_replace(btrim($1), '\\s+', ' ', 'g'))
+               AND NOT (id = ANY($2::uuid[]))""", name, ids)
+        if clash:
+            raise HTTPException(409, f"Another company is already called “{clash}”. Include it in the merge or "
+                                     "pick a different name.")
+        # Keep the one already called [name], else the one with the most records.
+        name_key = " ".join(name.lower().split())
+        keep = next((r for r in rows if r["name_key"] == name_key), max(rows, key=lambda r: r["n"]))["id"]
+        others = [r["id"] for r in rows if r["id"] != keep]
+        for other in others:
+            await conn.execute(
+                """DELETE FROM job_descriptions j WHERE j.company_id = $1 AND EXISTS (
+                       SELECT 1 FROM job_descriptions k WHERE k.company_id = $2 AND lower(k.role_title) = lower(j.role_title)
+                       AND coalesce(k.placement_year, 0) = coalesce(j.placement_year, 0) AND k.job_type = j.job_type)""",
+                other, keep)
+            await conn.execute(
+                """DELETE FROM company_seniors s WHERE s.company_id = $1 AND EXISTS (
+                       SELECT 1 FROM company_seniors k WHERE k.company_id = $2 AND k.email = s.email
+                       AND k.placement_year = s.placement_year)""", other, keep)
+            for table in ("job_descriptions", "ppt_info", "interview_experiences", "placement_records",
+                          "company_seniors"):
+                await conn.execute(f"UPDATE {table} SET company_id = $2 WHERE company_id = $1", other, keep)
+            forum = await conn.fetchval("SELECT id FROM forums WHERE company_id = $1", other)
+            if forum is not None:
+                kept_forum = await conn.fetchval("SELECT id FROM forums WHERE company_id = $1", keep)
+                if kept_forum is None:
+                    await conn.execute("UPDATE forums SET company_id = $2 WHERE id = $1", forum, keep)
+                else:
+                    await conn.execute("UPDATE threads SET forum_id = $2 WHERE forum_id = $1", forum, kept_forum)
+                    await conn.execute("DELETE FROM forums WHERE id = $1", forum)
+        await conn.execute(
+            """UPDATE companies k SET
+                   description = coalesce(k.description, (SELECT o.description FROM companies o
+                                 WHERE o.id = ANY($2::uuid[]) AND o.description IS NOT NULL LIMIT 1)),
+                   website = coalesce(k.website, (SELECT o.website FROM companies o
+                             WHERE o.id = ANY($2::uuid[]) AND o.website IS NOT NULL LIMIT 1)),
+                   industry = coalesce(k.industry, (SELECT o.industry FROM companies o
+                              WHERE o.id = ANY($2::uuid[]) AND o.industry IS NOT NULL LIMIT 1))
+               WHERE k.id = $1""", keep, others)
+        await conn.execute("DELETE FROM companies WHERE id = ANY($1::uuid[])", others)
+        await conn.execute("UPDATE companies SET name = $2 WHERE id = $1", keep, name)
+        await log_moderation(conn, user.id, "merge_companies", "company", keep,
+                             f"{', '.join(r['name'] for r in rows)} -> {name}")
+    return await _company_detail(conn, keep, user)

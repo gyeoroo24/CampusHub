@@ -431,3 +431,70 @@ async def my_watched_listings(page: PageParams = Depends(page_params), user: Cur
         ORDER BY w.created_at DESC LIMIT $2 OFFSET $3""", user.id, page.limit + 1, page.offset)
     tags = await seller_trust_tags(conn, {r["seller_id"] for r in rows})
     return make_page(rows, page, lambda r: _summary(r, tags.get(r["seller_id"])))
+
+
+# ---------------------------------------------------------------- bookmarks
+# Signed-in people's bookmarks live here; a guest's stay on their device and are looked up with
+# POST /listings/lookup, then copied to the account with POST /me/bookmarked-listings once they sign in.
+_VISIBLE = "l.deleted_at IS NULL AND l.hidden_by_strike_id IS NULL AND l.held_for_review_at IS NULL"
+MAX_BOOKMARK_IDS = 200
+
+
+class ListingIds(BaseModel):
+    listing_ids: list[UUID] = Field(max_length=MAX_BOOKMARK_IDS)
+
+
+@router.post("/lookup", response_model=list[ListingSummary],
+             summary="Listings with these ids, in the same order; gone or hidden ones are left out (guests allowed)")
+async def lookup_listings(body: ListingIds, conn: asyncpg.Connection = Depends(get_conn)):
+    rows = await conn.fetch(_SELECT + f" WHERE l.id = ANY($1::uuid[]) AND {_VISIBLE}", body.listing_ids)
+    tags = await seller_trust_tags(conn, {r["seller_id"] for r in rows})
+    by_id = {r["id"]: r for r in rows}
+    return [_summary(by_id[i], tags.get(by_id[i]["seller_id"])) for i in dict.fromkeys(body.listing_ids) if i in by_id]
+
+
+@router.put("/{listing_id}/bookmark", status_code=204, summary="Bookmark a listing")
+async def bookmark_listing(listing_id: UUID, user: CurrentUser = Depends(current_user),
+                           conn: asyncpg.Connection = Depends(get_conn)):
+    if not await conn.fetchval(f"SELECT EXISTS (SELECT 1 FROM listings l WHERE l.id = $1 AND {_VISIBLE})", listing_id):
+        raise not_found("Listing")
+    await conn.execute("INSERT INTO listing_bookmarks (user_id, listing_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                       user.id, listing_id)
+    return Response(status_code=204)
+
+
+@router.delete("/{listing_id}/bookmark", status_code=204, summary="Remove a bookmark")
+async def unbookmark_listing(listing_id: UUID, user: CurrentUser = Depends(current_user),
+                             conn: asyncpg.Connection = Depends(get_conn)):
+    await conn.execute("DELETE FROM listing_bookmarks WHERE user_id = $1 AND listing_id = $2", user.id, listing_id)
+    return Response(status_code=204)
+
+
+@watch_router.get("/me/bookmarked-listings", response_model=Page[ListingSummary],
+                  summary="Listings I bookmarked, most recent first")
+async def my_bookmarked_listings(page: PageParams = Depends(page_params), user: CurrentUser = Depends(current_user),
+                                 conn: asyncpg.Connection = Depends(get_conn)):
+    rows = await conn.fetch(
+        _SELECT + f""" JOIN listing_bookmarks b ON b.listing_id = l.id AND b.user_id = $1
+        WHERE {_VISIBLE} ORDER BY b.created_at DESC LIMIT $2 OFFSET $3""", user.id, page.limit + 1, page.offset)
+    tags = await seller_trust_tags(conn, {r["seller_id"] for r in rows})
+    return make_page(rows, page, lambda r: _summary(r, tags.get(r["seller_id"])))
+
+
+@watch_router.get("/me/bookmarked-listing-ids", response_model=list[UUID],
+                  summary="Ids of every listing I bookmarked (to mark them in a feed)")
+async def my_bookmarked_listing_ids(user: CurrentUser = Depends(current_user),
+                                    conn: asyncpg.Connection = Depends(get_conn)):
+    return [r["listing_id"] for r in await conn.fetch(
+        "SELECT listing_id FROM listing_bookmarks WHERE user_id = $1 ORDER BY created_at DESC", user.id)]
+
+
+@watch_router.post("/me/bookmarked-listings", status_code=204,
+                   summary="Add several bookmarks at once, e.g. the ones made as a guest before signing in")
+async def add_bookmarks(body: ListingIds, user: CurrentUser = Depends(current_user),
+                        conn: asyncpg.Connection = Depends(get_conn)):
+    await conn.execute(
+        f"""INSERT INTO listing_bookmarks (user_id, listing_id)
+            SELECT $1, l.id FROM listings l WHERE l.id = ANY($2::uuid[]) AND {_VISIBLE}
+            ON CONFLICT DO NOTHING""", user.id, body.listing_ids)
+    return Response(status_code=204)

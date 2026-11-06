@@ -215,3 +215,68 @@ async def lift_suspension(conn: asyncpg.Connection, seller_id: UUID, notify: boo
         await create_notifications(conn, [seller_id], "moderation_action", {
             "message": "A moderator lifted your posting suspension: you can post listings again.",
             "kind": "suspension_lifted"})
+
+
+async def is_blocked(conn: asyncpg.Connection, seller_id: UUID) -> bool:
+    """Blocked = the "Blocked Seller" tag or a posting suspension (a moderator can lift one without the other)."""
+    return (await seller_trust_tags(conn, {seller_id})).get(seller_id) == "blocked" \
+        or await is_listing_suspended(conn, seller_id)
+
+
+async def file_unblock_request(conn: asyncpg.Connection, seller_id: UUID, message: str) -> UUID | None:
+    """Records a blocked seller's request to be unblocked and tells the Buy & Sell moderators. None if they
+    already have one waiting."""
+    request_id = await conn.fetchval(
+        """INSERT INTO seller_unblock_requests (seller_id, message) VALUES ($1, $2)
+           ON CONFLICT (seller_id) WHERE status = 'pending' DO NOTHING RETURNING id""", seller_id, message)
+    if request_id is None:
+        return None
+    name = await conn.fetchval("SELECT name FROM users WHERE id = $1", seller_id)
+    moderators = [m for m in await _buy_sell_moderators(conn) if m != seller_id]
+    await create_notifications(conn, moderators, "moderation_action", {
+        "message": f'{name} asked to be unblocked as a seller: "{_short(message, 120)}". '
+                   "Review it in Moderation → Unblock requests.",
+        "request_id": str(request_id), "kind": "unblock_request"})
+    return request_id
+
+
+async def unblock_seller(conn: asyncpg.Connection, seller_id: UUID, moderator_id: UUID,
+                         note: str | None) -> int:
+    """Unblocks a seller: every strike that still counts is reset (excluded, so the tag goes), any pending
+    appeal on them is closed, the posting suspension is lifted and a waiting unblock request is approved. The
+    listings those strikes hid stay hidden. The seller is told. Returns how many strikes were reset."""
+    reset = await conn.fetch(
+        """UPDATE seller_strikes SET excluded = true, excluded_by = $2, excluded_at = now(),
+                  excluded_note = coalesce($3, 'Reset when the seller was unblocked'),
+                  appeal_resolved_at = CASE WHEN appeal_message IS NOT NULL AND appeal_resolved_at IS NULL
+                                            THEN now() ELSE appeal_resolved_at END,
+                  appeal_resolved_by = CASE WHEN appeal_message IS NOT NULL AND appeal_resolved_at IS NULL
+                                            THEN $2 ELSE appeal_resolved_by END
+           WHERE seller_id = $1 AND excluded = false RETURNING id""", seller_id, moderator_id, note)
+    await lift_suspension(conn, seller_id, notify=False)
+    await conn.execute(
+        """UPDATE seller_unblock_requests SET status = 'approved', resolved_by = $2, resolved_at = now(),
+                  resolution_note = $3
+           WHERE seller_id = $1 AND status = 'pending'""", seller_id, moderator_id, note)
+    await create_notifications(conn, [seller_id], "moderation_action", {
+        "message": "A moderator unblocked you as a seller and reset your strikes: you can post listings again."
+                   + (f" Note: {note}" if note else ""),
+        "kind": "seller_unblocked"})
+    return len(reset)
+
+
+async def reject_unblock_request(conn: asyncpg.Connection, request_id: UUID, moderator_id: UUID,
+                                 note: str | None) -> UUID | None:
+    """Declines a waiting unblock request; the seller stays blocked and is told. Returns the seller_id, or
+    None if there's no waiting request with this id."""
+    seller_id = await conn.fetchval(
+        """UPDATE seller_unblock_requests SET status = 'rejected', resolved_by = $2, resolved_at = now(),
+                  resolution_note = $3
+           WHERE id = $1 AND status = 'pending' RETURNING seller_id""", request_id, moderator_id, note)
+    if seller_id is None:
+        return None
+    await create_notifications(conn, [seller_id], "moderation_action", {
+        "message": "A moderator reviewed your request to be unblocked and kept the block."
+                   + (f" Note: {note}" if note else ""),
+        "request_id": str(request_id), "kind": "unblock_request_rejected"})
+    return seller_id

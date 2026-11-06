@@ -1,6 +1,6 @@
 """Seller trust score (future plan §1.5): a seller's own strike history and appeal, and the Buy &
 Sell moderator side (the contested-appeal queue, overturn a strike, reject an appeal, lift a
-suspension).
+suspension, unblock a seller and the unblock-request queue).
 
 The "Negative Seller" / "Blocked Seller" tag, and whether a listing is hidden pending review, are
 computed from this data and shown on listings - see app.seller_trust.seller_trust_tags and
@@ -22,6 +22,7 @@ from ..db import get_conn
 from ..permissions import is_module_moderator, log_moderation
 from ..seller_trust import (AppealStatus, Severity, Tag, appeal_status, file_appeal, is_listing_suspended, lift_suspension,
                             overturn_strike, seller_trust_tags)
+from ..seller_trust import file_unblock_request, is_blocked, reject_unblock_request, unblock_seller
 from ..seller_trust import reject_appeal as _reject_appeal
 
 router = APIRouter(tags=["Seller trust score"])
@@ -178,4 +179,149 @@ async def lift_suspension_endpoint(seller_id: UUID, user: CurrentUser = Depends(
     async with conn.transaction():
         await lift_suspension(conn, seller_id)
         await log_moderation(conn, user.id, "lift_listing_suspension", "user", seller_id)
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------- unblocking a seller
+UnblockStatus = Literal["pending", "approved", "rejected"]
+
+
+class UnblockRequestIn(BaseModel):
+    message: text(1000)
+
+
+class UnblockDecisionIn(BaseModel):
+    note: text(1000, min_length=0) | None = None
+
+
+class UnblockRequestOut(BaseModel):
+    id: UUID
+    seller: UserRef
+    message: str
+    status: UnblockStatus
+    resolution_note: str | None
+    created_at: datetime
+    resolved_at: datetime | None
+
+
+class BlockedSeller(BaseModel):
+    seller: UserRef
+    email: str
+    strikes: int = Field(description="Strikes that still count")
+    severe: int
+    suspended: bool
+    suspended_reason: str | None
+    pending_request: UnblockRequestOut | None
+
+
+_REQUEST_SELECT = """
+SELECT r.id, r.seller_id, u.name AS seller_name, r.message, r.status, r.resolution_note, r.created_at, r.resolved_at
+FROM seller_unblock_requests r JOIN users u ON u.id = r.seller_id
+"""
+
+
+def _request(r: asyncpg.Record) -> UnblockRequestOut:
+    return UnblockRequestOut(id=r["id"], seller=UserRef(id=r["seller_id"], name=r["seller_name"]),
+                             message=r["message"], status=r["status"], resolution_note=r["resolution_note"],
+                             created_at=r["created_at"], resolved_at=r["resolved_at"])
+
+
+@router.get("/me/seller-unblock-request", response_model=UnblockRequestOut | None,
+            summary="My latest request to be unblocked as a seller (null if I never asked)")
+async def my_unblock_request(user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
+    row = await conn.fetchrow(_REQUEST_SELECT + " WHERE r.seller_id = $1 ORDER BY r.created_at DESC LIMIT 1", user.id)
+    return _request(row) if row else None
+
+
+@router.post("/me/seller-unblock-request", response_model=UnblockRequestOut, status_code=201,
+             summary="Ask the Buy & Sell moderators to unblock me as a seller (only while blocked)")
+async def request_unblock(body: UnblockRequestIn, user: CurrentUser = Depends(current_user),
+                          conn: asyncpg.Connection = Depends(get_conn)):
+    if not await is_blocked(conn, user.id):
+        raise HTTPException(409, "You aren't blocked as a seller.")
+    async with conn.transaction():
+        request_id = await file_unblock_request(conn, user.id, body.message)
+    if request_id is None:
+        raise HTTPException(409, "You already have a request waiting for a moderator.")
+    return _request(await conn.fetchrow(_REQUEST_SELECT + " WHERE r.id = $1", request_id))
+
+
+@router.get("/seller-unblock-requests", response_model=list[UnblockRequestOut],
+            summary="Moderator queue: requests to be unblocked (Buy & Sell moderator or admin)")
+async def list_unblock_requests(
+    status: Literal["pending", "resolved", "all"] = Query("pending"),
+    user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn),
+):
+    await _require_buy_sell_moderator(conn, user)
+    where = {"pending": "r.status = 'pending'", "resolved": "r.status <> 'pending'", "all": "true"}[status]
+    rows = await conn.fetch(_REQUEST_SELECT + f" WHERE {where} ORDER BY r.created_at DESC LIMIT 200")
+    return [_request(r) for r in rows]
+
+
+@router.get("/blocked-sellers", response_model=list[BlockedSeller],
+            summary="Sellers who are blocked right now, with any waiting unblock request (Buy & Sell moderator or admin)")
+async def list_blocked_sellers(user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
+    await _require_buy_sell_moderator(conn, user)
+    rows = await conn.fetch(
+        """SELECT u.id, u.name, u.email::text AS email, u.listing_suspended_at IS NOT NULL AS suspended,
+                  u.listing_suspended_reason,
+                  count(s.id) FILTER (WHERE s.excluded = false)::int AS strikes,
+                  count(s.id) FILTER (WHERE s.excluded = false AND s.severity = 'severe')::int AS severe
+           FROM users u LEFT JOIN seller_strikes s ON s.seller_id = u.id
+           WHERE u.listing_suspended_at IS NOT NULL
+              OR EXISTS (SELECT 1 FROM seller_strikes x WHERE x.seller_id = u.id AND x.excluded = false)
+           GROUP BY u.id ORDER BY u.listing_suspended_at DESC NULLS LAST, u.name""")
+    tags = await seller_trust_tags(conn, {r["id"] for r in rows})
+    blocked = [r for r in rows if r["suspended"] or tags.get(r["id"]) == "blocked"]
+    pending = {r["seller_id"]: _request(r) for r in await conn.fetch(
+        _REQUEST_SELECT + " WHERE r.status = 'pending' AND r.seller_id = ANY($1::uuid[])", [r["id"] for r in blocked])}
+    return [BlockedSeller(seller=UserRef(id=r["id"], name=r["name"]), email=r["email"], strikes=r["strikes"],
+                          severe=r["severe"], suspended=r["suspended"], suspended_reason=r["listing_suspended_reason"],
+                          pending_request=pending.get(r["id"])) for r in blocked]
+
+
+@router.post("/users/{seller_id}/unblock", status_code=204,
+             summary="Unblock a seller: reset their strikes, lift the posting suspension and approve any waiting "
+                     "request; they are notified (Buy & Sell moderator or admin)")
+async def unblock(seller_id: UUID, body: UnblockDecisionIn | None = None, user: CurrentUser = Depends(current_user),
+                  conn: asyncpg.Connection = Depends(get_conn)):
+    await _require_buy_sell_moderator(conn, user)
+    if not await conn.fetchval("SELECT EXISTS (SELECT 1 FROM users WHERE id = $1)", seller_id):
+        raise not_found("User")
+    note = body.note if body else None
+    async with conn.transaction():
+        reset = await unblock_seller(conn, seller_id, user.id, note)
+        await log_moderation(conn, user.id, "unblock_seller", "user", seller_id,
+                             f"{reset} strikes reset" + (f": {note}" if note else ""))
+    return Response(status_code=204)
+
+
+@router.post("/seller-unblock-requests/{request_id}/approve", status_code=204,
+             summary="Approve an unblock request: same as unblocking the seller (Buy & Sell moderator or admin)")
+async def approve_unblock_request(request_id: UUID, body: UnblockDecisionIn | None = None,
+                                  user: CurrentUser = Depends(current_user),
+                                  conn: asyncpg.Connection = Depends(get_conn)):
+    await _require_buy_sell_moderator(conn, user)
+    seller_id = await conn.fetchval(
+        "SELECT seller_id FROM seller_unblock_requests WHERE id = $1 AND status = 'pending'", request_id)
+    if seller_id is None:
+        raise not_found("Waiting unblock request")
+    note = body.note if body else None
+    async with conn.transaction():
+        reset = await unblock_seller(conn, seller_id, user.id, note)
+        await log_moderation(conn, user.id, "approve_unblock_request", "seller_unblock_request", request_id,
+                             f"{reset} strikes reset" + (f": {note}" if note else ""))
+    return Response(status_code=204)
+
+
+@router.post("/seller-unblock-requests/{request_id}/reject", status_code=204,
+             summary="Decline an unblock request: the seller stays blocked and is told (Buy & Sell moderator or admin)")
+async def reject_unblock(request_id: UUID, body: UnblockDecisionIn | None = None,
+                         user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
+    await _require_buy_sell_moderator(conn, user)
+    note = body.note if body else None
+    async with conn.transaction():
+        if await reject_unblock_request(conn, request_id, user.id, note) is None:
+            raise not_found("Waiting unblock request")
+        await log_moderation(conn, user.id, "reject_unblock_request", "seller_unblock_request", request_id, note)
     return Response(status_code=204)
