@@ -19,6 +19,7 @@ import '../providers/buy_sell_providers.dart';
 import 'widgets/buy_sell_grid_card.dart';
 import 'widgets/buy_sell_list_card.dart';
 import 'widgets/create_listing_dialog.dart';
+import 'widgets/listing_bookmarks.dart';
 
 class BuySellFeedScreen extends ConsumerStatefulWidget {
   const BuySellFeedScreen({super.key});
@@ -239,6 +240,7 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
     final filter = ref.watch(buySellFilterProvider);
     final section = ref.watch(buySellSectionProvider);
     final isWanted = section == BuySellSection.wanted;
+    final bookmarkCount = ref.watch(listingBookmarksProvider).length;
     final showTrustedExchangeBanner = ref.watch(showTrustedExchangeBannerProvider);
     final categoriesAsync = ref.watch(buySellCategoriesProvider);
     final categoryPills = <({String name, String? icon})>[
@@ -400,6 +402,17 @@ class _BuySellFeedScreenState extends ConsumerState<BuySellFeedScreen> {
                         ),
                       ),
                       if (!isWanted) ...[
+                        IconButton(
+                          iconSize: 20,
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Bookmarks',
+                          icon: Badge(
+                            isLabelVisible: bookmarkCount > 0,
+                            label: Text('$bookmarkCount'),
+                            child: const Icon(Icons.bookmarks_outlined),
+                          ),
+                          onPressed: () => showDialog(context: context, builder: (_) => const BookmarkedListingsDialog()),
+                        ),
                         IconButton(
                           iconSize: 20,
                           visualDensity: VisualDensity.compact,

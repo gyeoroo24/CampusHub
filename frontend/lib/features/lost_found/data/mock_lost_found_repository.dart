@@ -565,7 +565,7 @@ class MockLostFoundRepository implements ILostFoundRepository {
   }
 
   @override
-  Future<void> deleteCategory(int id, {int? moveTo}) async {
+  Future<void> deleteCategory(int id, {int? moveTo, bool deletePosts = false}) async {
     _categories.removeWhere((c) => c.id == id);
   }
 

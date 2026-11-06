@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/widgets/deactivated_seller_badge.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'listing_bookmarks.dart';
 import '../../../../core/utils/contact_actions.dart';
 import '../../../../core/utils/error_text.dart';
 import '../../../../core/utils/date_time_formatter.dart';
@@ -325,6 +326,8 @@ class BuySellDetailDialog extends ConsumerWidget {
                           label: const Text('Message seller'),
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      SizedBox(width: double.infinity, child: ListingBookmarkButton(listingId: item.id)),
                       // Price watch (future plan §2.3), signed-in buyers only.
                       if (currentUser != null && !currentUser.isGuest) ...[
                         const SizedBox(height: 8),

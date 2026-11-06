@@ -35,3 +35,24 @@ final moderatedSellerStrikesProvider = FutureProvider<List<SellerStrike>>((ref) 
   final filter = ref.watch(sellerStrikesFilterProvider);
   return ref.watch(sellerTrustRepositoryProvider).fetchStrikesForModeration(appealStatus: filter);
 });
+
+/// My latest request to be unblocked (null for guests, in mock mode, or if I never asked).
+final myUnblockRequestProvider = FutureProvider<UnblockRequest?>((ref) async {
+  if (ref.watch(isGuestUserProvider)) return null;
+  return ref.watch(sellerTrustRepositoryProvider).fetchMyUnblockRequest();
+});
+
+/// Unblock requests a moderator has already decided, newest first (empty unless you can moderate Buy & Sell).
+/// Waiting ones show with their seller in [blockedSellersProvider].
+final resolvedUnblockRequestsProvider = FutureProvider<List<UnblockRequest>>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null || !user.canModerateBuySell) return [];
+  return ref.watch(sellerTrustRepositoryProvider).fetchUnblockRequests(status: 'resolved');
+});
+
+/// Sellers blocked right now (empty unless you can moderate Buy & Sell).
+final blockedSellersProvider = FutureProvider<List<BlockedSeller>>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null || !user.canModerateBuySell) return [];
+  return ref.watch(sellerTrustRepositoryProvider).fetchBlockedSellers();
+});

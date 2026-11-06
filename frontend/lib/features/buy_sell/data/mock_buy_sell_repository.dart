@@ -673,6 +673,27 @@ class MockBuySellRepository implements IBuySellRepository {
   Future<List<ListingItem>> fetchWatchedListings() async =>
       _mockData.where((it) => _watched.contains(it.id)).map((it) => it.copyWith(watching: true)).toList();
 
+  final Set<String> _bookmarked = {};
+
+  @override
+  Future<void> setBookmarked(String id, bool bookmarked) async {
+    bookmarked ? _bookmarked.add(id) : _bookmarked.remove(id);
+  }
+
+  @override
+  Future<Set<String>> fetchBookmarkedIds() async => {..._bookmarked};
+
+  @override
+  Future<List<ListingItem>> fetchBookmarkedListings() async => lookupListings(_bookmarked.toList().reversed.toList());
+
+  @override
+  Future<List<ListingItem>> lookupListings(List<String> ids) async => [
+        for (final id in ids) ..._mockData.where((it) => it.id == id),
+      ];
+
+  @override
+  Future<void> importBookmarks(List<String> ids) async => _bookmarked.addAll(ids);
+
   @override
   Future<CategoryRef> createCategory(String name) async {
     final clean = name.trim();
@@ -698,7 +719,7 @@ class MockBuySellRepository implements IBuySellRepository {
   }
 
   @override
-  Future<void> deleteCategory(int id, {int? moveTo}) async {
+  Future<void> deleteCategory(int id, {int? moveTo, bool deletePosts = false}) async {
     _categories.removeWhere((c) => c.id == id);
   }
 }

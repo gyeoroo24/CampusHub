@@ -65,6 +65,21 @@ abstract class IBuySellRepository {
   /// Listings the signed-in user is watching, most recently watched first.
   Future<List<ListingItem>> fetchWatchedListings();
 
+  /// Bookmark or un-bookmark a listing for the signed-in user.
+  Future<void> setBookmarked(String id, bool bookmarked);
+
+  /// Ids of every listing the signed-in user bookmarked.
+  Future<Set<String>> fetchBookmarkedIds();
+
+  /// Listings the signed-in user bookmarked, most recent first.
+  Future<List<ListingItem>> fetchBookmarkedListings();
+
+  /// Listings with these ids, in order, leaving out ones that are gone (a guest's on-device bookmarks).
+  Future<List<ListingItem>> lookupListings(List<String> ids);
+
+  /// Copies bookmarks made as a guest to the account that just signed in.
+  Future<void> importBookmarks(List<String> ids);
+
   /// Updates status to available, reserved, or sold (seller only, FR-5).
   Future<void> updateStatus(String id, ListingStatus newStatus);
 
@@ -91,7 +106,7 @@ abstract class IBuySellRepository {
 
   /// Deletes a category (that module's moderators and the admin). If posts or saved searches use
   /// it, they are moved to [moveTo]; without one the server answers 409 saying how many use it.
-  Future<void> deleteCategory(int id, {int? moveTo});
+  Future<void> deleteCategory(int id, {int? moveTo, bool deletePosts = false});
 }
 
 /// Backward compatibility alias for existing code

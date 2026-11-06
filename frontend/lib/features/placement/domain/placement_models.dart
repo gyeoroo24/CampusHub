@@ -397,6 +397,9 @@ class ImportResult {
   final List<String> companiesCreated;
   final List<RejectedSheetRow> rejectedRows;
 
+  /// Companies in this sheet that are probably the same as another one, for the moderator to review.
+  final List<SimilarCompanyGroup> similarCompanies;
+
   const ImportResult({
     required this.placementYear,
     required this.rowsTotal,
@@ -405,6 +408,7 @@ class ImportResult {
     required this.rowsRejected,
     this.companiesCreated = const [],
     this.rejectedRows = const [],
+    this.similarCompanies = const [],
   });
 
   factory ImportResult.fromJson(Map<String, dynamic> json) => ImportResult(
@@ -417,6 +421,33 @@ class ImportResult {
         rejectedRows: _list(json['rejected_rows'])
             .map((r) => RejectedSheetRow(_int(r['line']), r['reason']?.toString() ?? ''))
             .toList(),
+        similarCompanies: _list(json['similar_companies']).map(SimilarCompanyGroup.fromJson).toList(),
+      );
+}
+
+/// One company in a [SimilarCompanyGroup], with how many placement records it has.
+class SimilarCompany {
+  final String id;
+  final String name;
+  final int records;
+
+  const SimilarCompany({required this.id, required this.name, required this.records});
+
+  factory SimilarCompany.fromJson(Map<String, dynamic> j) =>
+      SimilarCompany(id: '${j['id']}', name: j['name']?.toString() ?? '', records: _int(j['records']));
+}
+
+/// Companies that are probably one company under different names ("Accenture", "Accenture [Mock
+/// Assessment]"), with a clean name to merge them under.
+class SimilarCompanyGroup {
+  final String suggestedName;
+  final List<SimilarCompany> companies;
+
+  const SimilarCompanyGroup({required this.suggestedName, required this.companies});
+
+  factory SimilarCompanyGroup.fromJson(Map<String, dynamic> j) => SimilarCompanyGroup(
+        suggestedName: j['suggested_name']?.toString() ?? '',
+        companies: _list(j['companies']).map(SimilarCompany.fromJson).toList(),
       );
 }
 

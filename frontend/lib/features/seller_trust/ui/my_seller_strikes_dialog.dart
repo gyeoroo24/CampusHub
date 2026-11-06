@@ -8,6 +8,7 @@ import '../providers/seller_trust_providers.dart';
 
 /// My seller-trust strike history (future plan §1.5): what got removed, why, whether the listing
 /// is currently hidden pending review, and a way to contest a strike that hasn't been appealed yet.
+/// A blocked seller can also ask the moderators to unblock them.
 class MySellerStrikesDialog extends ConsumerWidget {
   const MySellerStrikesDialog({super.key});
 
@@ -31,7 +32,11 @@ class MySellerStrikesDialog extends ConsumerWidget {
         contentPadding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
         content: SizedBox(
           width: 480,
-          child: strikesAsync.when(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (summary != null && (summary.suspended || summary.tag == 'blocked')) const _UnblockRequestCard(),
+              Flexible(child: strikesAsync.when(
             loading: () => const SizedBox(height: 120, child: Center(child: CircularProgressIndicator())),
             error: (e, _) => Padding(padding: const EdgeInsets.all(12), child: Text(errorText(e))),
             data: (strikes) {
@@ -52,10 +57,139 @@ class MySellerStrikesDialog extends ConsumerWidget {
                 itemBuilder: (context, i) => _StrikeTile(strike: strikes[i]),
               );
             },
+          )),
+            ],
           ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown while I'm blocked: ask the Buy & Sell moderators to unblock me, or see where my request stands.
+class _UnblockRequestCard extends ConsumerStatefulWidget {
+  const _UnblockRequestCard();
+
+  @override
+  ConsumerState<_UnblockRequestCard> createState() => _UnblockRequestCardState();
+}
+
+class _UnblockRequestCardState extends ConsumerState<_UnblockRequestCard> {
+  final _messageController = TextEditingController();
+  bool _isWriting = false;
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final message = _messageController.text.trim();
+    if (message.isEmpty) return;
+    setState(() => _isSubmitting = true);
+    try {
+      await ref.read(sellerTrustRepositoryProvider).requestUnblock(message);
+      ref.invalidate(myUnblockRequestProvider);
+      if (mounted) setState(() => _isWriting = false);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorText(e)), backgroundColor: Colors.red.shade700),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final request = ref.watch(myUnblockRequestProvider).valueOrNull;
+    final pending = request != null && request.isPending;
+    final rejected = request != null && request.status == 'rejected';
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.errorContainer.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.error.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.block_rounded, size: 18, color: theme.colorScheme.error),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('You are blocked as a seller', style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (pending)
+            Text(
+              'You asked to be unblocked on ${DateTimeFormatter.shortDate(request.createdAt)}. A Buy & Sell '
+              'moderator will review it; you\'ll get a notification either way.',
+              style: TextStyle(fontSize: 12.5, color: theme.hintColor, height: 1.35),
+            )
+          else ...[
+            Text(
+              rejected
+                  ? 'A moderator kept the block on your last request'
+                      '${request.resolutionNote != null ? ': "${request.resolutionNote}"' : ''}. You can ask again.'
+                  : 'You can\'t post listings right now. If you think this should change, ask the Buy & Sell '
+                      'moderators to unblock you. If they agree, your strikes are reset.',
+              style: TextStyle(fontSize: 12.5, color: theme.hintColor, height: 1.35),
+            ),
+            const SizedBox(height: 8),
+            if (_isWriting) ...[
+              TextField(
+                controller: _messageController,
+                maxLength: 1000,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  hintText: 'Why should you be unblocked?',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: _isSubmitting ? null : () => setState(() => _isWriting = false),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 6),
+                  FilledButton(
+                    onPressed: _isSubmitting ? null : _submit,
+                    child: _isSubmitting
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Send request'),
+                  ),
+                ],
+              ),
+            ] else
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: () => setState(() => _isWriting = true),
+                  icon: const Icon(Icons.lock_open_rounded, size: 16),
+                  label: const Text('Request unblocking'),
+                ),
+              ),
+          ],
         ],
       ),
     );

@@ -72,6 +72,12 @@ abstract class IPlacementRepository {
   /// Add roles with their compensation (Company, Position, Batch/Year, CTC, Base, Job type, Skills...).
   /// [placementYear] is the season for rows without a Batch/Year column.
   Future<CsvImportResult> importRoles(String csv, {int? placementYear});
+
+  /// Groups of companies that are probably the same one under different names.
+  Future<List<SimilarCompanyGroup>> fetchSimilarCompanies();
+
+  /// Merges [companyIds] into one company called [name]; everything under them moves to it.
+  Future<void> mergeCompanies(List<String> companyIds, String name);
 }
 
 List<Map<String, dynamic>> _items(dynamic data) =>
@@ -253,6 +259,19 @@ class ApiPlacementRepository implements IPlacementRepository {
   @override
   Future<void> deletePpt(String pptId) async {
     await apiClient.delete(ApiEndpoints.ppt(pptId));
+  }
+
+  @override
+  Future<List<SimilarCompanyGroup>> fetchSimilarCompanies() async {
+    final response = await apiClient.get(ApiEndpoints.similarCompanies);
+    return (response.data as List<dynamic>)
+        .map((j) => SimilarCompanyGroup.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<void> mergeCompanies(List<String> companyIds, String name) async {
+    await apiClient.post(ApiEndpoints.mergeCompanies, data: {'company_ids': companyIds, 'name': name});
   }
 
   @override
@@ -512,4 +531,10 @@ class MockPlacementRepository implements IPlacementRepository {
 
   @override
   Future<CsvImportResult> importRoles(String csv, {int? placementYear}) => importCompanies(csv);
+
+  @override
+  Future<List<SimilarCompanyGroup>> fetchSimilarCompanies() async => const [];
+
+  @override
+  Future<void> mergeCompanies(List<String> companyIds, String name) async {}
 }

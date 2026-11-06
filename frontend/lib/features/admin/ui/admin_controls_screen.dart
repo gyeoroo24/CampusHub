@@ -26,9 +26,13 @@ import '../../wanted/ui/wanted_detail_dialog.dart';
 import '../domain/content_report.dart';
 import '../providers/admin_providers.dart';
 import 'moderator_grants_panel.dart';
+import 'unblock_requests_panel.dart';
 
 /// The panel's tabs. The admin sees all of them; a moderator sees only the ones they can use.
-enum _PanelTab { moderators, users, reports, sellerStrikes, categories, campusServices }
+/// The category-delete dialog's "Delete its posts too" choice (category ids are positive).
+const _deletePostsChoice = -1;
+
+enum _PanelTab { moderators, users, reports, sellerStrikes, unblockRequests, categories, campusServices }
 
 class AdminControlsScreen extends ConsumerStatefulWidget {
   final int? initialTab;
@@ -85,6 +89,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
     return [
       _PanelTab.reports,
       if (user.canModerateBuySell) _PanelTab.sellerStrikes,
+      if (user.canModerateBuySell) _PanelTab.unblockRequests,
       if (user.canModerateBuySell || user.canModerateLostFound) _PanelTab.categories,
       if (user.isDepartmentModerator) _PanelTab.moderators,
     ];
@@ -271,6 +276,8 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
         _PanelTab.users => const Tab(icon: Icon(Icons.manage_accounts_outlined, size: 18), text: 'User Accounts'),
         _PanelTab.reports => const Tab(icon: Icon(Icons.report_gmailerrorred_rounded, size: 18), text: 'Reports Queue'),
         _PanelTab.sellerStrikes => const Tab(icon: Icon(Icons.gavel_outlined, size: 18), text: 'Seller Strikes'),
+        _PanelTab.unblockRequests =>
+          const Tab(icon: Icon(Icons.lock_open_rounded, size: 18), text: 'Unblock Requests'),
         _PanelTab.categories => const Tab(icon: Icon(Icons.category_outlined, size: 18), text: 'Categories'),
         _PanelTab.campusServices =>
           const Tab(icon: Icon(Icons.health_and_safety_outlined, size: 18), text: 'Campus Services'),
@@ -281,6 +288,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
         _PanelTab.users => _buildUsersTab(isDark, theme),
         _PanelTab.reports => _buildReportsQueueTab(isDark, theme),
         _PanelTab.sellerStrikes => _buildSellerStrikesTab(isDark, theme),
+        _PanelTab.unblockRequests => const UnblockRequestsPanel(),
         _PanelTab.categories => _buildCategoriesTab(isDark, theme),
         _PanelTab.campusServices => CampusServicesAdminPanel(isAdmin: user.isAdmin),
       };
@@ -1335,9 +1343,10 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
             const <CategoryRef>[])
         .where((c) => c.id != cat.id)
         .toList();
+    // _deletePostsChoice in place of a category id means "delete its posts with it".
     int? moveTo;
     // Posts can't be left without a category: if any use this one, the server asks where to move
-    // them (409), so the moderator picks a destination here up front.
+    // them or whether to delete them (409), so the moderator picks here up front.
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -1350,23 +1359,36 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('"$cleanName" will be removed from ${isBuySell ? 'Buy & Sell' : 'Lost & Found'} categories. '
-                    'If any posts or saved searches use it, they are moved to the category you pick below.'),
+                    'If any posts or saved searches use it, they are moved to the category you pick below, '
+                    'or deleted with it.'),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<int?>(
                   initialValue: moveTo,
                   menuMaxHeight: 320,
                   decoration: const InputDecoration(
-                    labelText: 'Move its posts to',
+                    labelText: 'Its posts',
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
                   items: [
                     const DropdownMenuItem<int?>(value: null, child: Text('— Only if nothing uses it —')),
+                    DropdownMenuItem<int?>(
+                      value: _deletePostsChoice,
+                      child: Text('Delete its posts too', style: TextStyle(color: Colors.red.shade700)),
+                    ),
                     for (final c in others)
                       DropdownMenuItem<int?>(value: c.id, child: Text(CategoryEmojiHelper.cleanName(c.name))),
                   ],
                   onChanged: (v) => setDialogState(() => moveTo = v),
                 ),
+                if (moveTo == _deletePostsChoice) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Every post in "$cleanName" is removed and its owner is told. Saved searches for it are '
+                    'deleted. This can\'t be undone.',
+                    style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1384,17 +1406,21 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
 
     if (confirm == true) {
       try {
+        final deletePosts = moveTo == _deletePostsChoice;
+        final target = deletePosts ? null : moveTo;
         if (isBuySell) {
-          await ref.read(buySellRepositoryProvider).deleteCategory(cat.id, moveTo: moveTo);
+          await ref.read(buySellRepositoryProvider).deleteCategory(cat.id, moveTo: target, deletePosts: deletePosts);
           ref.invalidate(buySellCategoriesProvider);
         } else {
-          await ref.read(lostFoundRepositoryProvider).deleteCategory(cat.id, moveTo: moveTo);
+          await ref.read(lostFoundRepositoryProvider).deleteCategory(cat.id, moveTo: target, deletePosts: deletePosts);
           ref.invalidate(lostFoundCategoriesProvider);
         }
-        _showToast(moveTo == null
-            ? 'Deleted category "$cleanName".'
-            : 'Deleted "$cleanName" and moved its posts to '
-                '"${CategoryEmojiHelper.cleanName(others.firstWhere((c) => c.id == moveTo).name)}".');
+        _showToast(deletePosts
+            ? 'Deleted "$cleanName" and its posts.'
+            : target == null
+                ? 'Deleted category "$cleanName".'
+                : 'Deleted "$cleanName" and moved its posts to '
+                    '"${CategoryEmojiHelper.cleanName(others.firstWhere((c) => c.id == target).name)}".');
       } catch (e) {
         _showToast('Could not delete "$cleanName": ${errorText(e)}', isError: true);
       }

@@ -280,10 +280,10 @@ class ApiLostFoundRepository implements ILostFoundRepository {
   }
 
   @override
-  Future<void> deleteCategory(int id, {int? moveTo}) async {
+  Future<void> deleteCategory(int id, {int? moveTo, bool deletePosts = false}) async {
     await apiClient.delete(
       '${ApiEndpoints.lostFoundCategories}/$id',
-      queryParameters: {if (moveTo != null) 'move_to': moveTo},
+      queryParameters: {if (moveTo != null) 'move_to': moveTo, if (deletePosts) 'delete_posts': true},
     );
   }
 

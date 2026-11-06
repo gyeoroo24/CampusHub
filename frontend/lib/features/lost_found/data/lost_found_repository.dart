@@ -83,7 +83,7 @@ abstract class ILostFoundRepository {
 
   /// Deletes a category (that module's moderators and the admin). If posts or saved searches use
   /// it, they are moved to [moveTo]; without one the server answers 409 saying how many use it.
-  Future<void> deleteCategory(int id, {int? moveTo});
+  Future<void> deleteCategory(int id, {int? moveTo, bool deletePosts = false});
 
   /// Possible matches for one of the signed-in user's own reports, best first
   /// (`GET /{kind}-reports/{id}/matches`). Owners and admins only.

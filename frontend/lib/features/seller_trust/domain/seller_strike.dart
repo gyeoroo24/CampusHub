@@ -100,3 +100,69 @@ class StrikeSummary {
         suspended: j['suspended'] == true,
       );
 }
+
+/// A blocked seller's request to be unblocked: 'pending', 'approved' or 'rejected'.
+class UnblockRequest {
+  final String id;
+  final UserRef seller;
+  final String message;
+  final String status;
+  final String? resolutionNote;
+  final DateTime createdAt;
+  final DateTime? resolvedAt;
+
+  const UnblockRequest({
+    required this.id,
+    required this.seller,
+    required this.message,
+    required this.status,
+    this.resolutionNote,
+    required this.createdAt,
+    this.resolvedAt,
+  });
+
+  bool get isPending => status == 'pending';
+
+  factory UnblockRequest.fromJson(Map<String, dynamic> j) => UnblockRequest(
+        id: j['id'].toString(),
+        seller: UserRef.fromJson(j['seller'] as Map<String, dynamic>),
+        message: j['message']?.toString() ?? '',
+        status: j['status']?.toString() ?? 'pending',
+        resolutionNote: j['resolution_note']?.toString(),
+        createdAt: DateTime.tryParse(j['created_at']?.toString() ?? '') ?? DateTime.now(),
+        resolvedAt: j['resolved_at'] != null ? DateTime.tryParse(j['resolved_at'].toString()) : null,
+      );
+}
+
+/// A seller who is blocked right now (GET /blocked-sellers), with any request they've made.
+class BlockedSeller {
+  final UserRef seller;
+  final String email;
+  final int strikes;
+  final int severe;
+  final bool suspended;
+  final String? suspendedReason;
+  final UnblockRequest? pendingRequest;
+
+  const BlockedSeller({
+    required this.seller,
+    required this.email,
+    required this.strikes,
+    required this.severe,
+    required this.suspended,
+    this.suspendedReason,
+    this.pendingRequest,
+  });
+
+  factory BlockedSeller.fromJson(Map<String, dynamic> j) => BlockedSeller(
+        seller: UserRef.fromJson(j['seller'] as Map<String, dynamic>),
+        email: j['email']?.toString() ?? '',
+        strikes: (j['strikes'] as num?)?.toInt() ?? 0,
+        severe: (j['severe'] as num?)?.toInt() ?? 0,
+        suspended: j['suspended'] == true,
+        suspendedReason: j['suspended_reason']?.toString(),
+        pendingRequest: j['pending_request'] == null
+            ? null
+            : UnblockRequest.fromJson(j['pending_request'] as Map<String, dynamic>),
+      );
+}

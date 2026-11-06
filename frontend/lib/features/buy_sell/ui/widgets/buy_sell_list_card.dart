@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'listing_bookmarks.dart';
 
 import '../../../../core/widgets/deactivated_seller_badge.dart';
 import '../../../../core/utils/date_time_formatter.dart';
@@ -130,6 +131,11 @@ class _BuySellListCardState extends State<BuySellListCard> {
                                       child: NoPhotoPlaceholder(compact: true),
                                     ),
                             ),
+                          ),
+                          Positioned(
+                            bottom: 4,
+                            right: 4,
+                            child: ListingBookmarkIcon(listingId: item.id, size: 14),
                           ),
                           Positioned(
                             top: 5,

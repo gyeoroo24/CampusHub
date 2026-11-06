@@ -178,6 +178,43 @@ class ApiBuySellRepository implements IBuySellRepository {
   }
 
   @override
+  Future<void> setBookmarked(String id, bool bookmarked) async {
+    if (bookmarked) {
+      await apiClient.put(ApiEndpoints.listingBookmark(id));
+    } else {
+      await apiClient.delete(ApiEndpoints.listingBookmark(id));
+    }
+  }
+
+  @override
+  Future<Set<String>> fetchBookmarkedIds() async {
+    final response = await apiClient.get(ApiEndpoints.myBookmarkedListingIds);
+    return {for (final id in response.data as List<dynamic>) id.toString()};
+  }
+
+  @override
+  Future<List<ListingItem>> fetchBookmarkedListings() async {
+    final response = await apiClient.get(ApiEndpoints.myBookmarkedListings, queryParameters: {'limit': 50});
+    final items = (response.data as Map<String, dynamic>)['items'] as List? ?? const [];
+    return items.map((j) => BuySellListingDto.fromJson(j as Map<String, dynamic>).toDomain()).toList();
+  }
+
+  @override
+  Future<List<ListingItem>> lookupListings(List<String> ids) async {
+    if (ids.isEmpty) return const [];
+    final response = await apiClient.post(ApiEndpoints.listingsLookup, data: {'listing_ids': ids.take(200).toList()});
+    return (response.data as List<dynamic>)
+        .map((j) => BuySellListingDto.fromJson(j as Map<String, dynamic>).toDomain())
+        .toList();
+  }
+
+  @override
+  Future<void> importBookmarks(List<String> ids) async {
+    if (ids.isEmpty) return;
+    await apiClient.post(ApiEndpoints.myBookmarkedListings, data: {'listing_ids': ids.take(200).toList()});
+  }
+
+  @override
   Future<void> updateStatus(String id, ListingStatus newStatus) async {
     await apiClient.patch(
       ApiEndpoints.listingStatus(id),
@@ -247,10 +284,10 @@ class ApiBuySellRepository implements IBuySellRepository {
   }
 
   @override
-  Future<void> deleteCategory(int id, {int? moveTo}) async {
+  Future<void> deleteCategory(int id, {int? moveTo, bool deletePosts = false}) async {
     await apiClient.delete(
       '${ApiEndpoints.buySellCategories}/$id',
-      queryParameters: {if (moveTo != null) 'move_to': moveTo},
+      queryParameters: {if (moveTo != null) 'move_to': moveTo, if (deletePosts) 'delete_posts': true},
     );
   }
 

@@ -9,6 +9,7 @@ import '../../auth/providers/auth_providers.dart';
 import '../../auth/ui/auth_dialog.dart';
 import '../domain/placement_models.dart';
 import '../providers/placement_providers.dart';
+import 'similar_companies_review.dart';
 import 'placement_dialogs.dart';
 
 /// Placement Hub page (FR-15, FR-16, FR-17), in tabs:
@@ -121,6 +122,7 @@ Future<void> _runManageAction(BuildContext context, WidgetRef ref, String action
     builder: (_) => switch (action) {
       'company' => const AddOrImportDialog(kind: CsvImportKind.companies),
       'date' => const AddOrImportDialog(kind: CsvImportKind.schedule),
+      'similar' => const SimilarCompaniesDialog(),
       _ => const ImportSheetDialog(),
     },
   );
@@ -138,6 +140,8 @@ const _manageActions = [
       'Pre-placement talks, online tests and interviews, by hand or from a schedule file.'),
   ('sheet', Icons.table_view_rounded, 'Import placement sheet',
       'Selected students (hiring numbers, seniors), or roles with their compensation and skills.'),
+  ('similar', Icons.merge_rounded, 'Club duplicate companies',
+      'Find companies listed under slightly different names (e.g. "Accenture [Mock Assessment]") and merge them.'),
 ];
 
 class _ManageTab extends ConsumerWidget {

@@ -37,6 +37,10 @@ class ApiEndpoints {
   static String listingStatus(String id) => '$version/listings/$id/status';
   static String listingWatch(String id) => '$version/listings/$id/watch';
   static const String myWatchedListings = '$version/me/watched-listings';
+  static String listingBookmark(String id) => '$version/listings/$id/bookmark';
+  static const String listingsLookup = '$version/listings/lookup';
+  static const String myBookmarkedListings = '$version/me/bookmarked-listings';
+  static const String myBookmarkedListingIds = '$version/me/bookmarked-listing-ids';
   static String listingPhotos(String id) => '$version/listings/$id/photos';
 
   // --- Seller trust score (future plan §1.5) ---
@@ -47,6 +51,12 @@ class ApiEndpoints {
   static String overturnSellerStrike(String id) => '$version/seller-strikes/$id/overturn';
   static String rejectSellerStrikeAppeal(String id) => '$version/seller-strikes/$id/reject-appeal';
   static String liftListingSuspension(String sellerId) => '$version/users/$sellerId/lift-listing-suspension';
+  static const String mySellerUnblockRequest = '$version/me/seller-unblock-request';
+  static const String sellerUnblockRequests = '$version/seller-unblock-requests';
+  static String approveUnblockRequest(String id) => '$version/seller-unblock-requests/$id/approve';
+  static String rejectUnblockRequest(String id) => '$version/seller-unblock-requests/$id/reject';
+  static const String blockedSellers = '$version/blocked-sellers';
+  static String unblockSeller(String sellerId) => '$version/users/$sellerId/unblock';
 
   // --- Lost & Found (FR-7, FR-8, FR-9, FR-10) ---
   // Lost Reports
@@ -150,6 +160,8 @@ class ApiEndpoints {
   static const String placementPpts = '$version/placement/ppts';
   static const String placementImports = '$version/placement/imports';
   static const String placementCompaniesImport = '$version/placement/companies/import';
+  static const String similarCompanies = '$version/placement/companies/similar';
+  static const String mergeCompanies = '$version/placement/companies/merge';
   static const String placementScheduleImport = '$version/placement/schedule/import';
   static const String placementRolesImport = '$version/placement/roles/import';
 

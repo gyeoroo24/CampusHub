@@ -4,6 +4,7 @@ import '../../../core/utils/date_time_formatter.dart';
 import '../../../core/utils/error_text.dart';
 import '../../../core/utils/text_file_picker.dart';
 import '../domain/placement_models.dart';
+import 'similar_companies_review.dart';
 import '../providers/placement_providers.dart';
 
 /// Shared frame for the Placement Hub forms: a title, the fields, and Cancel / Save. [onSave] throws to
@@ -477,6 +478,10 @@ class _ImportSheetDialogState extends ConsumerState<ImportSheetDialog> {
   ImportResult? _result;
   CsvImportResult? _rolesResult;
 
+  /// After a sheet import: reviewing the companies that look like the same one (null = not yet / not needed).
+  bool _reviewing = false;
+  int? _merged;
+
   /// What the sheet holds: selected students (hiring numbers), or roles with their compensation.
   bool _roles = false;
   bool _rolesChosen = false;
@@ -543,8 +548,16 @@ class _ImportSheetDialogState extends ConsumerState<ImportSheetDialog> {
       content: SizedBox(
         width: 620,
         child: SingleChildScrollView(
-          child: result != null
-              ? _ImportSummary(result: result)
+          child: result != null && _reviewing
+              ? SimilarCompaniesReview(
+                  groups: result.similarCompanies,
+                  onDone: (merged) => setState(() {
+                    _reviewing = false;
+                    _merged = merged;
+                  }),
+                )
+              : result != null
+              ? _ImportSummary(result: result, merged: _merged)
               : rolesResult != null
                   ? _CsvSummary(result: rolesResult)
               : Column(
@@ -610,7 +623,19 @@ class _ImportSheetDialogState extends ConsumerState<ImportSheetDialog> {
                 ),
         ),
       ),
-      actions: done
+      actions: _reviewing
+          ? null
+          : result != null && result.similarCompanies.isNotEmpty && _merged == null
+          ? [
+              TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Skip review')),
+              FilledButton.icon(
+                onPressed: () => setState(() => _reviewing = true),
+                icon: const Icon(Icons.merge_rounded, size: 16),
+                label: Text('Review ${result.similarCompanies.length} similar compan'
+                    '${result.similarCompanies.length == 1 ? 'y' : 'ies'}'),
+              ),
+            ]
+          : done
           ? [FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Done'))]
           : [
               TextButton(onPressed: _busy ? null : () => Navigator.pop(context, false), child: const Text('Cancel')),
@@ -629,7 +654,10 @@ class _ImportSheetDialogState extends ConsumerState<ImportSheetDialog> {
 class _ImportSummary extends StatelessWidget {
   final ImportResult result;
 
-  const _ImportSummary({required this.result});
+  /// Groups merged in the review after the import (null if there was none yet).
+  final int? merged;
+
+  const _ImportSummary({required this.result, this.merged});
 
   @override
   Widget build(BuildContext context) {
@@ -663,6 +691,36 @@ class _ImportSummary extends StatelessWidget {
         if (result.companiesCreated.isNotEmpty) ...[
           const SizedBox(height: 12),
           Text('New companies: ${result.companiesCreated.join(', ')}', style: const TextStyle(fontSize: 13)),
+        ],
+        if (result.similarCompanies.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Icon(merged == null ? Icons.merge_rounded : Icons.check_circle_outline_rounded,
+                    size: 18, color: Colors.amber.shade900),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    merged == null
+                        ? '${result.similarCompanies.length} group${result.similarCompanies.length == 1 ? '' : 's'} of '
+                            'companies look like the same company under different names, e.g. '
+                            '${result.similarCompanies.first.companies.map((c) => '"${c.name}"').take(3).join(', ')}. '
+                            'Review them to club them together.'
+                        : merged == 0
+                            ? 'Similar companies were kept as they are.'
+                            : 'Merged $merged group${merged == 1 ? '' : 's'} of similar companies.',
+                    style: const TextStyle(fontSize: 12.5),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
         if (result.rejectedRows.isNotEmpty) ...[
           const SizedBox(height: 12),

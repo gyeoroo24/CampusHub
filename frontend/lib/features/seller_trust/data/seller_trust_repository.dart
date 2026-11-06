@@ -1,9 +1,10 @@
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/models/user_ref.dart';
 import '../domain/seller_strike.dart';
 
 /// Seller trust score (future plan §1.5): a seller's own strike history and appeal, and the
-/// Buy & Sell moderator side (the contested-appeal queue, overturn, reject, lift a suspension).
+/// Buy & Sell moderator side (the contested-appeal queue, overturn, reject, lift a suspension, unblock).
 abstract class ISellerTrustRepository {
   /// Strikes against me, newest first.
   Future<List<SellerStrike>> fetchMyStrikes();
@@ -27,6 +28,25 @@ abstract class ISellerTrustRepository {
 
   /// Lifts a seller's posting suspension without overturning any strike.
   Future<void> liftListingSuspension(String sellerId);
+
+  /// My latest request to be unblocked, or null if I never asked.
+  Future<UnblockRequest?> fetchMyUnblockRequest();
+
+  /// Asks the Buy & Sell moderators to unblock me (only while blocked).
+  Future<UnblockRequest> requestUnblock(String message);
+
+  /// Moderator queue of unblock requests: 'pending' (default), 'resolved' or 'all'.
+  Future<List<UnblockRequest>> fetchUnblockRequests({String status = 'pending'});
+
+  /// Sellers blocked right now.
+  Future<List<BlockedSeller>> fetchBlockedSellers();
+
+  /// Unblocks a seller: resets their strikes, lifts the suspension, approves a waiting request.
+  Future<void> unblockSeller(String sellerId, {String? note});
+
+  Future<void> approveUnblockRequest(String requestId, {String? note});
+
+  Future<void> rejectUnblockRequest(String requestId, {String? note});
 }
 
 class ApiSellerTrustRepository implements ISellerTrustRepository {
@@ -81,6 +101,52 @@ class ApiSellerTrustRepository implements ISellerTrustRepository {
   Future<void> liftListingSuspension(String sellerId) async {
     await apiClient.post(ApiEndpoints.liftListingSuspension(sellerId));
   }
+
+  Map<String, dynamic> _note(String? note) => {if (note != null && note.isNotEmpty) 'note': note};
+
+  @override
+  Future<UnblockRequest?> fetchMyUnblockRequest() async {
+    final response = await apiClient.get(ApiEndpoints.mySellerUnblockRequest);
+    final data = response.data;
+    return data is Map<String, dynamic> ? UnblockRequest.fromJson(data) : null;
+  }
+
+  @override
+  Future<UnblockRequest> requestUnblock(String message) async {
+    final response = await apiClient.post(ApiEndpoints.mySellerUnblockRequest, data: {'message': message});
+    return UnblockRequest.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  @override
+  Future<List<UnblockRequest>> fetchUnblockRequests({String status = 'pending'}) async {
+    final response = await apiClient.get(ApiEndpoints.sellerUnblockRequests, queryParameters: {'status': status});
+    return (response.data as List<dynamic>)
+        .map((j) => UnblockRequest.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<List<BlockedSeller>> fetchBlockedSellers() async {
+    final response = await apiClient.get(ApiEndpoints.blockedSellers);
+    return (response.data as List<dynamic>)
+        .map((j) => BlockedSeller.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<void> unblockSeller(String sellerId, {String? note}) async {
+    await apiClient.post(ApiEndpoints.unblockSeller(sellerId), data: _note(note));
+  }
+
+  @override
+  Future<void> approveUnblockRequest(String requestId, {String? note}) async {
+    await apiClient.post(ApiEndpoints.approveUnblockRequest(requestId), data: _note(note));
+  }
+
+  @override
+  Future<void> rejectUnblockRequest(String requestId, {String? note}) async {
+    await apiClient.post(ApiEndpoints.rejectUnblockRequest(requestId), data: _note(note));
+  }
 }
 
 /// Local-only mock: no seller trust data in mock mode (no backend model behind it).
@@ -118,4 +184,27 @@ class MockSellerTrustRepository implements ISellerTrustRepository {
 
   @override
   Future<void> liftListingSuspension(String sellerId) async {}
+
+  @override
+  Future<UnblockRequest?> fetchMyUnblockRequest() async => null;
+
+  @override
+  Future<UnblockRequest> requestUnblock(String message) async => UnblockRequest(
+      id: 'mock', seller: const UserRef(id: 'me', name: 'Me'), message: message, status: 'pending',
+      createdAt: DateTime.now());
+
+  @override
+  Future<List<UnblockRequest>> fetchUnblockRequests({String status = 'pending'}) async => const [];
+
+  @override
+  Future<List<BlockedSeller>> fetchBlockedSellers() async => const [];
+
+  @override
+  Future<void> unblockSeller(String sellerId, {String? note}) async {}
+
+  @override
+  Future<void> approveUnblockRequest(String requestId, {String? note}) async {}
+
+  @override
+  Future<void> rejectUnblockRequest(String requestId, {String? note}) async {}
 }
