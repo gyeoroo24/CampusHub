@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_endpoints.dart';
 import '../../../core/utils/error_text.dart';
@@ -41,9 +42,12 @@ class AdminControlsScreen extends ConsumerStatefulWidget {
 }
 
 class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
-  late final List<_PanelTab> _tabs;
+    with TickerProviderStateMixin {
+  // Rebuilt by _syncTabs whenever the signed-in user's tabs change. After a page refresh the session is
+  // restored asynchronously, so the first build can run with no user (or a stale one) and only later
+  // see the real roles.
+  TabController? _tabController;
+  List<_PanelTab> _tabs = const [];
 
   // User management form
   final _userEmailController = TextEditingController();
@@ -62,19 +66,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
     // screen falls back to "Access Restricted" instead of showing tools from a stale session.
     ref.read(authRepositoryProvider).getCurrentUser().then((_) {}, onError: (_) {});
     final user = ref.read(currentUserProvider);
-    final isAdmin = user?.isAdmin ?? false;
-    _tabs = isAdmin
-        ? _PanelTab.values
-        : [
-            _PanelTab.reports,
-            if (user != null && user.canModerateBuySell) _PanelTab.sellerStrikes,
-            if (user != null && (user.canModerateBuySell || user.canModerateLostFound)) _PanelTab.categories,
-            if (user != null && user.isDepartmentModerator) _PanelTab.moderators,
-          ];
-    final initial = (widget.initialTab != null && widget.initialTab! >= 0 && widget.initialTab! < _tabs.length)
-        ? widget.initialTab!
-        : 0;
-    _tabController = TabController(length: _tabs.length, vsync: this, initialIndex: initial);
+    _syncTabs(user);
 
     // Default category target according to user's permissions
     if (user != null && !user.isAdmin) {
@@ -87,9 +79,41 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
 
   }
 
+  static List<_PanelTab> _tabsFor(User? user) {
+    if (user == null) return const [];
+    if (user.isAdmin) return _PanelTab.values;
+    return [
+      _PanelTab.reports,
+      if (user.canModerateBuySell) _PanelTab.sellerStrikes,
+      if (user.canModerateBuySell || user.canModerateLostFound) _PanelTab.categories,
+      if (user.isDepartmentModerator) _PanelTab.moderators,
+    ];
+  }
+
+  /// Makes _tabs and _tabController match [user]. The first set of tabs honours the route's ?tab=;
+  /// later changes keep the selected tab if it's still there, else go to the first tab.
+  void _syncTabs(User? user) {
+    final tabs = _tabsFor(user);
+    if (_tabController != null && listEquals(tabs, _tabs)) return;
+    final previous = _tabController;
+    final selected = previous == null || _tabs.isEmpty ? null : _tabs[previous.index];
+    int initial;
+    if (selected != null && tabs.contains(selected)) {
+      initial = tabs.indexOf(selected);
+    } else if (selected == null && widget.initialTab != null && widget.initialTab! >= 0 &&
+        widget.initialTab! < tabs.length) {
+      initial = widget.initialTab!;
+    } else {
+      initial = 0;
+    }
+    _tabs = tabs;
+    _tabController = tabs.isEmpty ? null : TabController(length: tabs.length, vsync: this, initialIndex: initial);
+    if (previous != null) WidgetsBinding.instance.addPostFrameCallback((_) => previous.dispose());
+  }
+
   @override
   void dispose() {
-    _tabController.dispose();
+    _tabController?.dispose();
     _userEmailController.dispose();
     _categoryController.dispose();
     super.dispose();
@@ -100,6 +124,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final currentUser = ref.watch(currentUserProvider);
+    _syncTabs(currentUser);
 
     // Admins belong on /admin and moderators on /moderator: fix the address if it's the other one.
     final path = widget.path;
@@ -216,7 +241,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
           ],
         ),
         bottom: TabBar(
-          controller: _tabController,
+          controller: _tabController!,
           isScrollable: true,
           tabAlignment: TabAlignment.start,
           indicatorColor: theme.colorScheme.primary,
@@ -224,7 +249,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
         ),
       ),
       body: TabBarView(
-        controller: _tabController,
+        controller: _tabController!,
         children: [for (final t in _tabs) _viewFor(t, isDark, theme, currentUser)],
       ),
     );
@@ -235,7 +260,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
   // ---------------------------------------------------------------------------
   void _goTo(_PanelTab tab) {
     final index = _tabs.indexOf(tab);
-    if (index >= 0) _tabController.animateTo(index);
+    if (index >= 0) _tabController?.animateTo(index);
   }
 
   Tab _tabFor(_PanelTab tab, User user) => switch (tab) {
