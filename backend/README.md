@@ -1,13 +1,53 @@
-# CampusHub API
+# CampusHub API (backend)
 
-Backend for CampusHub, the IISc student community platform (DS252 Introduction to Cloud
-Computing, team Order of Phoenix). FastAPI + asyncpg on AWS Lambda (via Mangum), PostgreSQL
-on RDS, Cognito sign-in, S3 uploads. The same code runs on EC2 for the Lambda-vs-EC2 comparison.
+The FastAPI backend for CampusHub, the IISc student community platform (DS252 Introduction to Cloud
+Computing, team Order of Phoenix). FastAPI and asyncpg on PostgreSQL, Cognito sign-in, S3 uploads and an
+optional Redis cache.
 
-**Phase 1 is built:** sign-in and profiles, moderator roles, Buy & Sell, Lost & Found (with
-matching notifications), Academic Help (departments, courses, materials, feedback), forums,
-user reports and the moderation queue, notifications inbox and push-device registration.
-Interactive docs for every endpoint: `/docs` (Swagger) and `/redoc`.
+On this branch it runs on **EC2 instances in an Auto Scaling group** behind an Application Load Balancer
+and CloudFront. The same code runs as Lambda functions on the `fix/cloud-deploy-zip-and-routes` branch,
+for the Lambda-vs-EC2 comparison.
+
+**Modules:** sign-in and profiles, moderator roles, Buy & Sell and Wanted posts, Lost & Found (with
+matching), Academic Help (departments, courses, materials, feedback), forums, Placement Hub, Community
+Events, mess menus, seniors, reports and moderation, notifications, messaging and campus services.
+
+```
+app/
+├── main.py           FastAPI app (uvicorn on EC2; also exposes a Lambda handler)
+├── config.py         Settings (environment variables, prefix CAMPUSHUB_)
+├── db.py             asyncpg pool; database password from Secrets Manager
+├── cache.py          Redis cache-aside layer (no-op when Redis is not configured)
+├── auth.py           Cognito ID-token checks, dev sign-in, user creation
+├── routers/          One file per module (listings.py, lost_found.py, academic.py, events.py, ...)
+├── matching/         Lost & Found description and photo matching (ONNX)
+└── ...               Notifications, moderation, sentiment, OCR for mess menus, jobs
+db/                   schema.sql, reference-data.sql, migrations/0NN_*.sql
+lambdas/              cognito_pre_signup.py (IISc-only sign-up trigger)
+scripts/              Dummy data, model download, calibration and evaluation
+tests/                pytest suite
+Dockerfile*           Images for local or container deployments (not used by the Terraform here)
+```
+
+## Table of contents
+
+1. [Run it locally](#run-it-locally)
+   - [Dummy data and keeping the database](#dummy-data-and-keeping-the-database)
+   - [Upgrading an existing database](#upgrading-an-existing-database)
+   - [Lost & Found matching (optional locally)](#lost--found-matching-optional-locally)
+   - [Share it on your network](#share-it-on-your-network)
+2. [Tests](#tests)
+3. [How sign-in works](#how-sign-in-works)
+4. [Uploading photos and files](#uploading-photos-and-files)
+5. [Endpoints (all under `/api/v1`)](#endpoints-all-under-apiv1)
+6. [Configuration](#configuration)
+7. [Caching](#caching)
+8. [Deploying on AWS](#deploying-on-aws)
+   - [How an instance installs the backend](#how-an-instance-installs-the-backend)
+   - [Operating an instance](#operating-an-instance)
+   - [Database schema and migrations](#database-schema-and-migrations)
+   - [EC2-specific behaviour](#ec2-specific-behaviour)
+   - [Push notifications](#push-notifications)
 
 ## Run it locally
 
@@ -176,7 +216,7 @@ python -m app.jobs
 pytest
 ```
 
-The 78 tests use the real Postgres from docker-compose (database `campushub_test`; set
+The tests (more than 200) use the real Postgres from docker-compose (database `campushub_test`; set
 `CAMPUSHUB_TEST_DATABASE_URL` to use another) and a mocked S3. They cover the PRD
 acceptance criteria that the backend owns, and `tests/test_review_fixes.py` covers each bug
 fixed after the 23 Oct 2026 review. Among them:
@@ -213,7 +253,8 @@ fixed after the 23 Oct 2026 review. Among them:
   request, so revoking a moderator takes effect on their very next call.
 - **Sign-up restriction:** attach `lambdas/cognito_pre_signup.py` as the user pool's
   *Pre sign-up* trigger, so only `…iisc.ac.in` addresses (including subdomains such as
-  `alum.iisc.ac.in`) can create accounts.
+  `alum.iisc.ac.in`) can create accounts. The Terraform `auth` module does **not** attach it, so
+  a deployed pool accepts any email at sign-up; the API still requires a verified email.
 
 ## Uploading photos and files
 
@@ -238,6 +279,10 @@ fixed after the 23 Oct 2026 review. Among them:
 
 Who can call each one: guest = no sign-in needed; user = signed in. For the fields each endpoint
 takes and returns, written for frontend design, see [docs/api-reference.md](../docs/api-reference.md).
+
+The tables below cover the original modules. Placement Hub, Community Events, mess menus, seniors and
+the other later routes are listed in `docs/api-reference.md` and in the live Swagger page (`/docs`,
+local runs only).
 
 **Users and roles**
 
@@ -377,69 +422,102 @@ New, edited or re-opened listings alert matching saved searches and Wanted posts
 | POST /campus-services | admin | Add (`url` and/or `phone` required) |
 | PATCH, DELETE /campus-services/{id} | admin | Edit, hide (`is_active: false`) or delete |
 
+## Configuration
+
+Every setting is an environment variable with the prefix `CAMPUSHUB_` (`app/config.py`). Templates:
+`.env.local.example` for your machine, `.env.example` for servers. The main ones:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CAMPUSHUB_DATABASE_URL` | local docker Postgres | Connection URL. On AWS it carries no password |
+| `CAMPUSHUB_DATABASE_SECRET_ARN` | unset | Secrets Manager secret with `username` and `password`, read at startup |
+| `CAMPUSHUB_DB_POOL_MAX_SIZE` | 2 in Lambda, 20 elsewhere | Connections per process. The EC2 user data sets it to `ec2_db_pool_max_size` (16) |
+| `CAMPUSHUB_AUTH_MODE` | `cognito` | `dev` enables header sign-in, which also needs `CAMPUSHUB_ALLOW_DEV_AUTH=true` |
+| `CAMPUSHUB_COGNITO_REGION`, `CAMPUSHUB_COGNITO_USER_POOL_ID`, `CAMPUSHUB_COGNITO_APP_CLIENT_ID` | | The pool whose ID tokens are accepted |
+| `CAMPUSHUB_S3_BUCKET`, `CAMPUSHUB_S3_REGION`, `CAMPUSHUB_S3_ENDPOINT_URL` | | Media bucket |
+| `CAMPUSHUB_REDIS_HOST`, `CAMPUSHUB_REDIS_PORT`, `CAMPUSHUB_REDIS_TLS` | unset, 6379, false | Redis cache. Unset host = no cache |
+| `CAMPUSHUB_REDIS_AUTH_TOKEN` | unset | Redis AUTH token. The EC2 user data reads it from Secrets Manager and writes it to `.env` |
+| `CAMPUSHUB_REDIS_DEFAULT_TTL_SECONDS` | 20 | Cache lifetime for list endpoints |
+| `CAMPUSHUB_CORS_ALLOW_ORIGINS` | `["*"]` | Allowed browser origins |
+| `CAMPUSHUB_MATCH_MODE` | `auto` | Lost & Found matching: `auto`, `lambda`, `inline` or `off` |
+| `CAMPUSHUB_SENTIMENT_BACKEND` | `auto` | Course-feedback sentiment: local model if present, otherwise a word list |
+| `CAMPUSHUB_AUTO_FLAG` | true | Automatic flagging of new posts |
+| `CAMPUSHUB_SMTP_*` | unset | Email for sign-in codes in dev sign-in |
+| `CAMPUSHUB_DOCS_ENABLED` | off in Lambda, on elsewhere | Swagger (`/docs`) and ReDoc. On, by default, on EC2 |
+
+## Caching
+
+`app/cache.py` is a cache-aside layer over Redis for the read-heavy list endpoints. It is used by
+`GET /listings`, `/lost-reports`, `/found-reports`, `/events`, `/departments`, `/courses` and `/messes`.
+
+- `get_or_set(key, ttl, fetch)` returns the cached JSON or runs `fetch()` and stores its result.
+- Keys come from `build_key(prefix, viewer_id, *filters)` and always include the viewer, so a response
+  with personal fields (for example `is_bookmarked`) is never served to someone else.
+- Any Redis error is logged once and treated as a miss. The API never fails because of Redis.
+- With no `CAMPUSHUB_REDIS_HOST`, every call is a pass-through. Local runs need nothing extra.
+
+On AWS, CloudFront also caches those paths, plus `/wanted`, `/event-tags`, `/companies` and
+`/placement/stats`, for 20 seconds in front of the API (see
+[terraform/README.md](../terraform/README.md#4-caching)).
+
 ## Deploying on AWS
 
-What still has to change before a real cloud deployment (temporary dev shortcuts, missing
-providers, new migrations) is listed in [docs/cloud-deployment-checklist.md](../docs/cloud-deployment-checklist.md).
+On this branch the backend runs on **EC2 instances in an Auto Scaling group** behind an Application
+Load Balancer. Terraform packages and deploys it; there is no Docker image. Follow the
+[root README](../README.md#5-deploy-to-aws) for the full deployment.
 
-- **Lambda:** build `Dockerfile.lambda` for one architecture and without attestations, push it
-  to ECR, and create the function from the image (handler `app.main.handler`, the same
-  architecture). Put it behind an API Gateway HTTP API.
+### How an instance installs the backend
 
-  ```bash
-  docker buildx build --platform linux/arm64 --provenance=false -f Dockerfile.lambda -t campushub-api .
-  ```
+1. `terraform apply` zips `backend/` and uploads it to the media bucket as `_deploy/backend.zip`.
+2. The launch template's user data (`terraform/modules/compute_ec2/user_data.sh.tftpl`) runs at boot on
+   Amazon Linux 2023:
+   - downloads `backend.zip`, and the optional Tesseract and ONNX model zips;
+   - reads the database password and Redis AUTH token from Secrets Manager;
+   - writes `/opt/campushub/backend/.env` (mode 600);
+   - creates a Python 3.11 virtual environment and installs `requirements.txt` (the full list,
+     including the ML packages);
+   - loads `db/schema.sql` and `db/reference-data.sql` if the database has no `users` table;
+   - starts `campushub.service`: `uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2`.
+3. The ALB health check calls `GET /api/v1/health` on port 8000.
 
-  - Use `.env.example` as the list of settings: `CAMPUSHUB_AUTH_MODE=cognito` plus the Cognito
-    pool and app-client ids, and `CAMPUSHUB_S3_BUCKET`.
-  - Point `CAMPUSHUB_DATABASE_URL` at the **RDS Proxy** endpoint without a password, and set
-    `CAMPUSHUB_DATABASE_SECRET_ARN` to the database credentials in Secrets Manager. Inside
-    Lambda the pool size defaults to 2 (the proxy does the real pooling) and `/docs` is off.
-  - Set `CAMPUSHUB_CORS_ALLOW_ORIGINS` to the web app's origin.
-  - On Lambda, push lookups and S3 cleanup (background tasks) finish before the response is
-    returned, so they add to its latency; pushes are capped at `CAMPUSHUB_PUSH_TIMEOUT_SECONDS`
-    (3 s). Keep this in mind when comparing Lambda with EC2, where they run after the response.
-- **Matcher:** a separate function from `Dockerfile.matcher` (handler
-  `app.matching.handler.handler`; arm64, 1536 MB, 30 s timeout, async retries 2). It holds
-  ONNX Runtime and the three models (~305 MB), so the API image stays small and starts fast.
+Running instances do not reload a new `backend.zip`. After changing backend code, apply and then start
+an instance refresh ([terraform/README.md](../terraform/README.md#3-the-ec2-tier)).
 
-  ```bash
-  docker buildx build --platform linux/arm64 --provenance=false -f Dockerfile.matcher -t campushub-matcher .
-  ```
+Keep every pin in `requirements.txt` installable on **Python 3.11**, the version the instances use.
+`numpy==2.5.4` once broke every instance because it had no 3.11 wheel, and the failure was hidden by
+`|| true` in the user data (see `docs/baseline-ec2-deployment-log.md`, A3).
 
-  - Give it the same database, S3 and VPC settings as the API. Its role needs `s3:GetObject`
-    on the bucket and `secretsmanager:GetSecretValue`.
-  - Set `CAMPUSHUB_MATCH_FUNCTION` on the API to the matcher's name, and allow the API role
-    `lambda:InvokeFunction` on it. The API then invokes it asynchronously after each change
-    (`{"kind", "report_id"}`). A Lambda in private subnets needs a `lambda` interface endpoint
-    or NAT for that call.
-  - Run `{"backfill": true}` once after migration 012, and optionally every 15 minutes from
-    EventBridge to retry anything a failed invocation left pending.
-  - Measured locally (one thread): ~7 ms per description and ~40 ms per photo; expect 2–3×
-    on Graviton, plus loading the models (~0.3 s) on a cold start.
-- **Purge job:** a second function from the same image with handler `app.jobs.purge_handler`,
-  run daily by an EventBridge schedule, deletes notifications older than 30 days.
-- **Network:** a Lambda in private subnets needs
-  - an S3 gateway endpoint, to check uploads;
-  - a NAT gateway or a `cognito-idp` interface endpoint, to download Cognito's signing keys
-    once per container.
-- **IAM:** the function role needs `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`,
-  `s3:PutObjectTagging` and `s3:ListBucket` on the bucket (without `ListBucket`, S3 answers
-  403 instead of 404 for a missing file), plus `secretsmanager:GetSecretValue` on the
-  database secret.
-- **S3 lifecycle rule:** expire objects tagged `state=pending` after 1 day, so uploads that
-  were never attached to a post are deleted.
-- **CloudFront:** set `CAMPUSHUB_CDN_BASE_URL`, `CAMPUSHUB_CDN_KEY_PAIR_ID` and
-  `CAMPUSHUB_CDN_PRIVATE_KEY` together. File links then point at CloudFront and are signed
-  with that key pair, so they expire like presigned S3 links (the app won't start with only
-  the URL). Register the public key in a CloudFront key group that the distribution trusts.
-- **EC2 baseline:** build `Dockerfile` (uvicorn) and run it with an `.env` made from
-  `.env.example` (never `.env.local.example`).
-- **Push notifications:** inbox rows are always written. `app/notify.py` currently only logs
-  pushes; replace `LogPushSender` with an SNS or FCM sender to deliver them.
+### Operating an instance
 
-## Not built yet (Phase 2)
+There is no SSH. Use SSM Session Manager:
 
-Placement Hub (companies, JDs, PPTs, interview experiences, bulk import, hiring stats),
-Community Events (tags, follows, bookmarks) and real push delivery. The
-database tables already exist in `db/schema.sql`.
+```bash
+aws ssm start-session --target <instance-id>
+sudo journalctl -u campushub -n 100       # app logs
+sudo systemctl restart campushub
+```
+
+Boot problems show up in `aws ec2 get-console-output --instance-id <id> --latest`.
+
+### Database schema and migrations
+
+The first instance creates the schema on an empty database. Newer `db/migrations/0NN_*.sql` files are
+not applied automatically: upload them to the media bucket's `_snapshots/` prefix and run them with the
+data-tools Lambda's `run_sql` action (see the [root README](../README.md#57-load-the-database)).
+
+### EC2-specific behaviour
+
+- Each uvicorn worker keeps its own pool (16 by default) and each instance runs 2 workers, so one
+  instance can open up to 32 connections. At `asg_max_size = 5` that is up to 160, above
+  `db.t4g.micro`'s roughly 100 to 110 `max_connections` (the comment in `terraform/variables.tf` counts
+  one pool per instance, 80). Lower the pool size or enable RDS Proxy before a heavy load test.
+- Background tasks (push lookups, S3 cleanup) run after the response is sent, unlike on Lambda.
+- `/docs` is on by default.
+- `app/otp.py` on this branch contains a `TEMP HARDCODED OTP` block that accepts `123456`. It affects
+  phone verification on a deployed stack. Remove it before deploying (see the
+  [root README troubleshooting](../README.md#12-troubleshooting)).
+
+### Push notifications
+
+Inbox rows are always written. `app/notify.py` only logs pushes; replace `LogPushSender` with an SNS or
+FCM sender to deliver them.
