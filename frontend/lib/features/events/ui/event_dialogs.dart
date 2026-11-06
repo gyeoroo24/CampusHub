@@ -286,7 +286,7 @@ class _UpdatesSection extends ConsumerWidget {
         Text(
           event.canEdit
               ? 'Tell attendees about delays, venue changes or anything they should know.'
-              : (event.isBookmarked
+              : (ref.watch(isEventBookmarkedProvider(event))
                   ? 'You\'ll get a notification when the organizers post an update.'
                   : 'Bookmark this event${isGuest ? ' (signed in)' : ''} to get a notification for each update.'),
           style: TextStyle(fontSize: 12, color: theme.hintColor),

@@ -228,8 +228,8 @@ async def get_listing(listing_id: UUID, viewer: CurrentUser | None = Depends(opt
 async def create_listing(body: ListingCreate, background: BackgroundTasks, user: CurrentUser = Depends(current_user),
                          conn: asyncpg.Connection = Depends(get_conn)):
     if await is_listing_suspended(conn, user.id):
-        raise forbidden("Your ability to post listings is suspended pending moderator review "
-                        "(seller trust score, future plan §1.5).")
+        raise forbidden("You're blocked from posting listings until a Buy & Sell moderator unblocks you. "
+                        "You can ask to be unblocked from your account menu → Seller strikes.")
     await verify_own_uploads(body.photo_keys, "listing_photo", user.id)
     async with conn.transaction():
         listing_id = await conn.fetchval(

@@ -41,6 +41,9 @@ class CourseGuideScreen extends ConsumerWidget {
       message: 'Follow a course to hear about new materials, feedback and forum posts.',
     );
     if (ok != true) return;
+    // Flip the button straight away; put it back if the server refuses.
+    final override = ref.read(courseFollowOverrideProvider(courseId).notifier);
+    override.state = !following;
     try {
       await ref.read(academicsRepositoryProvider).setFollowing(courseId, !following);
       ref.invalidate(courseProvider(courseId));
@@ -60,6 +63,7 @@ class CourseGuideScreen extends ConsumerWidget {
         );
       }
     } catch (e) {
+      override.state = following;
       if (context.mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(errorText(e)), behavior: SnackBarBehavior.floating));
@@ -72,7 +76,7 @@ class CourseGuideScreen extends ConsumerWidget {
     final guideAsync = ref.watch(survivalGuideProvider(courseId));
     final course = ref.watch(courseProvider(courseId)).valueOrNull;
     final code = course?.code ?? guideAsync.valueOrNull?.courseCode ?? 'this course';
-    final following = course?.following ?? false;
+    final following = ref.watch(courseFollowOverrideProvider(courseId)) ?? course?.following ?? false;
     final theme = Theme.of(context);
 
     return DefaultTabController(

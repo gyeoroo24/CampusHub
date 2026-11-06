@@ -42,6 +42,13 @@ final myCourseFeedbackProvider = FutureProvider.family<CourseFeedback?, String>(
   return ref.watch(academicsRepositoryProvider).fetchMyFeedback(courseId);
 });
 
+/// A follow / unfollow the viewer just made, shown at once while the server and the course lists catch up
+/// (null = nothing pending; use the course's own `following`). Reset when someone else signs in.
+final courseFollowOverrideProvider = StateProvider.family<bool?, String>((ref, courseId) {
+  ref.watch(currentUserProvider);
+  return null;
+});
+
 /// A course with its department's name, for search across departments.
 typedef CourseWithDepartment = ({Course course, String departmentName});
 

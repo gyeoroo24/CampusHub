@@ -583,10 +583,11 @@ class EventBookmarkButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final bookmarked = ref.watch(isEventBookmarkedProvider(event));
     return IconButton(
-      tooltip: event.isBookmarked ? 'Remove bookmark' : 'Bookmark',
-      icon: Icon(event.isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
-          color: onDark ? Colors.white : (event.isBookmarked ? Theme.of(context).colorScheme.primary : null)),
+      tooltip: bookmarked ? 'Remove bookmark' : 'Bookmark',
+      icon: Icon(bookmarked ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
+          color: onDark ? Colors.white : (bookmarked ? Theme.of(context).colorScheme.primary : null)),
       onPressed: () async {
         try {
           await toggleEventBookmark(ref, event);

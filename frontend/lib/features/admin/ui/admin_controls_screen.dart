@@ -925,7 +925,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
                   : 'Closing report as $action.'),
               if (needsSeverity) ...[
                 const SizedBox(height: 12),
-                const Text('Seller trust severity (future plan §1.5):',
+                const Text('Seller trust severity:',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                 const SizedBox(height: 6),
                 _SeverityOption(

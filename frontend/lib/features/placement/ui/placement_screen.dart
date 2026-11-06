@@ -356,6 +356,20 @@ class _CompaniesTabState extends ConsumerState<_CompaniesTab> {
     }
   }
 
+  /// Loading more waits for a scroll, but on a wide screen one page of companies can fit without
+  /// scrolling, which left only the first names (all starting with A) on screen. So after each page,
+  /// keep loading while the list doesn't fill the view.
+  void _fillViewport() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final page = ref.read(companiesPaginationProvider);
+      if (page.hasMore && !page.isLoadingMore && !page.isLoadingInitial && page.errorMessage == null &&
+          _scrollController.position.maxScrollExtent <= 250) {
+        ref.read(companiesPaginationProvider.notifier).loadMore();
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -366,6 +380,7 @@ class _CompaniesTabState extends ConsumerState<_CompaniesTab> {
     }
     final page = ref.watch(companiesPaginationProvider);
     final query = ref.watch(companySearchProvider);
+    _fillViewport();
     // Keep the box and the filter in step (the filter is cleared whenever the page opens).
     if (widget.search.text != query) widget.search.text = query;
 
@@ -470,6 +485,19 @@ class _CompaniesTabState extends ConsumerState<_CompaniesTab> {
                 child: Padding(
                   padding: EdgeInsets.only(bottom: 16),
                   child: Center(child: CircularProgressIndicator()),
+                ),
+              )
+            else if (page.hasMore)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Center(
+                    child: OutlinedButton.icon(
+                      onPressed: () => ref.read(companiesPaginationProvider.notifier).loadMore(),
+                      icon: const Icon(Icons.expand_more_rounded, size: 18),
+                      label: const Text('Show more companies'),
+                    ),
+                  ),
                 ),
               ),
           ],
