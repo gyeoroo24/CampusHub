@@ -1,0 +1,19 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+GET,[Placement] GET /api/v1/companies/{id},HTTPError('500 Server Error: Internal Server Error for url: [Placement] GET /api/v1/companies/{id}'),523,2026-11-06T14:07:11Z,2026-11-06T14:09:02Z
+GET,[Academic] GET /api/v1/courses/{id}/materials,HTTPError('500 Server Error: Internal Server Error for url: [Academic] GET /api/v1/courses/{id}/materials'),657,2026-11-06T14:07:12Z,2026-11-06T14:09:02Z
+GET,[Placement] GET /api/v1/interviews/{id},HTTPError('500 Server Error: Internal Server Error for url: [Placement] GET /api/v1/interviews/{id}'),46,2026-11-06T14:07:15Z,2026-11-06T14:09:00Z
+GET,[Placement] GET /api/v1/companies/{id}/seniors,HTTPError('500 Server Error: Internal Server Error for url: [Placement] GET /api/v1/companies/{id}/seniors'),555,2026-11-06T14:07:12Z,2026-11-06T14:09:03Z
+GET,[Academic] GET /api/v1/departments,HTTPError('500 Server Error: Internal Server Error for url: [Academic] GET /api/v1/departments'),989,2026-11-06T14:07:12Z,2026-11-06T14:09:03Z
+GET,[Placement] GET /api/v1/interviews?limit=15,HTTPError('500 Server Error: Internal Server Error for url: [Placement] GET /api/v1/interviews?limit=15'),772,2026-11-06T14:07:13Z,2026-11-06T14:09:02Z
+GET,[Academic] GET /api/v1/courses/{id}/forum,HTTPError('500 Server Error: Internal Server Error for url: [Academic] GET /api/v1/courses/{id}/forum'),635,2026-11-06T14:07:13Z,2026-11-06T14:09:03Z
+GET,[Placement] GET /api/v1/placement/ppts?limit=20,HTTPError('500 Server Error: Internal Server Error for url: [Placement] GET /api/v1/placement/ppts?limit=20'),685,2026-11-06T14:07:13Z,2026-11-06T14:09:03Z
+GET,[Academic] GET /api/v1/courses/{id},HTTPError('500 Server Error: Internal Server Error for url: [Academic] GET /api/v1/courses/{id}'),983,2026-11-06T14:07:12Z,2026-11-06T14:09:03Z
+GET,/api/v1/listings [Init],HTTPError('500 Server Error: Internal Server Error for url: /api/v1/listings [Init]'),20,2026-11-06T14:07:11Z,2026-11-06T14:07:13Z
+GET,[Placement] GET /api/v1/companies/{id}/hiring-stats,HTTPError('500 Server Error: Internal Server Error for url: [Placement] GET /api/v1/companies/{id}/hiring-stats'),522,2026-11-06T14:07:12Z,2026-11-06T14:09:03Z
+GET,[Placement] GET /api/v1/companies/{id}/forum,HTTPError('500 Server Error: Internal Server Error for url: [Placement] GET /api/v1/companies/{id}/forum'),409,2026-11-06T14:07:13Z,2026-11-06T14:09:03Z
+GET,[Academic] GET /api/v1/departments/{id}/courses,HTTPError('500 Server Error: Internal Server Error for url: [Academic] GET /api/v1/departments/{id}/courses'),1294,2026-11-06T14:07:12Z,2026-11-06T14:09:03Z
+GET,[Academic] GET /api/v1/courses/{id}/survival-guide,HTTPError('500 Server Error: Internal Server Error for url: [Academic] GET /api/v1/courses/{id}/survival-guide'),675,2026-11-06T14:07:12Z,2026-11-06T14:09:03Z
+GET,[Academic] GET /api/v1/courses/{id}/feedback,HTTPError('500 Server Error: Internal Server Error for url: [Academic] GET /api/v1/courses/{id}/feedback'),1976,2026-11-06T14:07:11Z,2026-11-06T14:09:03Z
+GET,[Placement] GET /api/v1/companies?limit=20,HTTPError('500 Server Error: Internal Server Error for url: [Placement] GET /api/v1/companies?limit=20'),1348,2026-11-06T14:07:12Z,2026-11-06T14:09:03Z
+GET,[Placement] GET /api/v1/placement/stats,HTTPError('500 Server Error: Internal Server Error for url: [Placement] GET /api/v1/placement/stats'),864,2026-11-06T14:07:12Z,2026-11-06T14:09:03Z
+GET,/api/v1/companies [Init],HTTPError('500 Server Error: Internal Server Error for url: /api/v1/companies [Init]'),47,2026-11-06T14:07:11Z,2026-11-06T14:07:15Z

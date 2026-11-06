@@ -1,0 +1,14 @@
+{
+  "timestamp": 1793977422.9271128,
+  "state": "stopped",
+  "user_count": 0,
+  "total_requests": 6306,
+  "total_failures": 0,
+  "current_rps": 52.5,
+  "current_fail_per_sec": 0.0,
+  "fail_ratio": 0.0,
+  "median_response_time": 110.0,
+  "p90_response_time": 0.0,
+  "p95_response_time": 120.0,
+  "p99_response_time": 160.0
+}

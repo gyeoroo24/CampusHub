@@ -1,0 +1,35 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+GET,[Placement] GET /api/v1/companies/{id},HTTPError('500 Server Error: Internal Server Error for url: [Placement] GET /api/v1/companies/{id}'),143,2026-11-06T16:22:08Z,2026-11-06T16:23:31Z
+GET,[Placement] GET /api/v1/placement/ppts?limit=20,HTTPError('502 Server Error: Bad Gateway for url: [Placement] GET /api/v1/placement/ppts?limit=20'),2,2026-11-06T16:23:10Z,2026-11-06T16:23:21Z
+GET,[Academic] GET /api/v1/courses/{id}/survival-guide,HTTPError('502 Server Error: Bad Gateway for url: [Academic] GET /api/v1/courses/{id}/survival-guide'),1,2026-11-06T16:23:31Z,2026-11-06T16:23:31Z
+GET,[Placement] GET /api/v1/companies/{id},HTTPError('502 Server Error: Bad Gateway for url: [Placement] GET /api/v1/companies/{id}'),3,2026-11-06T16:23:00Z,2026-11-06T16:23:27Z
+GET,[Academic] GET /api/v1/courses/{id}/materials,HTTPError('500 Server Error: Internal Server Error for url: [Academic] GET /api/v1/courses/{id}/materials'),139,2026-11-06T16:22:04Z,2026-11-06T16:23:31Z
+GET,[Placement] GET /api/v1/companies/{id}/seniors,HTTPError('504 Server Error: Gateway Time-out for url: [Placement] GET /api/v1/companies/{id}/seniors'),1,2026-11-06T16:22:40Z,2026-11-06T16:22:40Z
+GET,[Placement] GET /api/v1/companies/{id}/seniors,HTTPError('500 Server Error: Internal Server Error for url: [Placement] GET /api/v1/companies/{id}/seniors'),119,2026-11-06T16:22:36Z,2026-11-06T16:23:31Z
+GET,[Academic] GET /api/v1/departments,HTTPError('500 Server Error: Internal Server Error for url: [Academic] GET /api/v1/departments'),182,2026-11-06T16:22:04Z,2026-11-06T16:23:31Z
+GET,[Placement] GET /api/v1/companies/{id}/hiring-stats,HTTPError('502 Server Error: Bad Gateway for url: [Placement] GET /api/v1/companies/{id}/hiring-stats'),7,2026-11-06T16:22:47Z,2026-11-06T16:23:28Z
+GET,[Placement] GET /api/v1/interviews?limit=15,HTTPError('502 Server Error: Bad Gateway for url: [Placement] GET /api/v1/interviews?limit=15'),3,2026-11-06T16:23:03Z,2026-11-06T16:23:20Z
+GET,[Core] GET /api/v1/health,HTTPError('500 Server Error: Internal Server Error for url: [Core] GET /api/v1/health'),156,2026-11-06T16:22:37Z,2026-11-06T16:23:31Z
+GET,[Placement] GET /api/v1/interviews?limit=15,HTTPError('500 Server Error: Internal Server Error for url: [Placement] GET /api/v1/interviews?limit=15'),179,2026-11-06T16:22:05Z,2026-11-06T16:23:31Z
+GET,[Academic] GET /api/v1/courses/{id}/forum,HTTPError('500 Server Error: Internal Server Error for url: [Academic] GET /api/v1/courses/{id}/forum'),138,2026-11-06T16:22:09Z,2026-11-06T16:23:31Z
+GET,[Placement] GET /api/v1/companies/{id}/forum,HTTPError('502 Server Error: Bad Gateway for url: [Placement] GET /api/v1/companies/{id}/forum'),2,2026-11-06T16:23:07Z,2026-11-06T16:23:16Z
+GET,[Placement] GET /api/v1/placement/ppts?limit=20,HTTPError('500 Server Error: Internal Server Error for url: [Placement] GET /api/v1/placement/ppts?limit=20'),145,2026-11-06T16:22:24Z,2026-11-06T16:23:31Z
+GET,[Academic] GET /api/v1/courses/{id},HTTPError('500 Server Error: Internal Server Error for url: [Academic] GET /api/v1/courses/{id}'),192,2026-11-06T16:22:06Z,2026-11-06T16:23:31Z
+GET,/api/v1/listings [Init],HTTPError('500 Server Error: Internal Server Error for url: /api/v1/listings [Init]'),9,2026-11-06T16:21:56Z,2026-11-06T16:22:29Z
+GET,[Placement] GET /api/v1/companies?limit=20,HTTPError('502 Server Error: Bad Gateway for url: [Placement] GET /api/v1/companies?limit=20'),8,2026-11-06T16:22:52Z,2026-11-06T16:23:31Z
+GET,[Academic] GET /api/v1/courses/{id}/forum,HTTPError('502 Server Error: Bad Gateway for url: [Academic] GET /api/v1/courses/{id}/forum'),1,2026-11-06T16:23:04Z,2026-11-06T16:23:04Z
+GET,[Academic] GET /api/v1/courses/{id}/feedback,HTTPError('502 Server Error: Bad Gateway for url: [Academic] GET /api/v1/courses/{id}/feedback'),7,2026-11-06T16:23:00Z,2026-11-06T16:23:23Z
+GET,[Academic] GET /api/v1/courses/{id}/materials,HTTPError('502 Server Error: Bad Gateway for url: [Academic] GET /api/v1/courses/{id}/materials'),5,2026-11-06T16:23:05Z,2026-11-06T16:23:29Z
+GET,[Placement] GET /api/v1/companies/{id}/seniors,HTTPError('502 Server Error: Bad Gateway for url: [Placement] GET /api/v1/companies/{id}/seniors'),2,2026-11-06T16:22:54Z,2026-11-06T16:22:59Z
+GET,[Placement] GET /api/v1/companies/{id}/hiring-stats,HTTPError('500 Server Error: Internal Server Error for url: [Placement] GET /api/v1/companies/{id}/hiring-stats'),146,2026-11-06T16:21:59Z,2026-11-06T16:23:31Z
+GET,[Placement] GET /api/v1/companies/{id}/forum,HTTPError('500 Server Error: Internal Server Error for url: [Placement] GET /api/v1/companies/{id}/forum'),90,2026-11-06T16:22:04Z,2026-11-06T16:23:31Z
+GET,[Academic] GET /api/v1/departments/{id}/courses,HTTPError('500 Server Error: Internal Server Error for url: [Academic] GET /api/v1/departments/{id}/courses'),277,2026-11-06T16:22:22Z,2026-11-06T16:23:31Z
+GET,[Academic] GET /api/v1/courses/{id}/survival-guide,HTTPError('500 Server Error: Internal Server Error for url: [Academic] GET /api/v1/courses/{id}/survival-guide'),127,2026-11-06T16:22:05Z,2026-11-06T16:23:31Z
+GET,[Academic] GET /api/v1/departments,HTTPError('502 Server Error: Bad Gateway for url: [Academic] GET /api/v1/departments'),2,2026-11-06T16:22:52Z,2026-11-06T16:22:53Z
+GET,[Academic] GET /api/v1/courses/{id}/feedback,HTTPError('500 Server Error: Internal Server Error for url: [Academic] GET /api/v1/courses/{id}/feedback'),408,2026-11-06T16:22:04Z,2026-11-06T16:23:31Z
+GET,[Placement] GET /api/v1/placement/stats,HTTPError('502 Server Error: Bad Gateway for url: [Placement] GET /api/v1/placement/stats'),4,2026-11-06T16:22:50Z,2026-11-06T16:23:14Z
+GET,[Core] GET /api/v1/health,HTTPError('502 Server Error: Bad Gateway for url: [Core] GET /api/v1/health'),4,2026-11-06T16:22:48Z,2026-11-06T16:23:30Z
+GET,[Placement] GET /api/v1/companies?limit=20,HTTPError('500 Server Error: Internal Server Error for url: [Placement] GET /api/v1/companies?limit=20'),294,2026-11-06T16:22:22Z,2026-11-06T16:23:31Z
+GET,[Academic] GET /api/v1/departments/{id}/courses,HTTPError('502 Server Error: Bad Gateway for url: [Academic] GET /api/v1/departments/{id}/courses'),1,2026-11-06T16:23:09Z,2026-11-06T16:23:09Z
+GET,[Placement] GET /api/v1/placement/stats,HTTPError('500 Server Error: Internal Server Error for url: [Placement] GET /api/v1/placement/stats'),166,2026-11-06T16:22:46Z,2026-11-06T16:23:31Z
+GET,/api/v1/companies [Init],HTTPError('500 Server Error: Internal Server Error for url: /api/v1/companies [Init]'),2,2026-11-06T16:22:29Z,2026-11-06T16:22:33Z

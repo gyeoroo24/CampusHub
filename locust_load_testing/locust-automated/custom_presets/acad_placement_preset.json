@@ -1,0 +1,27 @@
+{
+  "name": "acad_placement_preset",
+  "created_at": "2026-11-06T17:41:15.032870",
+  "endpoints": {
+    "health": 5,
+    "academic_departments": 6,
+    "department_courses": 8,
+    "course_detail": 6,
+    "course_feedback": 12,
+    "course_my_feedback": 4,
+    "course_materials": 4,
+    "course_survival_guide": 4,
+    "course_forum": 4,
+    "placement_companies": 8,
+    "company_detail": 4,
+    "company_hiring_stats": 4,
+    "company_seniors": 4,
+    "company_forum": 3,
+    "placement_stats": 5,
+    "placement_interviews": 5,
+    "interview_detail": 3,
+    "placement_ppts": 4
+  },
+  "default_users": 101,
+  "default_spawn_rate": 10.0,
+  "default_run_time": "5m"
+}
