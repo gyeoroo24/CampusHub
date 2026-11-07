@@ -1,0 +1,26 @@
+MOCK SNAPSHOT - fabricated data, no real users or content.
+exported: generated mock data, not from any real export
+source bucket: n/a (synthetic data, no S3 export involved)
+row counts:
+  users: 50
+  listings: 35
+  notifications: 150
+  comments: 86
+  threads: 40
+  placement_records: 200
+  course_feedback: 40
+  events: 15
+  mess_menus: 3
+  moderation_log: 20
+uploads: 4 files (placeholder text/CSV files, not real documents)
+
+This snapshot contains no data from the project's real database snapshot.
+Every row (departments, courses, companies, users, listings, events, threads,
+comments, placement records, mess menus, etc.) was synthetically generated
+and clearly marked with "Mock"/"Fictional"/"mock.*@iisc.ac.in" style names,
+emails and content so it can never be confused with real data.
+
+The users table intentionally contains zero admin accounts. See the root
+README.md section "5.7 Load the database" and "7.3 Administrator and
+moderator tasks" for how to create your own first admin after importing
+this snapshot.

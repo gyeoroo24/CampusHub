@@ -174,6 +174,11 @@ Run them from `terraform/` after `terraform apply`. They read everything they ne
 | `scripts/snapshot_restore.sh` | Restores `data/snapshot/` into this stack. Refuses if tables exist, unless `FORCE=1` |
 | `scripts/deactivate_missing_cognito_users.sh` | After a restore: deactivates users with no account in this Cognito pool (dry run without `--apply`; the admin is never touched) |
 
+Don't have the team's real snapshot? `data/mock-snapshot/` is committed to the repo and has the same
+schema but fully synthetic data (no admin user, no real people). Copy it into `data/snapshot/` and run
+`snapshot_restore.sh` as usual — see the root [README.md, 5.7](../README.md#57-load-the-database) for
+details and for how to create your own first admin afterwards.
+
 The data-tools Lambda also takes these payloads directly:
 
 ```json

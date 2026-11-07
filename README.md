@@ -229,9 +229,30 @@ cd terraform
 ./scripts/snapshot_restore.sh
 ```
 
-Then apply every migration in `backend/db/migrations/` newer than the snapshot, in order. The snapshot
-of 3 November 2026 is at revision 24, so it needs `025_company_created_by.sql` and
-`026_unblock_requests_bookmarks.sql`:
+If you are not one of the people who already has the team's real snapshot (it is never committed to
+git, since it holds real personal data), use the mock snapshot committed at
+[`terraform/data/mock-snapshot/`](terraform/data/mock-snapshot/) instead. It has the exact same schema
+and is a drop-in replacement, but every row (users, listings, events, threads, comments, placement
+records, companies, etc.) is synthetic/fabricated data clearly labelled "Mock"/"Fictional" — none of it
+comes from the real snapshot. Copy it into place and restore as normal:
+
+```bash
+cp -r terraform/data/mock-snapshot/* terraform/data/snapshot/
+cd terraform
+./scripts/snapshot_restore.sh
+```
+
+The mock snapshot's `users` table is intentionally empty of admins (it only has `base_role = 'signed_in'`
+rows with fake `@iisc.ac.in` emails that cannot sign in). After restoring it, **you must create the first
+admin yourself**: sign up normally in the app using an email address ending in `iisc.ac.in` that you can
+actually receive mail at (the one-time passcode to sign in is emailed there), then promote that account
+to admin with the SQL command in [7.3 Administrator and moderator tasks](#73-administrator-and-moderator-tasks)
+below. This applies whether you restore the real snapshot or the mock one — the real snapshot also ships
+with no pre-seeded admin, for the same reason.
+
+Either way, then apply every migration in `backend/db/migrations/` newer than the snapshot, in order. The
+snapshot of 3 November 2026 (and the mock snapshot generated from its schema) is at revision 24, so it
+needs `025_company_created_by.sql` and `026_unblock_requests_bookmarks.sql`:
 
 ```bash
 for m in 025_company_created_by 026_unblock_requests_bookmarks; do

@@ -1,0 +1,1 @@
+This is a placeholder mock file used only to satisfy the demo course-materials upload used by the mock snapshot. It is not real course content.
