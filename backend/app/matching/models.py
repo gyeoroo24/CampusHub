@@ -1,4 +1,4 @@
-"""The three small embedding models behind Lost & Found matching (future plan §1.2 / §4.2).
+"""The three small embedding models behind Lost & Found matching.
 
 - all-MiniLM-L6-v2 (90 MB): description vs description.
 - MobileCLIP-S0 image encoder (45 MB): photo vs photo.

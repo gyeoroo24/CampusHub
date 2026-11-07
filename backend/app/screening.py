@@ -1,4 +1,4 @@
-"""Automatic flagging of new posts (future plan §1.6).
+"""Automatic flagging of new posts.
 
 Every new or edited Buy & Sell listing and Lost & Found report is checked, and anything that
 looks wrong is filed as a report in the normal moderation queue (reports.source = 'system', no

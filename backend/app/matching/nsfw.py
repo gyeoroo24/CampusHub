@@ -1,4 +1,4 @@
-"""Obscene-photo check for automatic flagging (future plan §1.6, app/screening.py).
+"""Obscene-photo check for automatic flagging (app/screening.py).
 
 Model: Falconsai/nsfw_image_detection (ViT-base, Apache-2.0), the int8 ONNX export from
 onnx-community/nsfw_image_detection-ONNX (87 MB). 224x224 bilinear resize, pixels scaled to

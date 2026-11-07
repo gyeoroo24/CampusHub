@@ -1,4 +1,4 @@
-"""Suggest an existing Buy & Sell / Lost & Found category from a listing's title (future plan §2.4).
+"""Suggest an existing Buy & Sell / Lost & Found category from a listing's title.
 
 Nearest existing category only: it never invents a category, and stays quiet when nothing fits.
 
