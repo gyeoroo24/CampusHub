@@ -61,6 +61,8 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
     final isDark = theme.brightness == Brightness.dark;
     final filter = ref.watch(eventsFilterProvider);
     final tagsAsync = ref.watch(eventTagsProvider);
+    // Events moderators and the admin can delete a tag from its chip (move or delete its events).
+    final canManageTags = ref.watch(currentUserProvider)?.canModerateModule('events') ?? false;
     final eventsAsync = ref.watch(eventsProvider);
     final isGuest = ref.watch(isGuestUserProvider);
 
@@ -210,6 +212,20 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
                                     if (t.following) ...[
                                       const SizedBox(width: 4),
                                       const Icon(Icons.notifications_active_rounded, size: 13),
+                                    ],
+                                    if (canManageTags) ...[
+                                      const SizedBox(width: 4),
+                                      Tooltip(
+                                        message: 'Delete "${t.name}"',
+                                        child: InkWell(
+                                          customBorder: const CircleBorder(),
+                                          onTap: () => confirmDeleteEventTag(context, ref, t, tags),
+                                          child: const Padding(
+                                            padding: EdgeInsets.all(2),
+                                            child: Icon(Icons.close_rounded, size: 14),
+                                          ),
+                                        ),
+                                      ),
                                     ],
                                   ],
                                 ),

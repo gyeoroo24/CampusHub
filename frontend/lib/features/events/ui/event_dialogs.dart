@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../core/utils/date_time_formatter.dart';
 import '../../../core/utils/error_text.dart';
 import '../../../core/widgets/photo_picker_field.dart';
@@ -9,8 +10,88 @@ import '../domain/event_models.dart';
 import '../providers/events_providers.dart';
 import 'events_screen.dart' show EventBookmarkButton, EventPoster, eventTimeRange;
 
-void _snack(BuildContext context, String message) => ScaffoldMessenger.of(context)
-    .showSnackBar(SnackBar(content: Text(message), behavior: SnackBarBehavior.floating));
+void _snack(BuildContext context, String message) =>
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), behavior: SnackBarBehavior.floating));
+
+/// Deletes an event tag (events moderators and the admin), the same choice as deleting a category: a tag
+/// used by events needs those events moved to another tag (its followers move too) or deleted with it.
+Future<void> confirmDeleteEventTag(BuildContext context, WidgetRef ref, EventTag tag, List<EventTag> all) async {
+  const deleteEvents = -1; // in place of a tag id: delete its events with it
+  final others = all.where((t) => t.id != tag.id).toList();
+  int? moveTo;
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDialogState) => AlertDialog(
+        title: Text('Delete tag “${tag.name}”?'),
+        content: SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '“${tag.name}” will be removed. If any events use it, they get the tag you pick below instead '
+                '(and people following “${tag.name}” follow that tag), or are deleted with it.',
+              ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<int?>(
+                initialValue: moveTo,
+                menuMaxHeight: 320,
+                decoration: const InputDecoration(labelText: 'Its events', border: OutlineInputBorder(), isDense: true),
+                items: [
+                  const DropdownMenuItem<int?>(value: null, child: Text('— Only if no event uses it —')),
+                  DropdownMenuItem<int?>(
+                    value: deleteEvents,
+                    child: Text('Delete its events too', style: TextStyle(color: Colors.red.shade700)),
+                  ),
+                  for (final t in others) DropdownMenuItem<int?>(value: t.id, child: Text('Move to “${t.name}”')),
+                ],
+                onChanged: (v) => setDialogState(() => moveTo = v),
+              ),
+              if (moveTo == deleteEvents) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'Every event tagged “${tag.name}” is removed; its organizer and anyone who saved it are told. '
+                  'This can\'t be undone.',
+                  style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete tag'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (confirm != true) return;
+  final deletePosts = moveTo == deleteEvents;
+  final target = deletePosts ? null : moveTo;
+  try {
+    await ref.read(eventsRepositoryProvider).deleteTag(tag.id, moveTo: target, deletePosts: deletePosts);
+    ref.invalidate(eventTagsProvider);
+    ref.invalidate(eventsProvider);
+    if (context.mounted) {
+      _snack(
+        context,
+        deletePosts
+            ? 'Deleted “${tag.name}” and its events.'
+            : target == null
+            ? 'Deleted tag “${tag.name}”.'
+            : 'Deleted “${tag.name}” and moved its events to “${others.firstWhere((t) => t.id == target).name}”.',
+      );
+    }
+  } catch (e) {
+    if (context.mounted) _snack(context, 'Could not delete “${tag.name}”: ${errorText(e)}');
+  }
+}
 
 /// An event's details with bookmark, and edit / cancel for its organizer (or an admin).
 class _EventDetails extends ConsumerWidget {
@@ -67,8 +148,9 @@ class _EventDetails extends ConsumerWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: (live ? Colors.green : (e.when == EventWhen.past ? Colors.grey : theme.colorScheme.primary))
-                          .withValues(alpha: 0.15),
+                      color:
+                          (live ? Colors.green : (e.when == EventWhen.past ? Colors.grey : theme.colorScheme.primary))
+                              .withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(e.when.label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
@@ -100,27 +182,30 @@ class _EventDetails extends ConsumerWidget {
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.person_outline_rounded),
           title: Text('Posted by ${e.organizerName}'),
-          subtitle: Text([
-            if (e.bookmarkCount > 0) '${e.bookmarkCount} ${e.bookmarkCount == 1 ? 'person' : 'people'} saved this',
-            'updated ${DateTimeFormatter.timeAgo(e.updatedAt)}',
-          ].join(' · ')),
+          subtitle: Text(
+            [
+              if (e.bookmarkCount > 0) '${e.bookmarkCount} ${e.bookmarkCount == 1 ? 'person' : 'people'} saved this',
+              'updated ${DateTimeFormatter.timeAgo(e.updatedAt)}',
+            ].join(' · '),
+          ),
         ),
         if (e.tags.isNotEmpty)
-          Wrap(spacing: 6, runSpacing: 6, children: [
-            for (final t in e.tags) Chip(visualDensity: VisualDensity.compact, label: Text(t.name)),
-          ]),
-        if (e.description != null) ...[
-          const SizedBox(height: 12),
-          SelectableText(e.description!),
-        ],
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [for (final t in e.tags) Chip(visualDensity: VisualDensity.compact, label: Text(t.name))],
+          ),
+        if (e.description != null) ...[const SizedBox(height: 12), SelectableText(e.description!)],
         if (e.canEdit) ...[
           const SizedBox(height: 16),
           Row(
             children: [
               OutlinedButton.icon(
                 onPressed: () async {
-                  final saved =
-                      await showDialog<CampusEvent>(context: context, builder: (_) => EventFormDialog(event: e));
+                  final saved = await showDialog<CampusEvent>(
+                    context: context,
+                    builder: (_) => EventFormDialog(event: e),
+                  );
                   if (saved != null) {
                     ref.invalidate(eventProvider(e.id));
                     ref.invalidate(eventsProvider);
@@ -156,7 +241,9 @@ class EventDetailDialog extends ConsumerWidget {
       content: SizedBox(
         width: 560,
         child: SingleChildScrollView(
-          child: ref.watch(eventProvider(eventId)).when(
+          child: ref
+              .watch(eventProvider(eventId))
+              .when(
                 loading: () => const Padding(
                   padding: EdgeInsets.all(32),
                   child: Center(child: CircularProgressIndicator()),
@@ -169,7 +256,10 @@ class EventDetailDialog extends ConsumerWidget {
                     if (event.posterUrl != null) ...[
                       ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: SizedBox(height: 260, child: EventPoster(event: event, fit: BoxFit.contain)),
+                        child: SizedBox(
+                          height: 260,
+                          child: EventPoster(event: event, fit: BoxFit.contain),
+                        ),
                       ),
                       const SizedBox(height: 12),
                     ],
@@ -208,7 +298,9 @@ class EventDetailScreen extends ConsumerWidget {
           constraints: const BoxConstraints(maxWidth: 820),
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
-            child: ref.watch(eventProvider(eventId)).when(
+            child: ref
+                .watch(eventProvider(eventId))
+                .when(
                   skipLoadingOnReload: true,
                   loading: () => const Center(child: CircularProgressIndicator()),
                   error: (e, _) => Text(errorText(e)),
@@ -250,11 +342,11 @@ class EventDetailScreen extends ConsumerWidget {
 
 // ---------------------------------------------------------------- updates
 ({IconData icon, Color color, String label}) _updateStyle(String kind) => switch (kind) {
-      'time' => (icon: Icons.schedule_rounded, color: const Color(0xFFD97706), label: 'Time changed'),
-      'venue' => (icon: Icons.place_rounded, color: const Color(0xFF7C3AED), label: 'Venue changed'),
-      'time_venue' => (icon: Icons.edit_calendar_rounded, color: const Color(0xFFDC2626), label: 'Time and venue changed'),
-      _ => (icon: Icons.campaign_rounded, color: const Color(0xFF2563EB), label: 'Update'),
-    };
+  'time' => (icon: Icons.schedule_rounded, color: const Color(0xFFD97706), label: 'Time changed'),
+  'venue' => (icon: Icons.place_rounded, color: const Color(0xFF7C3AED), label: 'Venue changed'),
+  'time_venue' => (icon: Icons.edit_calendar_rounded, color: const Color(0xFFDC2626), label: 'Time and venue changed'),
+  _ => (icon: Icons.campaign_rounded, color: const Color(0xFF2563EB), label: 'Update'),
+};
 
 /// Official notices on an event, newest first. Events moderators, admins and the organizer post them;
 /// everyone who bookmarked the event is notified.
@@ -277,7 +369,10 @@ class _UpdatesSection extends ConsumerWidget {
             ),
             if (event.canEdit)
               FilledButton.tonalIcon(
-                onPressed: () => showDialog(context: context, builder: (_) => PostUpdateDialog(event: event)),
+                onPressed: () => showDialog(
+                  context: context,
+                  builder: (_) => PostUpdateDialog(event: event),
+                ),
                 icon: const Icon(Icons.campaign_outlined, size: 18),
                 label: const Text('Post update'),
               ),
@@ -287,13 +382,18 @@ class _UpdatesSection extends ConsumerWidget {
           event.canEdit
               ? 'Tell attendees about delays, venue changes or anything they should know.'
               : (ref.watch(isEventBookmarkedProvider(event))
-                  ? 'You\'ll get a notification when the organizers post an update.'
-                  : 'Bookmark this event${isGuest ? ' (signed in)' : ''} to get a notification for each update.'),
+                    ? 'You\'ll get a notification when the organizers post an update.'
+                    : 'Bookmark this event${isGuest ? ' (signed in)' : ''} to get a notification for each update.'),
           style: TextStyle(fontSize: 12, color: theme.hintColor),
         ),
         const SizedBox(height: 12),
-        ref.watch(eventUpdatesProvider(event.id)).when(
-              loading: () => const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())),
+        ref
+            .watch(eventUpdatesProvider(event.id))
+            .when(
+              loading: () => const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              ),
               error: (e, _) => Text(errorText(e)),
               data: (updates) => updates.isEmpty
                   ? Container(
@@ -302,10 +402,15 @@ class _UpdatesSection extends ConsumerWidget {
                         border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Text('No updates yet. Changes to the time or venue will show up here.',
-                          textAlign: TextAlign.center, style: TextStyle(color: theme.hintColor)),
+                      child: Text(
+                        'No updates yet. Changes to the time or venue will show up here.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: theme.hintColor),
+                      ),
                     )
-                  : Column(children: [for (final u in updates) _UpdateTile(update: u, eventId: event.id)]),
+                  : Column(
+                      children: [for (final u in updates) _UpdateTile(update: u, eventId: event.id)],
+                    ),
             ),
       ],
     );
@@ -339,13 +444,17 @@ class _UpdateTile extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(style.label.toUpperCase(),
-                    style: TextStyle(fontSize: 10, letterSpacing: 0.6, fontWeight: FontWeight.bold, color: style.color)),
+                Text(
+                  style.label.toUpperCase(),
+                  style: TextStyle(fontSize: 10, letterSpacing: 0.6, fontWeight: FontWeight.bold, color: style.color),
+                ),
                 const SizedBox(height: 2),
                 SelectableText(update.message),
                 const SizedBox(height: 4),
-                Text('${update.authorName} · ${DateTimeFormatter.timeAgo(update.createdAt)}',
-                    style: TextStyle(fontSize: 11, color: theme.hintColor)),
+                Text(
+                  '${update.authorName} · ${DateTimeFormatter.timeAgo(update.createdAt)}',
+                  style: TextStyle(fontSize: 11, color: theme.hintColor),
+                ),
               ],
             ),
           ),
@@ -427,7 +536,9 @@ class _PostUpdateDialogState extends ConsumerState<PostUpdateDialog> {
       _error = null;
     });
     try {
-      await ref.read(eventsRepositoryProvider).postUpdate(
+      await ref
+          .read(eventsRepositoryProvider)
+          .postUpdate(
             widget.event.id,
             _message.text.trim(),
             startTime: _changeTime ? _start : null,
@@ -449,20 +560,25 @@ class _PostUpdateDialogState extends ConsumerState<PostUpdateDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     Widget timeRow(String label, DateTime value, ValueChanged<DateTime> onPicked) => Row(
-          children: [
-            SizedBox(width: 56, child: Text(label, style: TextStyle(color: theme.hintColor))),
-            Expanded(child: Text(DateTimeFormatter.fullDateTime(value), style: const TextStyle(fontWeight: FontWeight.w600))),
-            TextButton(
-              onPressed: _busy
-                  ? null
-                  : () async {
-                      final picked = await _pick(value);
-                      if (picked != null) onPicked(picked);
-                    },
-              child: const Text('Change'),
-            ),
-          ],
-        );
+      children: [
+        SizedBox(
+          width: 56,
+          child: Text(label, style: TextStyle(color: theme.hintColor)),
+        ),
+        Expanded(
+          child: Text(DateTimeFormatter.fullDateTime(value), style: const TextStyle(fontWeight: FontWeight.w600)),
+        ),
+        TextButton(
+          onPressed: _busy
+              ? null
+              : () async {
+                  final picked = await _pick(value);
+                  if (picked != null) onPicked(picked);
+                },
+          child: const Text('Change'),
+        ),
+      ],
+    );
     return AlertDialog(
       title: Text('Update on “${widget.event.title}”'),
       content: SizedBox(
@@ -492,11 +608,15 @@ class _PostUpdateDialogState extends ConsumerState<PostUpdateDialog> {
                 title: const Text('Also change the time'),
               ),
               if (_changeTime) ...[
-                timeRow('Starts', _start, (t) => setState(() {
-                      final length = _end.difference(_start);
-                      _start = t;
-                      _end = t.add(length);
-                    })),
+                timeRow(
+                  'Starts',
+                  _start,
+                  (t) => setState(() {
+                    final length = _end.difference(_start);
+                    _start = t;
+                    _end = t.add(length);
+                  }),
+                ),
                 timeRow('Ends', _end, (t) => setState(() => _end = t)),
               ],
               CheckboxListTile(
@@ -512,8 +632,10 @@ class _PostUpdateDialogState extends ConsumerState<PostUpdateDialog> {
                   decoration: const InputDecoration(labelText: 'New venue', border: OutlineInputBorder()),
                 ),
               const SizedBox(height: 4),
-              Text('Everyone who bookmarked this event gets a notification.',
-                  style: TextStyle(fontSize: 12, color: theme.hintColor)),
+              Text(
+                'Everyone who bookmarked this event gets a notification.',
+                style: TextStyle(fontSize: 12, color: theme.hintColor),
+              ),
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -617,7 +739,9 @@ class _EventFormDialogState extends ConsumerState<EventFormDialog> {
         posterKey: posterKey,
         removePoster: widget.event?.posterUrl != null && !_keepPoster && _poster.isEmpty,
       );
-      final saved = widget.event == null ? await repo.createEvent(draft) : await repo.updateEvent(widget.event!.id, draft);
+      final saved = widget.event == null
+          ? await repo.createEvent(draft)
+          : await repo.updateEvent(widget.event!.id, draft);
       if (mounted) Navigator.pop(context, saved);
     } catch (e) {
       if (mounted) setState(() => _error = errorText(e));
@@ -626,25 +750,64 @@ class _EventFormDialogState extends ConsumerState<EventFormDialog> {
     }
   }
 
+  /// Events moderators and the admin can add a tag right here; it's selected for this event.
+  Future<void> _addTag() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New event tag'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 40,
+          decoration: const InputDecoration(labelText: 'Tag name', border: OutlineInputBorder()),
+          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('Add')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.isEmpty) return;
+    try {
+      final tag = await ref.read(eventsRepositoryProvider).createTag(name);
+      ref.invalidate(eventTagsProvider);
+      if (mounted)
+        setState(() {
+          if (_tags.length < 5) _tags.add(tag.id);
+        });
+    } catch (e) {
+      if (mounted) _snack(context, 'Could not add “$name”: ${errorText(e)}');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tags = ref.watch(eventTagsProvider).valueOrNull ?? const <EventTag>[];
     Widget timeRow(String label, DateTime value, ValueChanged<DateTime> onPicked) => Row(
-          children: [
-            SizedBox(width: 56, child: Text(label, style: TextStyle(color: theme.hintColor))),
-            Expanded(child: Text(DateTimeFormatter.fullDateTime(value), style: const TextStyle(fontWeight: FontWeight.w600))),
-            TextButton(
-              onPressed: _busy
-                  ? null
-                  : () async {
-                      final picked = await _pick(value);
-                      if (picked != null) onPicked(picked);
-                    },
-              child: const Text('Change'),
-            ),
-          ],
-        );
+      children: [
+        SizedBox(
+          width: 56,
+          child: Text(label, style: TextStyle(color: theme.hintColor)),
+        ),
+        Expanded(
+          child: Text(DateTimeFormatter.fullDateTime(value), style: const TextStyle(fontWeight: FontWeight.w600)),
+        ),
+        TextButton(
+          onPressed: _busy
+              ? null
+              : () async {
+                  final picked = await _pick(value);
+                  if (picked != null) onPicked(picked);
+                },
+          child: const Text('Change'),
+        ),
+      ],
+    );
 
     return AlertDialog(
       title: Text(widget.event == null ? 'Add an event' : 'Edit event'),
@@ -664,18 +827,25 @@ class _EventFormDialogState extends ConsumerState<EventFormDialog> {
                   validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 4),
-                timeRow('Starts', _start, (t) => setState(() {
-                      final length = _end.difference(_start);
-                      _start = t;
-                      if (!_end.isAfter(_start)) _end = _start.add(length.isNegative ? const Duration(hours: 2) : length);
-                    })),
+                timeRow(
+                  'Starts',
+                  _start,
+                  (t) => setState(() {
+                    final length = _end.difference(_start);
+                    _start = t;
+                    if (!_end.isAfter(_start)) _end = _start.add(length.isNegative ? const Duration(hours: 2) : length);
+                  }),
+                ),
                 timeRow('Ends', _end, (t) => setState(() => _end = t)),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _location,
                   maxLength: 200,
-                  decoration: const InputDecoration(labelText: 'Where', hintText: "e.g. Students' Gymkhana",
-                      border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'Where',
+                    hintText: "e.g. Students' Gymkhana",
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text('Tags (up to 5)', style: TextStyle(color: theme.hintColor, fontSize: 12)),
@@ -695,6 +865,12 @@ class _EventFormDialogState extends ConsumerState<EventFormDialog> {
                             _tags.remove(t.id);
                           }
                         }),
+                      ),
+                    if (ref.watch(currentUserProvider)?.canModerateModule('events') ?? false)
+                      ActionChip(
+                        avatar: const Icon(Icons.add_rounded, size: 16),
+                        label: const Text('New tag'),
+                        onPressed: _busy ? null : _addTag,
                       ),
                   ],
                 ),
@@ -730,8 +906,11 @@ class _EventFormDialogState extends ConsumerState<EventFormDialog> {
                   minLines: 3,
                   maxLines: 8,
                   maxLength: 5000,
-                  decoration: const InputDecoration(labelText: 'Details', hintText: 'What, who it is for, how to join…',
-                      border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'Details',
+                    hintText: 'What, who it is for, how to join…',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 if (_error != null) Text(_error!, style: TextStyle(color: theme.colorScheme.error, fontSize: 13)),
               ],
@@ -782,14 +961,18 @@ class _FollowTagsDialogState extends ConsumerState<FollowTagsDialog> {
       title: const Text('Follow tags'),
       content: SizedBox(
         width: 400,
-        child: ref.watch(eventTagsProvider).when(
+        child: ref
+            .watch(eventTagsProvider)
+            .when(
               loading: () => const SizedBox(height: 120, child: Center(child: CircularProgressIndicator())),
               error: (e, _) => Text(errorText(e)),
               data: (tags) => Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Get a notification when a new event is posted under these tags.',
-                      style: TextStyle(fontSize: 13)),
+                  const Text(
+                    'Get a notification when a new event is posted under these tags.',
+                    style: TextStyle(fontSize: 13),
+                  ),
                   const SizedBox(height: 8),
                   Flexible(
                     child: ListView(

@@ -14,8 +14,6 @@ import '../../auth/providers/auth_providers.dart';
 import '../../buy_sell/providers/buy_sell_providers.dart';
 import '../../buy_sell/ui/widgets/buy_sell_detail_dialog.dart';
 import '../../campus_services/ui/campus_services_admin_panel.dart';
-import '../../events/domain/event_models.dart';
-import '../../events/providers/events_providers.dart';
 import '../../forums/providers/forum_providers.dart';
 import '../../lost_found/domain/lost_found_item.dart';
 import '../../lost_found/providers/lost_found_providers.dart';
@@ -91,7 +89,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
       _PanelTab.reports,
       if (user.canModerateBuySell) _PanelTab.sellerStrikes,
       if (user.canModerateBuySell) _PanelTab.unblockRequests,
-      if (user.canModerateBuySell || user.canModerateLostFound || user.canModerateModule('events'))
+      if (user.canModerateBuySell || user.canModerateLostFound)
         _PanelTab.categories,
       if (user.isDepartmentModerator) _PanelTab.moderators,
     ];
@@ -1058,8 +1056,6 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
     final canManageBuySell = currentUser?.isAdmin == true || (currentUser?.canModerateBuySell ?? false);
     final canManageLostFound = currentUser?.isAdmin == true || (currentUser?.canModerateLostFound ?? false);
     final canManageAny = canManageBuySell || canManageLostFound;
-    final canManageEventTags = currentUser?.isAdmin == true || (currentUser?.canModerateModule('events') ?? false);
-    final eventTags = ref.watch(eventTagsProvider);
 
     // Ensure _categoryTarget is pointing to a permitted module
     if (!canManageBuySell && canManageLostFound && _categoryTarget != 'lost_found') {
@@ -1251,151 +1247,11 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
                 loading: () => const CircularProgressIndicator(),
                 error: (e, _) => Text('Error: ${errorText(e)}'),
               ),
-
-              // Event tags: deleted the same way as a category (events moderators and the admin).
-              if (canManageEventTags) ...[
-                const SizedBox(height: 28),
-                Row(
-                  children: [
-                    const Text('Event Tags', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text('(tap chip to rename, ✕ to delete)',
-                          overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: theme.hintColor)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                eventTags.when(
-                  data: (tags) => tags.isEmpty
-                      ? Text('No event tags yet.', style: TextStyle(color: theme.hintColor))
-                      : Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final t in tags)
-                              InputChip(
-                                label: Text(t.upcomingCount > 0 ? '${t.name} · ${t.upcomingCount}' : t.name),
-                                avatar: const Icon(Icons.edit_outlined, size: 14),
-                                tooltip: 'Tap to rename "${t.name}", click ✕ to delete',
-                                onPressed: () => _showRenameEventTagDialog(t),
-                                onDeleted: () => _confirmDeleteEventTag(t, tags),
-                                deleteIcon: const Icon(Icons.close, size: 14),
-                                deleteButtonTooltipMessage: 'Delete "${t.name}"',
-                              ),
-                          ],
-                        ),
-                  loading: () => const CircularProgressIndicator(),
-                  error: (e, _) => Text('Error: ${errorText(e)}'),
-                ),
-              ],
             ],
           ),
         ),
       ),
     );
-  }
-
-  Future<void> _showRenameEventTagDialog(EventTag tag) async {
-    final controller = TextEditingController(text: tag.name);
-    final name = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Rename Event Tag'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 40,
-          decoration: const InputDecoration(labelText: 'Tag name', border: OutlineInputBorder()),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('Save')),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (name == null || name.isEmpty || name == tag.name) return;
-    try {
-      await ref.read(eventsRepositoryProvider).renameTag(tag.id, name);
-      ref.invalidate(eventTagsProvider);
-      _showToast('Renamed "${tag.name}" to "$name".');
-    } catch (e) {
-      _showToast('Could not rename "${tag.name}": ${errorText(e)}', isError: true);
-    }
-  }
-
-  /// The same choice as deleting a category: a tag used by events needs those events moved to another tag
-  /// (its followers move too) or deleted with it.
-  Future<void> _confirmDeleteEventTag(EventTag tag, List<EventTag> all) async {
-    final others = all.where((t) => t.id != tag.id).toList();
-    int? moveTo; // _deletePostsChoice: delete its events with it
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('Delete Event Tag "${tag.name}"?'),
-          content: SizedBox(
-            width: 380,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('"${tag.name}" will be removed from the event tags. If any events use it, they get the tag '
-                    'you pick below instead (and people following "${tag.name}" follow that tag), or are deleted '
-                    'with it.'),
-                const SizedBox(height: 14),
-                DropdownButtonFormField<int?>(
-                  initialValue: moveTo,
-                  menuMaxHeight: 320,
-                  decoration: const InputDecoration(labelText: 'Its events', border: OutlineInputBorder(), isDense: true),
-                  items: [
-                    const DropdownMenuItem<int?>(value: null, child: Text('— Only if no event uses it —')),
-                    DropdownMenuItem<int?>(
-                      value: _deletePostsChoice,
-                      child: Text('Delete its events too', style: TextStyle(color: Colors.red.shade700)),
-                    ),
-                    for (final t in others) DropdownMenuItem<int?>(value: t.id, child: Text(t.name)),
-                  ],
-                  onChanged: (v) => setDialogState(() => moveTo = v),
-                ),
-                if (moveTo == _deletePostsChoice) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    'Every event tagged "${tag.name}" is removed; its organizer and anyone who saved it are told. '
-                    'This can\'t be undone.',
-                    style: TextStyle(fontSize: 12, color: Colors.red.shade700),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Delete Tag'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (confirm != true) return;
-    final deletePosts = moveTo == _deletePostsChoice;
-    final target = deletePosts ? null : moveTo;
-    try {
-      await ref.read(eventsRepositoryProvider).deleteTag(tag.id, moveTo: target, deletePosts: deletePosts);
-      ref.invalidate(eventTagsProvider);
-      _showToast(deletePosts
-          ? 'Deleted "${tag.name}" and its events.'
-          : target == null
-              ? 'Deleted tag "${tag.name}".'
-              : 'Deleted "${tag.name}" and moved its events to "${others.firstWhere((t) => t.id == target).name}".');
-    } catch (e) {
-      _showToast('Could not delete "${tag.name}": ${errorText(e)}', isError: true);
-    }
   }
 
   Future<void> _handleAddCategory() async {
