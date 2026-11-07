@@ -4,7 +4,7 @@ This folder deploys the serverless CampusHub stack in `ap-south-1`: CloudFront, 
 functions, RDS PostgreSQL, ElastiCache Redis, S3, Cognito and monitoring. The step-by-step deploy guide
 is in the [root README](../README.md#5-deploy-to-aws). This file is the reference.
 
-The EC2 baseline is on the `baseline-infra-restore` branch. It has its own `terraform/README.md`.
+The EC2 baseline is on the `[STALE]-baseline-infra` branch. It has its own `terraform/README.md` **CAUTION: USED ONLY FOR COMPARISON PURPOSES**
 
 ## Table of contents
 
