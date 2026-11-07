@@ -1,374 +1,294 @@
 # CampusHub: An IISc Student Community Platform
 
-**Project Requirements Document**
+**Project Requirements Document — v2 (As Built)**
 
-DS252 Introduction to Cloud Computing [Aug 2026], PRD of Order of Phoenix
+DS252 Introduction to Cloud Computing, PRD of Order of Phoenix
 
-> This is the Markdown version of the original plan, [`Cloud_Computing_Project-PRD.pdf`](Cloud_Computing_Project-PRD.pdf)
-> (v1, 24 October 2026; first issued 30 September 2026 as [`docs/CampusHub-PRD-v1.pdf`](docs/CampusHub-PRD-v1.pdf)).
-> The original content is unchanged. **Implementation status marks were added on 7 November 2026**, in a
-> **Status** column or in front of list items:
->
-> | Mark | Meaning |
-> |---|---|
-> | ✅ | Implemented |
-> | ⚠️ | Partly implemented (the note says what is missing) |
-> | ❌ | Not implemented |
->
-> A summary is in [Implementation summary](#implementation-summary). How it was built is described in
-> [README.md](README.md) and [DEV.md](DEV.md).
+> This is a rewrite of the project plan, describing our web app called CampusHub. For the original plan, see
+> [`Cloud_Computing_Project-PRD.pdf`](Cloud_Computing_Project-PRD.pdf) (v1, 24 October 2026). 
 
 | | |
 |---|---|
 | **Team name** | Order of Phoenix |
 | **Team members** | Mohammad Sufyan Azam (SR 26898, mohammadazam@iisc.ac.in)<br>Adithya Chippa (SR 26643, cadithya@iisc.ac.in)<br>Lakhani Dinky Ashokbhai (SR 26648, dinkylakhani@iisc.ac.in)<br>Mukund Kukreja (SR 25862, kmukund@iisc.ac.in) |
-| **Summary** | A Cross-platform IISc community Application unifying Buy & Sell, Lost & Found, Academic help, Placement resources, and Campus culture. |
-| **Date** | October 24, 2026 |
-| **Version** | v1 |
+| **Summary** | A cross-platform IISc community web app unifying Buy & Sell, Lost & Found, Academic Help, Placement Hub, Community Events, mess menus, forums and messaging — deployed twice on AWS (serverless and EC2) for a head-to-head architecture comparison. |
+| **Date** | 7 November 2026 |
+| **Version** | v2 (as built) |
 
 ## Table of contents
 
-1. [Problem Statement and Motivation](#1-problem-statement-and-motivation)
-2. [Project Scope](#2-project-scope)
-3. [Stakeholders and usage scenarios](#3-stakeholders-and-usage-scenarios)
-4. [Functional requirements](#4-functional-requirements)
-5. [Non-functional requirements](#5-non-functional-requirements)
+1. [Problem statement and motivation](#1-problem-statement-and-motivation)
+2. [What was built](#2-what-was-built)
+3. [Roles and permissions](#3-roles-and-permissions)
+4. [Module-by-module capabilities](#4-module-by-module-capabilities)
+5. [Beyond the original plan](#5-beyond-the-original-plan)
 6. [System architecture and technology stack](#6-system-architecture-and-technology-stack)
-7. [Evaluation plan](#7-evaluation-plan)
-8. [Work plan, milestones and risks](#8-work-plan-milestones-and-risks)
-9. [References](#9-references)
-10. [Implementation summary](#implementation-summary)
+7. [Security and data protection](#7-security-and-data-protection)
+8. [Evaluation: serverless vs. EC2](#8-evaluation-serverless-vs-ec2)
+9. [Testing](#9-testing)
+10. [Team](#10-team)
 
-## 1. Problem Statement and Motivation
+## 1. Problem statement and motivation
 
-IISc's roughly 6,000 students currently run the functions of a campus community platform through ad hoc
-channels: second-hand Buy & Sell and Lost & Found happen over WhatsApp groups that scroll out of relevance
-within days; Course experience and Exam-preparation knowledge is passed down informally between batches and
-is rarely documented; and Placement and Interview preparation material lives in scattered personal notes and
-one-off senior-junior conversations. Each new cohort effectively rebuilds this institutional knowledge from
-scratch, because none of it is searchable, persistent, or structured. The technical gap is the absence of a
-single, persistent, filterable, campus-scoped application that verified students can rely on across their
-entire programme duration, rather than a rotating set of chat threads.
+IISc's roughly 6,000 students ran the functions of a campus community platform through ad hoc channels:
+second-hand Buy & Sell and Lost & Found over WhatsApp groups that scroll out of relevance within days; course
+and exam-preparation knowledge passed down informally between batches; and placement and interview material
+scattered across personal notes and one-off senior–junior conversations. None of it was searchable, persistent
+or structured, so each cohort rebuilt this institutional knowledge from scratch.
 
-This problem requires Cloud Infrastructure rather than a single machine for two concrete reasons. First, usage
-is bursty and calendar-driven – Buy/Sell spikes at semester start and end, Placement-hub traffic spikes during
-Interview season. So, the compute tier needs to scale with dynamic demand rather than being sized (and paid
-for) at peak, all year round. Second, the data itself must persist and remain queryable across years of
-cohorts (structured search over thousands of listings, reports, and reviews), which needs a managed, durable
-database and object store rather than a single machine's disk.
+CampusHub replaces those ad hoc channels with a single, persistent, filterable, campus-scoped application:
+a web app that any verified IISc student can rely on throughout their programme, backed by cloud
+infrastructure chosen specifically because campus traffic is bursty and calendar-driven (Buy & Sell spikes at
+semester boundaries, Placement Hub spikes during interview season) and because the data itself — thousands of
+listings, reports, reviews and placement records — must stay durable and queryable across years of cohorts.
 
-## 2. Project Scope
+## 2. What was built
 
-### 2.1 In scope
+CampusHub is a single Flutter web application and FastAPI backend, deployed **twice** on AWS from the same
+codebase so the two deployments could be measured against each other:
 
-- ✅ A four-role permission model (Guest, Signed-in User, Moderator, Administrator), enforced independently per
-  module.
-- ✅ Buy & Sell: listings with status tracking (Available/Reserved/Sold), search/filter.
-- ✅ Lost & Found: separate lost/found reporting flows.
-- ✅ Academic Help: university wide course feedback/reviews segregated by departments, exam materials and a
-  discussion forum for signed-in users.
-- ✅ Placement Hub: company details, JD, pre-placement-talk (PPT) info, aggregated hiring statistics and past
-  trends, interview-experiences, a forum.
-- ✅ Community/Culture: a category-based events timeline (Past/Present/Upcoming) and the feature to
-  bookmark/favorite it to receive alerts.
-- ✅ Bookmarks: on-device for guest users, account-synced for signed-in users.
-  *(Guest bookmarks are kept in the browser and moved to the account at sign-in.)*
-- ⚠️ IISc-email-integrated authentication, push notifications, and a cross-platform (website + iOS + Android +
-  desktop) client.
-  *(IISc sign-in ✅. Notifications are delivered in-app; push to devices is only logged. The Flutter project
-  has iOS, Android and desktop targets, but only the web app is built and deployed.)*
+- **Serverless**: CloudFront → API Gateway → 5 AWS Lambda functions → RDS PostgreSQL + ElastiCache Redis.
+- **EC2 baseline**: CloudFront → Application Load Balancer → EC2 Auto Scaling group → the same RDS and Redis.
 
-### 2.2 Future scope
+Both are fully provisioned by Terraform, both run the identical application code, and both were load-tested
+with Locust to produce the architecture comparison described in [section 8](#8-evaluation-serverless-vs-ec2).
 
-- ✅ In app 1-1 chat feature for messaging between signed-in users. *(Built: one chat per person, with offers
-  that reserve a listing.)*
+Eight product areas are live on both deployments:
 
-### 2.3 Out of scope
+| Module | What it does |
+|---|---|
+| **Buy & Sell** | Second-hand listings with photos, price, category and location; status tracking (Available / Reserved / Sold); search and filter; price-drop watch; seller trust and moderation |
+| **Wanted** | "Looking for" posts that alert the poster when a matching listing appears |
+| **Lost & Found** | Separate lost/found report flows with automatic photo- and description-based match suggestions |
+| **Academic Help** | Departments → courses, course feedback with sentiment analysis, shared materials, a one-page course survival guide, and course discussion forums |
+| **Placement Hub** | Company pages (JD, pre-placement-talk info, multi-year hiring statistics, interview experiences, senior contacts), company forums, and bulk CSV import of historical placement records |
+| **Community Events** | A tag-filtered events timeline that auto-classifies Past / Present / Upcoming, with bookmarking and tag-follow alerts |
+| **Mess** | Daily mess menus (read from PDFs/photos by OCR) with follow-and-alert on meal updates |
+| **Messages** | One-to-one chat per pair of users, including offers that reserve a Buy & Sell listing |
 
-- In-app payments for Buy & Sell (item handoff and payment remains in-person/off-app).
-- Any AI chatbot / Q&A assistant
-- Mock-interview-round scheduling.
-- Automated (ML-based) content moderation instead of human moderator. *(Still out of scope: the automatic
-  flagging that was added only flags posts for human moderators.)*
-- Support for institutions other than IISc, or multi-campus federation.
-- Migration of existing data / posts from WhatsApp groups to our application.
-- Any Backup or Disaster recovery drills are out of scope.
+All eight sit behind one IISc-email sign-in (Cognito), one four-role permission model enforced independently
+per module, one notifications inbox, and one admin panel.
 
-### 2.4 Assumptions
+## 3. Roles and permissions
 
-- All users authenticate with a valid IISc email address; unauthenticated guests get read-only access.
-- The active user base is bounded (roughly 6000 thousand students), which sizes our scale targets.
-- Students list/report items honestly. The platform does not verify item ownership or identity beyond email.
-- Moderators and Admininstrators are trusted appointees (fellow students/staff). The platform does not defend
-  against a malicious Moderator/Administrator.
-- AWS Educate/free-tier credits are available to cover the project's cloud spend for the semester. No
-  additional credits are sponsored or paid for.
-- The resources will be deployed in Mumbai (ap-south-1) region. The timeliness of resources creation and
-  service availability are under normal conditions. If a catastrophic event occurs, the resource availability
-  and service availability will then be subject to the SLAs of the cloud providers.
+CampusHub enforces four roles, checked on every request directly from the database (never from token claims),
+so a revoked moderator loses access on their very next call:
 
-## 3. Stakeholders and usage scenarios
+1. **Guest** (not signed in) — reads every public feed: listings, Lost & Found, courses, placement pages,
+   events, mess menus. Bookmarks are kept in the browser and moved to the account at sign-in.
+2. **Signed-in user** — everything a guest can do, plus creating, editing and deleting their own posts,
+   feedback, forum threads and profile; messaging other users; bookmarking, following and saving searches.
+3. **Moderator** — scoped by the admin to one module (Buy & Sell, Lost & Found, Placement Hub, Events) or, for
+   Academic Help, to a department or a single course. Department-level Academic Help moderators additionally
+   manage courses, materials and course-level moderators. Moderators remove posts in their scope and work the
+   reports queue.
+4. **Administrator** — exactly one account at a time. Everything above, plus granting and revoking moderators,
+   deactivating accounts, editing landing-page campus services, and handing the admin role to someone else.
 
-### 3.1 User roles and permissions
+## 4. Module-by-module capabilities
 
-We have majorly four different categories of users which are enforced per module (ref: FR-2).
+### 4.1 Buy & Sell
 
-1. **Guest user** has read-only permissions. They can bookmark their interests but these bookmarks will be
-   stored in their local browser.
-2. **Signed-in User** can perform CRUD operations on their own posts/reviews/forum threads/profile. They cannot
-   mutate other users information.
-3. **Moderators** are module-scoped review authorities. In Buy&Sell/Lost&Found modules, the moderators can
-   perform CRUD operations on their own posts and read/delete any other signed-in user's post. In Academic
-   Help, there are 2 level of moderators - Department-level and Course level. The Course level moderators are
-   optional. Department-level moderators can perform CRUD operations on department scoped materials as well as
-   they can CRUD Course-level moderators. On the other hand, Course-level moderators can CRUD any materials on
-   the course to which they are assigned.
-4. An **Administrator** has access to the entire website. They can perform CRUD operations as well as provision
-   or de-provision Moderators.
+Students post listings with title, description, price, category, location and photos; the system suggests a
+category from the title text. Owners move a listing through Available → Reserved → Sold. Listings are
+searchable and filterable by category, price range and keyword. Buyers can watch a listing for price drops and
+see a "Negotiable" signal. Every listing carries a seller trust signal, driven only by moderator-confirmed
+removals (strikes, with an appeal/unblock-request flow) — never by an automated judgment. New posts are
+automatically screened (keywords, gibberish/spam detection, an image check) and flagged for a human moderator;
+nothing is auto-removed without one. A companion **Wanted** board lets a student post what they're looking for
+and get alerted when a matching listing appears.
 
-### 3.2 Usage scenarios
+### 4.2 Lost & Found
 
-1. **Buy & Sell:** A first-year student searches Buy & Sell for a specific item, filters by price, messages the
-   seller, and the seller marks the listing Reserved once they agree.
-2. **Lost & Found:** A student loses their ID card near the library and files a Lost report with time and
-   location. Two days later, another student finds it and files a Found report. The platform notifies the
-   original reporter of a likely match.
-3. **Placement Hub:** A final-year student preparing for placements opens the Placement Hub for a specific
-   company, reads the JD and recent interview experiences, and checks the last three years' hiring statistics
-   before deciding whether to apply.
-4. **Academic Help:** A course-level Moderator (appointed by a department-level Moderator) for Academic Help -
-   typically a TA or a student who previously took the course - uploads materials (notes, slides, past
-   assignments, feedback) from their records and curriculum. A department-level Moderator can freely edit a
-   course's materials and feedback, and can also remove the course itself from the department or add new
-   courses.
+Students file a lost or a found report (description, category, date, location, optional photo). A matching
+engine scores lost/found pairs by text and photo similarity (small ONNX embedding models), surfaces likely
+matches, and notifies the original reporter. Where the embedding models aren't available (for example, the
+trimmed Lambda deployment), the system falls back to a same-category match rule rather than failing.
 
-## 4. Functional requirements
+### 4.3 Academic Help
 
-| ID | Pri. | Requirement | Acceptance criterion | Status |
-|---|---|---|---|---|
-| FR-1 | Must | Sign Up/Log In only with a valid IISc email; Guests browse read-only without an account. | SignUp with a non-IISc email address is rejected before account creation; a Guest session reads public feeds with no login. | ✅ The API refuses non-IISc and unverified emails (403); guests read every feed. A Cognito pre sign-up trigger is provided (`backend/lambdas/cognito_pre_signup.py`) but not attached by Terraform |
-| FR-2 | Must | Enforce the four-role permission matrix (Guest/Signed-in/Moderator/Administrator) independently per module. | An automated test suite covering all role × module combinations confirms every out-of-scope action is rejected with 401/403. | ⚠️ Enforced on every route from the database; backend tests cover the role checks. The 16-combination matrix script (`terraform/tests/test_permission_matrix.py`) is out of date |
-| FR-3 | Must | An Administrator grants/revokes the Moderator role, scoped to a module (and, for Academic Help, a department or single course). | A revoked Moderator's next privileged call is rejected; a newly granted one succeeds. | ✅ Grants scoped to module, department or course; a revoked moderator's next call is rejected (tested) |
-| FR-4 | Must | Create a Buy/Sell listing (title, description, price, category, location, photo). | Listing is retrievable by ID within reasonable time (in seconds) of submission, including the photo and location. | ✅ |
-| FR-5 | Must | Owner changes listing status (Available/Reserved/Sold). | New status visible to other users in near-real time of status update. | ✅ |
-| FR-6 | Should | Search/filter listings by category, price range, keyword. | A combined category + price query returns only matching listings (0 false positives). | ✅ Tested: the combined filter returns no false positives |
-| FR-7 | Must | Submit a lost-item report (description, category, date, location). | Report visible in the Lost feed in near-real time of event reported. | ✅ |
-| FR-8 | Must | Submit a found-item report (description, category, date, location). | Report visible in the Found feed in near real-time – visually distinct from Lost. | ✅ |
-| FR-9 | Should | Notify a lost-item reporter of a found-item report. | For a synthetic matching tag, a push notification is delivered of the found report's creation. | ✅ Match notifications in the inbox (description and photo matching locally; same-category rule on Lambda). Push to devices is only logged |
-| FR-10 | Must | A Moderator removes (soft-deletes) any Buy & Sell or Lost & Found post. | Removed post disappears from the public feed in near real-time; a non-owner, non-moderator attempt is rejected (FR-2). | ✅ |
-| FR-11 | Must | Browse departments → courses; see whether feedback/material content exists for a course. | A course with no content returns an explicit "no data yet" response, never an error or blank page. | ✅ Explicit "no data yet" flag (tested) |
-| FR-12 | Must | Submit a text course-feedback post tied to a course. | Post visible on the course page in near real-time of feedback submission. | ✅ |
-| FR-13 | Should | Department-level Moderator has full CRUD on their department's courses' materials; course-level Moderator has read+edit+delete only on, on their own course's material. | A course-level Moderator's edit/delete attempt for their own course's material is only accepted; a department-level Moderator's create/update/delete on any course's material in-department succeeds. | ✅ Department and course moderators (tested) |
-| FR-14 | Should | Post/reply within a course or department discussion forum. | A reply is visible in the thread in near real-time, preserving thread order. | ✅ Course, department and company forums, with votes |
-| FR-15 | Must | Browse a company page: details, JD, PPT information, aggregated hiring statistics. | For available data, returned statistics match the data exactly; missing PPT/JD shows an explicit empty state. | ✅ Including multi-year hiring statistics |
-| FR-16 | Must | Submit an interview-experience post tied to a company/role. | Post visible under the company page. | ✅ |
-| FR-17 | Should | Moderator bulk-imports historical placement records from an existing spreadsheet. | Importing N well-formed rows creates/updates exactly N records; malformed rows are rejected and reported, not silently dropped. | ✅ CSV import of placement sheets, company lists and schedules; malformed rows are reported |
-| FR-18 | Must | Browse events filtered by category/tag (Sports, Food/Mess, Nature, Photography, Culture, etc . . . ). | Filtering by a tag returns only events carrying it. | ✅ |
-| FR-19 | Must | Each event auto-classifies Past/Present/Upcoming by time. | An event with start ≤ now ≤ end shows Present; one past its end time shows Past automatically | ✅ |
-| FR-20 | Should | Bookmark an event; get notified when a bookmarked/followed-tag event updates. | A triggered test update is delivered to the device within the bound set by NFR-1/NFR-2. | ✅ Bookmarks and followed tags notify on event updates (in-app; push only logged) |
-| FR-21 | Must | Landing page surfaces highlights from all four modules. | Each section renders populated content when data exists, and a defined empty-state otherwise. | ❌ No landing page: the app opens on Buy & Sell. The API serves campus-service links for it |
-| FR-22 | Should | Push notification for events relevant to the user (sale, match, forum reply, bookmarked-event update). | Triggered test event results in a delivered notification within the bound set by NFR-1/NFR-2. | ✅ In-app notifications, plus Web Push to browsers that turn it on (sales, matches, replies, messages, event updates); a push-sender Lambda outside the VPC delivers them. Native-app push (FCM/APNs) not built |
-| FR-23 | Could | One to one personal chat with users | Messages sent by user A intended for user B must reach user B and the acknowledgment should be sent back to user A. | ✅ One-to-one chat with delivery to the recipient (polling, not WebSockets) |
+Students browse departments and courses; a course with no content yet returns an explicit "no data" state
+rather than an error or a blank page. Students post text course feedback, which is scored for sentiment and
+summarized into a one-page **course survival guide**. Department-level moderators (often appointed TAs or
+students who took the course) upload and curate materials — notes, slides, past assignments; department
+moderators have full CRUD over their department's courses and materials and appoint course-level moderators,
+who in turn manage only their own course's material. Students can follow a course to be told about new
+materials, feedback and forum posts, and discuss in a course forum.
 
-## 5. Non-functional requirements
+### 4.4 Placement Hub
 
-| ID | Target (value, unit) | Workload | Measurement method | Status |
-|---|---|---|---|---|
-| NFR-1 (Latency) | p99 ≤ 600 ms incl. cold starts, Lambda config. | – | Locust / k6 identical harness – quantifies the serverless trade-off. | ✅ p99 140 ms (Lambda) and 160 ms (EC2) at 101 users. Lambda cold starts reached 4.1 to 4.7 s on each user's first request |
-| NFR-2 (Throughput) | ≥50 req/s aggregate, error rate <1%. | Mixed listing - create / search / notification-read traffic, 10-min ramp. | Locust / k6 ramping load. | ⚠️ 54.7 req/s (Lambda) and 52.5 req/s (EC2) with 0 % errors at 101 users, but with a read-only workload for 2 minutes, not the mixed 10-minute ramp |
-| NFR-3 (Scalability) | ≥ 500 concurrent sessions without p99 exceeding NFR-1 by >2×. | Simulated-user count ramp, fixed request mix. | Locust / k6 | ❌ At 501 users: Lambda p99 3.5 s with 84 % errors (database connections exhausted; RDS Proxy was off), EC2 p99 47 s |
-| NFR-4 (High Availability) | ≥ 99.0% over a 2-week window. | Continuous health-check polling. | CloudWatch synthetic canary, 5-min interval. | ❌ Not measured: no CloudWatch synthetic canary was set up |
-| NFR-5 (Cost) | Within free tier credits. | Same load as NFR-1. | AWS Cost Explorer/Budgets over the load-test window. | ⚠️ AWS Budgets alert is configured; the cost over a load-test window (Experiment 2) was not measured |
-| NFR-6 (Identity Security) | 100% of unauth. /expired-token requests and all 16 role × module permission combinations (Guest /Signed-in /Moderator /Administrator × 4 modules) resolve correctly. | Missing / malformed / expired-JWT suite + full permission-matrix suite. | Automated integration test suite, run in CI on every deploy. | ⚠️ Bad, missing and expired tokens are rejected on every route (tested), but the full matrix suite is out of date and not run in CI |
-| NFR-7 (Network and Data Security) | TLS 1.2+ in transit; KMS-backed encryption at rest (AWS RDS and S3). | N/A (configuration check). | AWS Config rule / manual audit checklist per milestone. | ⚠️ TLS 1.2+ (CloudFront, RDS `force_ssl`, Redis TLS) and RDS encryption at rest with KMS. S3 uses S3-managed keys (AES-256), not KMS |
-| NFR-8 (Data Integrity) | 0% upload corruption. | 100 uploads, 100 KB–10 MB. | Checksum comparison. | ✅ Every upload is a presigned PUT with a signed size and SHA-256 checksum, which S3 enforces (tested) |
+Company pages show the job description, pre-placement-talk information, aggregated multi-year hiring
+statistics, interview experiences submitted by students, and contact details for seniors at that company, plus
+a company discussion forum. Placement Hub moderators bulk-import historical placement records, company lists
+and interview schedules from CSV exports of spreadsheets; malformed rows are rejected and reported back, never
+silently dropped.
+
+### 4.5 Community Events
+
+Events are browsable by category/tag (Sports, Food/Mess, Nature, Photography, Culture, …) and each one
+auto-classifies itself as Past, Present or Upcoming purely from its start/end time. Students bookmark
+individual events or follow a tag, and are notified when a bookmarked event or a followed tag's event updates.
+
+### 4.6 Mess
+
+Daily menus per campus mess, extracted automatically from a PDF or photo of the posted menu using OCR, with a
+follow option that sends a meal alert to subscribers.
+
+### 4.7 Messages
+
+Each pair of signed-in users has exactly one conversation. Buy & Sell sellers and buyers can message directly
+from a listing, and a seller can send an offer that, on acceptance, reserves the listing. Messages are
+encrypted with server-held keys.
+
+### 4.8 Notifications
+
+One inbox collects every alert the platform generates — Lost & Found matches, forum replies, listing-status
+and price-watch updates, bookmarked-event updates, mess alerts, saved-search hits and chat messages — with
+in-app delivery for everyone and Web Push to browsers that opt in.
+
+### 4.9 Administration
+
+The admin panel grants and revokes moderator roles (scoped to a module, department or course), reviews a
+cross-module reports queue, handles Buy & Sell seller strikes/appeals/unblock requests, runs Placement Hub
+imports, and edits the campus-services links used across the app.
+
+## 5. Beyond the original plan
+
+A number of capabilities were built that were not in the v1 scope, because they turned out to make the core
+modules materially more useful:
+
+- **Wanted posts** — a request-side companion to Buy & Sell, with alerts when a match is listed.
+- **Seller trust and moderation** — trust scores and tags driven only by confirmed moderator action, plus a
+  seller appeal/unblock-request flow.
+- **Automatic content screening** — keyword, gibberish/spam and image checks that flag new posts for a human
+  moderator (content is never auto-removed by the model).
+- **Price watch** — price-drop alerts and a "Negotiable" signal on Buy & Sell listings.
+- **Smarter category suggestion** — a listing's category is suggested from its title text.
+- **Saved searches** — persistent search filters that alert the user when a new match appears.
+- **Course survival guide** — a one-page, sentiment-scored summary of a course's accumulated feedback.
+- **Lost & Found photo + description matching** — ONNX embedding models score candidate matches instead of a
+  plain category match.
+- **Mess menus** — OCR-extracted daily menus with meal-alert subscriptions.
+- **One-to-one messaging** — direct chat, including listing-reservation offers, server-side encrypted.
+- **Forums** — course, department and company discussion threads with upvotes/downvotes.
+- **A second, independently deployed EC2 baseline stack** — the same application built and measured against
+  the serverless deployment, to produce the architecture comparison in [section 8](#8-evaluation-serverless-vs-ec2).
+- **An ElastiCache Redis cache and CloudFront edge caching** in front of the most-read list endpoints, with a
+  viewer-aware cache key so no user is ever served another user's cached response.
 
 ## 6. System architecture and technology stack
 
-![Proposed AWS system architecture](Proposal-Serverless-Architecture.jpg)
+### 6.1 Serverless deployment (primary)
 
-*Figure 1: Proposed AWS system architecture illustrating the end-to-end application workflow*
+```
+Users → Route 53 / CloudFront (CDN, edge cache on list endpoints) → S3 (Flutter web bundle)
+                                   │
+                                   ├─→ API Gateway (HTTP API) → 5 Lambda functions (FastAPI via Mangum)
+                                   │        buy-sell · lost-found · placement-hub · academic-hub · community-events
+                                   │        running in private subnets across 3 Availability Zones
+                                   │
+                        ElastiCache Redis (read cache)      RDS PostgreSQL 16 (system of record)
+                                   │
+                          Cognito (IISc-email sign-in, Hosted UI, 4 groups)
+                          S3 media bucket (presigned direct uploads)
+                          CloudWatch alarms · SNS · AWS Budgets
+```
 
-### 6.1 Infrastructure and managed services
+### 6.2 EC2 baseline deployment (for comparison)
 
-- ⚠️ **Edge & delivery:** Route 53 resolves the domain → AWS WAF inspects inbound traffic → CloudFront (CDN)
-  serves the static Flutter-web bundle and fronts the API.
-- ✅ **Storage:** S3 holds the static site plus all module objects (Buy & Sell listings, Lost & Found reports,
-  Academic Materials, Placement Hub docs); the bucket is private, reachable only via CloudFront's origin access
-  control, and client uploads go directly to S3 through Lambda-signed presigned URLs.
-- ⚠️ **Compute & API:** API Gateway (HTTPS/WebSocket) validates the Cognito JWT and invokes per-module Lambda
-  functions (Buy&Sell, Lost&Found, Placement Hub, Academic Help, Community Events) running in private subnets
-  across three Availability Zones, packaged from the same FastAPI container so it redeploys unmodified to
-  Fargate for the Sec. 7 evaluation.
-- ✅ **Data tier:** AWS RDS (Cluster), reached from the Lambda subnets via direct private subnet routing.–
-  persistent records (listings, reports, materials, profiles) and high-write, TTL-expiring data (notification
-  and chat streams) alike.
-- ⚠️ **Auth & security:** Cognito gates sign-up to IISc email addresses (current student or alumni) and issues
-  JWTs carrying Cognito Group claims (Guest/ Signed-in/ Moderator/ Admin, with Moderator groups further scoped
-  per department for Academic Help), checked by a single shared FastAPI authorization dependency on every
-  route; IAM enforces least-privilege roles per service; KMS manages secrets and encryption at rest.
-- ⚠️ **Operations & IaC:** Terraform provisions all of the above from a GitHub-hosted IaC repo, triggered by the
-  CI/CD pipeline; CloudWatch collects logs, metrics, and traces; AWS Budgets tracks spend and alerts on cost
-  overruns.
+The same FastAPI application, packaged as a Docker image, runs on an Auto Scaling group of EC2 instances
+(`t4g.micro`, min 3 / desired 3 / max 5, scaling on CPU and request count) behind an Application Load Balancer,
+reached the same way through CloudFront, and backed by the same RDS and Redis.
 
-**Status of 6.1:**
+### 6.3 Technology stack
 
-| Item | Status |
+| Layer | Technology |
 |---|---|
-| Edge & delivery | ⚠️ CloudFront serves the Flutter bundle and fronts the API ✅. WAF is an optional Terraform module, off by default. Route 53 is not used (the `*.cloudfront.net` address is used) |
-| Storage | ✅ Private S3 buckets, CloudFront origin access control, presigned uploads straight to S3 |
-| Compute & API | ⚠️ API Gateway (HTTP API) invokes 5 per-module Lambda functions in private subnets across 3 AZs ✅. Token validation is done by the FastAPI app, not the gateway; no WebSocket API; the functions are a zip package, not a container. The comparison uses EC2 rather than Fargate |
-| Data tier | ✅ RDS PostgreSQL (a Multi-AZ instance rather than a cluster) in private subnets, plus ElastiCache Redis as a read cache |
-| Auth & security | ⚠️ Cognito sign-in ✅, least-privilege IAM ✅, KMS-backed RDS encryption and Secrets Manager ✅. Roles come from the database, not Cognito group claims; the IISc-only pre sign-up trigger is not attached by Terraform |
-| Operations & IaC | ⚠️ Terraform provisions everything ✅, CloudWatch logs and alarms ✅, AWS Budgets ✅. CI/CD only builds and publishes the web app; Terraform is applied by hand |
+| Frontend | Flutter (Dart) — single codebase, web build deployed; iOS/Android/desktop targets exist in the project |
+| Backend | FastAPI (Python), async I/O throughout, raw SQL via asyncpg (no ORM) |
+| Database | Amazon RDS for PostgreSQL 16 — 57 tables, 19 enum types |
+| Cache | Amazon ElastiCache for Redis (cache-aside) + CloudFront edge caching |
+| Auth | Amazon Cognito, IISc-email-gated sign-up, JWT verified on every route |
+| Object storage | Amazon S3 — static site, uploaded media, presigned direct uploads with a signed SHA-256 checksum |
+| Infrastructure as code | Terraform (HCL), one module set, two environments (`dev` = serverless, `baseline` = EC2) |
+| Observability | CloudWatch logs, metrics and alarms; AWS Budgets |
+| Load testing | Locust, with a purpose-built Tkinter GUI, an endpoint catalogue and automated chart generation |
 
-### 6.2 Software
+### 6.4 Key design decisions
 
-- ✅ **Flutter:** A single Dart codebase compiles to native iOS/Android/desktop/web-browser build for the
-  Frontend.
-- ✅ **FastAPI (Python):** Async I/O suits concurrent calls to AWS RDS and S3 in one request path, and it packages
-  cleanly into a Lambda function via a Lambda-compatible ASGI adapter (e.g. Mangum), which is what lets
-  Sec. 7's Lambda-vs-EC2 instances comparison run against the same codebase rather than two separate backends.
+| Decision | Why |
+|---|---|
+| FastAPI packaged identically for Lambda (via Mangum) and for EC2 | One codebase runs unmodified in both deployments, which is what makes the architecture comparison meaningful |
+| RDS PostgreSQL as the sole system of record | The relational querying needed for combined filters, department→course moderator hierarchies and spreadsheet ingestion is natural in SQL and awkward in a NoSQL store |
+| Flutter for the client | One Dart codebase targets web (shipped) and iOS/Android/desktop (scaffolded), with native-quality rendering for photo- and scroll-heavy screens |
+| Terraform over CloudFormation | Concise HCL, an explicit `plan` preview before every `apply`, and no cloud-provider lock-in |
+| Permissions read from the database on every request, not from JWT claims | A moderator grant or revocation takes effect on the very next API call, with no token refresh needed |
+| Redis + CloudFront caching layered in front of Postgres | Cuts p50 latency on the busiest read endpoints without ever caching a write or sharing one user's response with another |
+| A second EC2-based deployment of the identical app | Produces real, load-tested numbers for the serverless-vs-always-on trade-off described in the PRD, instead of a theoretical argument |
 
-### 6.3 Design decisions (alternatives rejected + reason)
+## 7. Security and data protection
 
-| Decision | Alternative rejected | Reason |
+- **Identity**: sign-up is gated to IISc email addresses through Cognito; every API route verifies the bearer
+  token (signature, expiry, issuer, audience) and rejects a missing, malformed or expired one.
+- **Authorization**: all four roles are enforced per module from the database, including department- and
+  course-scoped Academic Help moderators.
+- **Transport and storage encryption**: TLS 1.2+ on every public endpoint (CloudFront, RDS `force_ssl`, Redis
+  TLS); RDS is encrypted at rest with KMS; application secrets live only in Secrets Manager, never in Lambda
+  environment variables.
+- **Upload integrity**: every file goes straight to S3 through a presigned URL carrying a signed size limit and
+  SHA-256 checksum, which S3 itself enforces before accepting the object.
+- **Least privilege**: each AWS service runs under its own IAM role, scoped to only what it needs.
+- **Moderation trail**: every moderator action (removal, grant, revocation) is written to an audit log.
+
+## 8. Evaluation: serverless vs. EC2
+
+The two deployments were load-tested with Locust against identical, read-heavy traffic (Academic Help and
+Placement Hub endpoints, with a Cognito ID token) at 101, 250 and 501 concurrent users, 2 minutes per run,
+bypassing CloudFront's edge cache.
+
+| Stack | Users | Successful req/s | p50 | p95 | p99 | Errors |
+|---|---:|---:|---:|---:|---:|---:|
+| Lambda | 101 | 54.7 | 53 ms | 74 ms | 140 ms | 0 % |
+| EC2 | 101 | 52.5 | 110 ms | 120 ms | 160 ms | 0 % |
+| Lambda | 250 | 13.5 | 150 ms | 280 ms | 3,200 ms | 88.9 % |
+| EC2 | 250 | 55.4 | 130 ms | 5,800 ms | 24,000 ms | 30.8 % |
+| Lambda | 501 | 31.6 | 430 ms | 1,500 ms | 3,500 ms | 84.2 % |
+| EC2 | 501 | 94.0 | 440 ms | 13,000 ms | 47,000 ms | 7.2 % |
+
+**At normal load (101 users), Lambda answers roughly twice as fast as EC2** (53 ms vs. 110 ms median), with
+zero errors on both stacks, meeting the PRD's latency target (p99 ≤ 600 ms) and throughput target (≥ 50 req/s)
+comfortably. The 101-user run is the traffic level CampusHub is actually sized for.
+
+At higher concurrency, the investigation traced the bottleneck precisely: each of up to 399 concurrent Lambda
+containers opened its own database connection pool, which exhausted the `db.t4g.micro` instance's connection
+limit (observed peak: 179 simultaneous connections, with thousands of `TooManyConnectionsError`s in the logs).
+The fix — Amazon RDS Proxy, which multiplexes a bounded pool of database connections across all Lambda
+containers — is already built into the Terraform module (`enable_rds_proxy`) and was simply not switched on
+for this run. EC2 degraded differently under the same load (request queuing rather than connection exhaustion),
+confirming the finding is about the serverless connection model specifically, not the application code.
+
+Full per-endpoint results, interactive reports and charts: [`README.md` §9](README.md#9-performance-and-metrics)
+and [`locust_load_testing/output/BENCHMARK_SUMMARY.md`](locust_load_testing/output/BENCHMARK_SUMMARY.md).
+
+## 9. Testing
+
+- **Backend**: over 200 automated tests (pytest) against a real PostgreSQL instance, covering every module's
+  CRUD paths and the role/permission checks for all four roles.
+- **Frontend**: Flutter widget and integration tests, including a live-backend integration suite.
+- **ML feature accuracy**: dedicated accuracy evaluations for Lost & Found matching and category suggestion
+  (`docs/auto-flag-accuracy.md`, `docs/category-suggest-accuracy.md`).
+- **Load testing**: the Locust suite described in [section 8](#8-evaluation-serverless-vs-ec2), covering 65
+  endpoints across 10 modules, runnable against either deployment or a local backend.
+- **Deployment verification**: a `curl`-based smoke-test sequence checks health, CloudFront edge caching and
+  authentication on every fresh deploy (`README.md` §5.9).
+
+## 10. Team
+
+**Team Order of Phoenix**, DS252 Introduction to Cloud Computing, Indian Institute of Science (IISc).
+
+| SR No. | Name | Email |
 |---|---|---|
-| Lambda (serverless/FaaS) as sole compute target for FastAPI. | IaaS (EC2) and always-on containers (ECS/Fargate). | Traffic is bursty and calendar-driven (spikes at semester/interview boundaries, idle between). Pay-per-invocation avoids paying for idle capacity and eliminates OS/cluster management overhead. |
-| Amazon RDS PostgreSQL Cluster as sole system of record for MVP. | Amazon DynamoDB (NoSQL). | Requires complex multi-attribute filtering (FR-6), hierarchical relational mappings for department-to-course permissions (FR-11, FR-13), and historical spreadsheet ingestion (FR-17). DynamoDB cannot natively handle these relational queries without complex Global Secondary Indexes |
-| Flutter for web, desktop, and mobile client. | React Native. | Native rendering (no JS bridge) handles image/scroll-heavy screens smoothly. Single Dart codebase covers all three platforms, avoiding separate frontend stacks. |
-| S3 (+ CloudFront) for static website hosting. | Serving from EC2, or via a FaaS handler (Lambda) per request. | Static assets require no compute. S3/CloudFront provides flat per-GB edge hosting without server management. Running through Lambda would add unnecessary compute costs and cold-start latency. |
-| Terraform for infrastructure-as-code. | AWS CloudFormation (native IaC). | HCL is more concise than CloudFormation YAML/JSON. terraform plan ensures gives an explicit preview of changes before every apply, and the provider model prevents cloud vendor lock-in for third-party integrations. |
-
-## 7. Evaluation plan
-
-**Workload Generator:** Locust / k6 configured to replay a mixed trace of listing creation, search, and
-notification-read traffic.
-
-**Configurations for Comparison:**
-
-![Baseline AWS system architecture](Baseline-Architecture.jpg)
-
-*Figure 2: Baseline AWS system architecture illustrating the end-to-end application workflow*
-
-- **Proposed Architecture:** FastAPI application running on AWS Lambda (Serverless), triggered via Amazon API
-  Gateway.
-- **Baseline Configuration:** The identical FastAPI application packaged in a Docker container and deployed on
-  an always-on Amazon EC2 instance.
-
-**Metrics:**
-
-- Client-measured p50, p95, and p99 end-to-end latency (ms).
-- System throughput (RPS = requests per second at a < 1% error rate ceiling).
-- Cost per 1,000 requests (USD).
-
-**Experimental Configurations Traceability:**
-
-- ⚠️ **Experiment 1: Concurrency and Scalability (Validates NFR-1, NFR-2, NFR-3).** Replay the workload trace
-  across both the Lambda and EC2 baseline configurations at three concurrency levels (100, 300, and 500
-  simulated clients) with a 10-minute steady-state run.
-  *(Run on 6 November 2026 at 101, 250 and 501 users for 2 minutes each, read-only; results in
-  [README.md](README.md#9-performance-and-metrics).)*
-- ❌ **Experiment 2: Cost Efficiency Under Bursty Load (Validates NFR-5).** Simulate a 24-hour campus traffic
-  profile featuring sharp semester-boundary traffic spikes followed by idle night hours. Calculate the AWS bill
-  (compute + data transfer) for both the Lambda and EC2 configurations over this window.
-- ⚠️ **Experiment 3: Permission Matrix Validation (Validates FR-2, NFR-6).** Execute an automated integration test
-  suite generating 16 cross-combinations of roles (Guest, Signed-in, Moderator, Admin) attempting CRUD
-  operations across all four modules to confirm 100% rejection of unauthorized calls.
-  *(The backend test suite covers the role checks; the dedicated matrix script is out of date.)*
-
-**Cost Model:** Total AWS spend (Compute + API Gateway + Database I/O) attributed to the duration of the
-load-test window, divided by the total number of successful requests served, expressed as $USD per 1,000
-requests.
-
-**Expected Form of Results:**
-
-- A latency-vs-concurrency line plot comparing the Serverless vs. Baseline configurations.
-- A cost-per-1,000-requests bar chart demonstrating the idle-cost penalty of the EC2 baseline versus Lambda.
-
-## 8. Work plan, milestones and risks
-
-### 8.1 WBS
-
-| Week/Milestone | Owner | Task |
-|---|---|---|
-| 1 | All | Finalize PRD; Terraform installation and setup (VPC, S3, etc.); Flutter project skeleton. |
-| 2 | All | Auth + 4-role permission model (FR-1, FR-2, FR-3) + profile; FastAPI project skeleton on Lambda. |
-| 3 | All | Buy & Sell + Lost & Found (FR-4–FR-10) |
-| 4 | All | Academic Help + Placement Hub (FR-11–FR-17) |
-| 5 | All | Community/Events/Landing Page (FR-18–FR-22); Permission-matrix test suite (Sec. 7); CI/CD Integration |
-| 6 | All | Locust / k6 load tests (Sec. 7); bug-fix pass; demo prep; report writing. |
-
-### 8.2 Minimum Viable Product (MVP)
-
-The MVP delivers the core, persistent campus platform deployed entirely on AWS Lambda and Amazon RDS
-(PostgreSQL). It includes:
-
-- ✅ **Identity Access:** IISc Email Cognito integration (FR-1) and full Role-Based Access Control (FR-2, FR-3).
-- ✅ **Core Modules:** Buy Sell CRUD and relational filtering (FR-4, FR-5, FR-6), Lost Found reporting (FR-7,
-  FR-8, FR-10), Academic Help course browsing and feedback (FR-11, FR-12),Department level Course information
-  access privilege (FR13,FR14) Placement Hub browsing (FR-15, FR-16), and Community Events (FR-18, FR-19,
-  FR-21).
-- ✅ **Infrastructure Base:** Complete Terraform automation of the VPC, Lambda tier, RDS cluster, S3 static
-  hosting, and API Gateway.
-
-### 8.3 Stretch Goals (Out of MVP Scope)
-
-- ⚠️ Real-time 1-to-1 Chat via WebSockets (FR-23). *(Chat is built, using polling instead of WebSockets.)*
-- ✅ Automated push notifications for Lost & Found matching (FR-9) and bookmarked events (FR-20, FR-22), to browsers (Web Push).
-  *(Delivered in-app; push to devices is only logged.)*
-- ✅ Moderator bulk-import of historical placement data via Excel spreadsheets (FR-17). *(As CSV files exported from the spreadsheet.)*
-
-### 8.4 Principal Risks and Mitigations
-
-1. **Risk:** A buggy frontend client loop or accidental request spam floods the API, rapidly consuming the
-   team's limited AWS free-tier credits and degrading throughput for legitimate users
-   - **Mitigation:** Enable built-in request throttling and quota limits directly in Amazon API Gateway (e.g.,
-     a steady-state rate of 50 requests per second and a burst limit of 100). API Gateway intercepts and drops
-     excessive requests with an HTTP 429 ("Too Many Requests") status code at the edge before invoking Lambda
-     compute, preventing unexpected billing spikes.
-   - ✅ *Status: API Gateway stage throttling is configured (default 1,000 req/s, burst 2,000).*
-2. **Risk:** Generating 500 concurrent simulated clients for the baseline load tests (NFR-3) overwhelms local
-   compute resources, leading to false-positive latency metrics caused by client-side CPU bottlenecks rather
-   than actual cloud infrastructure limits.
-   - **Mitigation:** Instead of running the Locust/k6 workload generator locally, we will deploy the
-     load-testing suite onto a dedicated, compute-optimized AWS EC2 instance (e.g., c5.large) in the Mumbai
-     region. This guarantees the load generator has sufficient network and CPU overhead to accurately saturate
-     and measure the API.
-   - ❌ *Status: the load tests were run from a local machine.*
-3. **Risk:** Removing DynamoDB to rely strictly on Amazon RDS introduces connection-pool exhaustion if
-   thousands of concurrent Lambda instances attempt to open independent database connections during a sudden
-   traffic spike (e.g., beginning of placements).
-   - **Mitigation:** Implement Amazon RDS Proxy between the Lambda execution tier and the PostgreSQL database.
-     RDS Proxy automatically pools and shares a bounded number of database connections, allowing massive
-     serverless concurrency to safely multiplex without overwhelming the database's memory.
-   - ⚠️ *Status: RDS Proxy is available in Terraform (`enable_rds_proxy`) but was off during the load tests,
-     and this exact failure occurred at 250+ users.*
-
-## 9. References
-
-1. AWS documentation: Lambda, Fargate, API Gateway, RDS, DynamoDB, S3, CloudFront, Cognito, SNS, SQS, KMS,
-   Secrets Manager, CloudWatch. https://docs.aws.amazon.com
-2. Locust load-testing framework documentation. https://locust.io
-3. Grafana k6 load-testing framework documentation https://k6.io/
-4. FastAPI documentation. https://fastapi.tiangolo.com
-5. Flutter documentation. https://flutter.dev
-6. Terraform AWS provider documentation. https://registry.terraform.io/providers/hashicorp/aws
-7. Tooling: this PRD's architecture analysis and requirements drafting were iterated on with Claude
-   (Anthropic) and Google Gemini, per the course's encouraged LLM use. The architecture diagram is created
-   using Draw.io
-
-## Implementation summary
-
-| Group | ✅ Implemented | ⚠️ Partly | ❌ Not implemented |
-|---|---:|---:|---:|
-| Functional requirements (23) | 20 | 2 | 1 |
-| Non-functional requirements (8) | 2 | 4 | 2 |
-
-- **Not implemented:** FR-21 (landing page), NFR-3 (500-user scalability target), NFR-4 (availability
-  canary), Experiment 2 (cost under bursty load).
-- **Partly implemented:** FR-2 and NFR-6 (matrix test suite out of date), NFR-2 (read-only, shorter test), NFR-5 (budget alert only), NFR-7 (S3 not KMS-encrypted).
-- **Built beyond the plan:** Wanted posts, seller trust scores and appeals, saved searches with alerts, price
-  watch, mess menus with meal alerts and menu reading from PDFs/photos, course survival guide with
-  sentiment, automatic flagging for moderators, category suggestion, a Redis cache and CloudFront API
-  caching, and the EC2 baseline deployment for the comparison.
+| 26898 | Mohammad Sufyan Azam | [mohammadazam@iisc.ac.in](mailto:mohammadazam@iisc.ac.in) |
+| 26643 | Adithya Chippa | [cadithya@iisc.ac.in](mailto:cadithya@iisc.ac.in) |
+| 26648 | Dinky Lakhani | [dinkylakhani@iisc.ac.in](mailto:dinkylakhani@iisc.ac.in) |
+| 25862 | Mukund Kukreja | [kmukund@iisc.ac.in](mailto:kmukund@iisc.ac.in) |
