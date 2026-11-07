@@ -60,7 +60,7 @@ of on that branch.
 
 ![Proposed Architecture Diagram](Proposal-Architecture-Lambda.jpg)
 
-- **Request path and caching : ** A read-heavy GET (for example `/api/v1/listings`) is served in up to three
+- **Request path and caching :** A read-heavy GET (for example `/api/v1/listings`) is served in up to three
 ways:
 
 1. **CloudFront edge cache.** 11 list/browse paths (`listings`, `lost-reports`, `found-reports`, `wanted`,
