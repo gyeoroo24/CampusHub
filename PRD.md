@@ -167,7 +167,7 @@ We have majorly four different categories of users which are enforced per module
 | FR-19 | Must | Each event auto-classifies Past/Present/Upcoming by time. | An event with start ≤ now ≤ end shows Present; one past its end time shows Past automatically | ✅ |
 | FR-20 | Should | Bookmark an event; get notified when a bookmarked/followed-tag event updates. | A triggered test update is delivered to the device within the bound set by NFR-1/NFR-2. | ✅ Bookmarks and followed tags notify on event updates (in-app; push only logged) |
 | FR-21 | Must | Landing page surfaces highlights from all four modules. | Each section renders populated content when data exists, and a defined empty-state otherwise. | ❌ No landing page: the app opens on Buy & Sell. The API serves campus-service links for it |
-| FR-22 | Should | Push notification for events relevant to the user (sale, match, forum reply, bookmarked-event update). | Triggered test event results in a delivered notification within the bound set by NFR-1/NFR-2. | ⚠️ In-app notifications for sales, matches, replies and event updates; push to devices is only logged (`LogPushSender`) |
+| FR-22 | Should | Push notification for events relevant to the user (sale, match, forum reply, bookmarked-event update). | Triggered test event results in a delivered notification within the bound set by NFR-1/NFR-2. | ✅ In-app notifications, plus Web Push to browsers that turn it on (sales, matches, replies, messages, event updates); a push-sender Lambda outside the VPC delivers them. Native-app push (FCM/APNs) not built |
 | FR-23 | Could | One to one personal chat with users | Messages sent by user A intended for user B must reach user B and the acknowledgment should be sent back to user A. | ✅ One-to-one chat with delivery to the recipient (polling, not WebSockets) |
 
 ## 5. Non-functional requirements
@@ -315,7 +315,7 @@ The MVP delivers the core, persistent campus platform deployed entirely on AWS L
 ### 8.3 Stretch Goals (Out of MVP Scope)
 
 - ⚠️ Real-time 1-to-1 Chat via WebSockets (FR-23). *(Chat is built, using polling instead of WebSockets.)*
-- ⚠️ Automated push notifications for Lost & Found matching (FR-9) and bookmarked events (FR-20, FR-22).
+- ✅ Automated push notifications for Lost & Found matching (FR-9) and bookmarked events (FR-20, FR-22), to browsers (Web Push).
   *(Delivered in-app; push to devices is only logged.)*
 - ✅ Moderator bulk-import of historical placement data via Excel spreadsheets (FR-17). *(As CSV files exported from the spreadsheet.)*
 
@@ -367,8 +367,7 @@ The MVP delivers the core, persistent campus platform deployed entirely on AWS L
 
 - **Not implemented:** FR-21 (landing page), NFR-3 (500-user scalability target), NFR-4 (availability
   canary), Experiment 2 (cost under bursty load).
-- **Partly implemented:** FR-2 and NFR-6 (matrix test suite out of date), FR-22 (device push is only
-  logged), NFR-2 (read-only, shorter test), NFR-5 (budget alert only), NFR-7 (S3 not KMS-encrypted).
+- **Partly implemented:** FR-2 and NFR-6 (matrix test suite out of date), NFR-2 (read-only, shorter test), NFR-5 (budget alert only), NFR-7 (S3 not KMS-encrypted).
 - **Built beyond the plan:** Wanted posts, seller trust scores and appeals, saved searches with alerts, price
   watch, mess menus with meal alerts and menu reading from PDFs/photos, course survival guide with
   sentiment, automatic flagging for moderators, category suggestion, a Redis cache and CloudFront API
