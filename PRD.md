@@ -278,13 +278,3 @@ and [`locust_load_testing/output/BENCHMARK_SUMMARY.md`](locust_load_testing/outp
 - **Deployment verification**: a `curl`-based smoke-test sequence checks health, CloudFront edge caching and
   authentication on every fresh deploy (`README.md` §5.9).
 
-## 10. Team
-
-**Team Order of Phoenix**, DS252 Introduction to Cloud Computing, Indian Institute of Science (IISc).
-
-| SR No. | Name | Email |
-|---|---|---|
-| 26898 | Mohammad Sufyan Azam | [mohammadazam@iisc.ac.in](mailto:mohammadazam@iisc.ac.in) |
-| 26643 | Adithya Chippa | [cadithya@iisc.ac.in](mailto:cadithya@iisc.ac.in) |
-| 26648 | Dinky Lakhani | [dinkylakhani@iisc.ac.in](mailto:dinkylakhani@iisc.ac.in) |
-| 25862 | Mukund Kukreja | [kmukund@iisc.ac.in](mailto:kmukund@iisc.ac.in) |
