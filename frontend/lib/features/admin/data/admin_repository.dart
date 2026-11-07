@@ -5,6 +5,13 @@ import '../../auth/domain/account_status.dart';
 import '../../auth/domain/user.dart';
 import '../domain/content_report.dart';
 
+/// One page of the admin's account list.
+class UserPage {
+  final List<User> items;
+  final bool hasMore;
+  const UserPage(this.items, {required this.hasMore});
+}
+
 abstract class IAdminRepository {
   Future<List<ModeratorGrant>> listModerators({bool includeRevoked = false});
   Future<ModeratorGrant> grantModerator({
@@ -16,7 +23,6 @@ abstract class IAdminRepository {
   });
   Future<void> revokeModerator(String grantId);
   Future<AccountStatus> transferAdminRole(String targetEmail);
-  Future<AccountStatus> updateUserStatus({required String email, required bool isActive});
   Future<List<ContentReport>> listReports({String? status, String? module});
 
   /// Flags a listing or lost/found report for moderator review (FR-10). Any signed-in user may
@@ -37,9 +43,9 @@ abstract class IAdminRepository {
     String? severity,
   });
   Future<Map<String, dynamic>> getSystemHealth();
-  /// Accounts for the admin's User Accounts tab (admin only): the admin first, then by name.
-  /// [query] narrows to names or emails containing it; at most [limit] are returned.
-  Future<List<User>> listRegisteredUsers({String query = '', int limit = 50});
+  /// One page of accounts for the admin's User Accounts tab (admin only): the admin first, then by name.
+  /// [query] narrows to names or emails containing it; [status] is 'active', 'deactivated' or null (all).
+  Future<UserPage> listRegisteredUsers({String query = '', String? status, int offset = 0, int limit = 50});
 
   /// Finds an account by email (admin only); throws if nobody with that email has signed in yet.
   Future<AccountStatus> lookupUser(String email);
@@ -377,30 +383,6 @@ class MockAdminRepository implements IAdminRepository {
   }
 
   @override
-  Future<AccountStatus> updateUserStatus({required String email, required bool isActive}) async {
-    await Future<void>.delayed(const Duration(milliseconds: 150));
-    final trimmed = email.trim().toLowerCase();
-    final idx = _mockUsers.indexWhere((u) => u.email.toLowerCase() == trimmed);
-    if (idx == -1) {
-      throw Exception('No campus user found with email "$trimmed".');
-    }
-    final target = _mockUsers[idx];
-    if (target.isAdmin && !isActive) {
-      throw Exception('Cannot deactivate the active Administrator. Transfer the role first.');
-    }
-
-    _mockUsers[idx] = target.copyWith(isActive: isActive);
-
-    return AccountStatus(
-      id: target.id,
-      email: target.email,
-      name: target.name,
-      isActive: isActive,
-      isAdmin: target.isAdmin,
-    );
-  }
-
-  @override
   Future<List<ContentReport>> listReports({String? status, String? module}) async {
     await Future<void>.delayed(const Duration(milliseconds: 100));
     return _mockReports.where((r) {
@@ -488,12 +470,14 @@ class MockAdminRepository implements IAdminRepository {
   }
 
   @override
-  Future<List<User>> listRegisteredUsers({String query = '', int limit = 50}) async {
+  Future<UserPage> listRegisteredUsers({String query = '', String? status, int offset = 0, int limit = 50}) async {
     await Future<void>.delayed(const Duration(milliseconds: 80));
     final q = query.trim().toLowerCase();
-    return List.unmodifiable(_mockUsers
+    final matching = _mockUsers
         .where((u) => q.isEmpty || u.name.toLowerCase().contains(q) || u.email.toLowerCase().contains(q))
-        .take(limit));
+        .where((u) => status == null || u.isActive == (status == 'active'))
+        .toList();
+    return UserPage(matching.skip(offset).take(limit).toList(), hasMore: matching.length > offset + limit);
   }
 }
 
@@ -557,16 +541,6 @@ class ApiAdminRepository implements IAdminRepository {
     final target = await lookupUser(targetEmail);
     final response = await apiClient.post(
       ApiEndpoints.userMakeAdmin(target.id),
-    );
-    return AccountStatus.fromJson(response.data as Map<String, dynamic>);
-  }
-
-  @override
-  Future<AccountStatus> updateUserStatus({required String email, required bool isActive}) async {
-    final target = await lookupUser(email);
-    final response = await apiClient.patch(
-      ApiEndpoints.user(target.id),
-      data: {'is_active': isActive},
     );
     return AccountStatus.fromJson(response.data as Map<String, dynamic>);
   }
@@ -639,12 +613,16 @@ class ApiAdminRepository implements IAdminRepository {
   }
 
   @override
-  Future<List<User>> listRegisteredUsers({String query = '', int limit = 50}) async {
+  Future<UserPage> listRegisteredUsers({String query = '', String? status, int offset = 0, int limit = 50}) async {
     final response = await apiClient.get(ApiEndpoints.users, queryParameters: {
       if (query.trim().isNotEmpty) 'q': query.trim(),
+      if (status != null) 'status': status,
+      'offset': offset,
       'limit': limit,
     });
-    final items = (response.data as Map<String, dynamic>)['items'] as List<dynamic>? ?? const [];
-    return items.map((u) => User.fromJson(u as Map<String, dynamic>)).toList();
+    final data = response.data as Map<String, dynamic>;
+    final items = data['items'] as List<dynamic>? ?? const [];
+    return UserPage(items.map((u) => User.fromJson(u as Map<String, dynamic>)).toList(),
+        hasMore: data['has_more'] == true);
   }
 }

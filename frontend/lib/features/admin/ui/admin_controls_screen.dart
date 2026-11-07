@@ -32,7 +32,7 @@ import 'unblock_requests_panel.dart';
 /// The category-delete dialog's "Delete its posts too" choice (category ids are positive).
 const _deletePostsChoice = -1;
 
-enum _PanelTab { moderators, users, reports, sellerStrikes, unblockRequests, categories, campusServices }
+enum _PanelTab { moderators, users, adminHandover, reports, sellerStrikes, unblockRequests, categories, campusServices }
 
 class AdminControlsScreen extends ConsumerStatefulWidget {
   final int? initialTab;
@@ -55,7 +55,6 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
 
   // User management form
   final _userEmailController = TextEditingController();
-  bool _isUpdatingUser = false;
   bool _isTransferringAdmin = false;
 
   // New category form
@@ -274,6 +273,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
             text: user.isAdmin ? 'Moderators' : 'Course moderators',
           ),
         _PanelTab.users => const Tab(icon: Icon(Icons.manage_accounts_outlined, size: 18), text: 'User Accounts'),
+        _PanelTab.adminHandover => const Tab(icon: Icon(Icons.swap_horiz_rounded, size: 18), text: 'Admin Handover'),
         _PanelTab.reports => const Tab(icon: Icon(Icons.report_gmailerrorred_rounded, size: 18), text: 'Reports Queue'),
         _PanelTab.sellerStrikes => const Tab(icon: Icon(Icons.gavel_outlined, size: 18), text: 'Seller Strikes'),
         _PanelTab.unblockRequests =>
@@ -286,6 +286,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
   Widget _viewFor(_PanelTab tab, bool isDark, ThemeData theme, User user) => switch (tab) {
         _PanelTab.moderators => const ModeratorGrantsPanel(),
         _PanelTab.users => _buildUsersTab(isDark, theme),
+        _PanelTab.adminHandover => _buildAdminHandoverTab(isDark, theme),
         _PanelTab.reports => _buildReportsQueueTab(isDark, theme),
         _PanelTab.sellerStrikes => _buildSellerStrikesTab(isDark, theme),
         _PanelTab.unblockRequests => const UnblockRequestsPanel(),
@@ -294,260 +295,233 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
       };
 
   // ---------------------------------------------------------------------------
-  // TAB 2: User Account Controls & Single Admin Handover
+  // TAB 2: User Accounts (admin) -- every account, loaded a page at a time as the list scrolls
   // ---------------------------------------------------------------------------
   Widget _buildUsersTab(bool isDark, ThemeData theme) {
-    final currentUser = ref.watch(currentUserProvider);
-    final isUserAdmin = currentUser?.isAdmin ?? false;
+    final users = ref.watch(registeredUsersProvider);
+    final status = ref.watch(registeredUsersStatusProvider);
+    final query = ref.watch(registeredUsersQueryProvider);
+    final border = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
 
-    if (!isUserAdmin) {
-      return Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 580),
-          child: Card(
-            margin: const EdgeInsets.all(24),
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.lock_person_outlined, size: 48, color: Colors.orange.shade700),
-                  const SizedBox(height: 12),
-                  const Text('Administrator Privileges Required', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  const SizedBox(height: 8),
-                  Text(
-                    'User account deactivation and administrative role handover are reserved strictly for the Administrator. Switch to Reports Queue to review flagged listings.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: theme.hintColor, fontSize: 13),
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    icon: const Icon(Icons.report_gmailerrorred_rounded, size: 16),
-                    label: const Text('Go to Reports Queue'),
-                    onPressed: () => _goTo(_PanelTab.reports),
-                  ),
-                ],
+    return LayoutBuilder(builder: (context, constraints) {
+      // Same 880px column as the other tabs, centred.
+      final side = ((constraints.maxWidth - 880) / 2).clamp(20.0, double.infinity);
+      return NotificationListener<ScrollNotification>(
+        onNotification: (n) {
+          if (n.metrics.extentAfter < 600) ref.read(registeredUsersProvider.notifier).loadMore();
+          return false;
+        },
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(side, 20, side, 12),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Registered Campus Members & Status Overview',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 12),
+                    TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Search by name or email',
+                        prefixIcon: const Icon(Icons.search, size: 18),
+                        isDense: true,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onSubmitted: (q) => ref.read(registeredUsersQueryProvider.notifier).state = q.trim(),
+                      onChanged: (q) {
+                        // Clearing the box shows everyone again without needing Enter.
+                        if (q.trim().isEmpty) ref.read(registeredUsersQueryProvider.notifier).state = '';
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        for (final (value, label) in const [(null, 'All'), ('active', 'Active'), ('deactivated', 'Deactivated')])
+                          ChoiceChip(
+                            label: Text(label),
+                            selected: status == value,
+                            onSelected: (_) => ref.read(registeredUsersStatusProvider.notifier).state = value,
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
+            if (users.items.isEmpty && !users.loading && users.error == null)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 32),
+                  child: Center(
+                    child: Text(
+                      query.isNotEmpty
+                          ? 'No accounts match “$query”.'
+                          : status == 'deactivated'
+                              ? 'No deactivated accounts.'
+                              : 'No accounts yet.',
+                      style: TextStyle(color: theme.hintColor),
+                    ),
+                  ),
+                ),
+              ),
+            SliverPadding(
+              padding: EdgeInsets.symmetric(horizontal: side),
+              sliver: SliverList.separated(
+                itemCount: users.items.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (context, idx) => _userCard(users.items[idx], border, theme),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Center(
+                  child: users.loading
+                      ? const CircularProgressIndicator()
+                      : users.error != null
+                          ? TextButton.icon(
+                              icon: const Icon(Icons.refresh_rounded, size: 16),
+                              label: Text('Couldn’t load accounts: ${errorText(users.error!)}. Retry'),
+                              onPressed: () => ref.read(registeredUsersProvider.notifier).loadMore(),
+                            )
+                          : users.items.isNotEmpty && !users.hasMore
+                              ? Text('${users.items.length} accounts', style: TextStyle(fontSize: 12, color: theme.hintColor))
+                              : const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          ],
         ),
       );
-    }
+    });
+  }
 
-    final usersAsync = ref.watch(registeredUsersProvider);
+  Widget _userCard(User u, Color border, ThemeData theme) {
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: border)),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: u.isAdmin ? Colors.red.shade100 : Colors.teal.shade100,
+          child: Text(
+            u.name.isNotEmpty ? u.name[0].toUpperCase() : 'U',
+            style: TextStyle(fontWeight: FontWeight.bold, color: u.isAdmin ? Colors.red.shade900 : Colors.teal.shade900),
+          ),
+        ),
+        title: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            Text(u.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            if (u.isAdmin)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(4)),
+                child: const Text('ADMIN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red)),
+              ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: u.isActive ? Colors.green.shade50 : Colors.red.shade50,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: u.isActive ? Colors.green.shade200 : Colors.red.shade200),
+              ),
+              child: Text(
+                u.isActive ? 'ACTIVE' : 'DEACTIVATED',
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: u.isActive ? Colors.green.shade800 : Colors.red.shade800),
+              ),
+            ),
+          ],
+        ),
+        subtitle: Text(
+          'Email: ${u.email} • ${u.programme ?? "Student"} (${u.graduationYear ?? "—"})',
+          style: TextStyle(fontSize: 12, color: theme.hintColor),
+        ),
+        trailing: u.isAdmin || !u.isActive
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
+                tooltip: 'Name as admin successor',
+                onPressed: () {
+                  _userEmailController.text = u.email;
+                  _goTo(_PanelTab.adminHandover);
+                },
+              ),
+      ),
+    );
+  }
 
+  // ---------------------------------------------------------------------------
+  // TAB: Admin Handover -- pass the single admin role to someone else
+  // ---------------------------------------------------------------------------
+  Widget _buildAdminHandoverTab(bool isDark, ThemeData theme) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 880),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Single Admin Handover Card
-              Card(
-                elevation: 0,
-                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFFEF2F2),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: Colors.red.shade300),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          child: Card(
+            elevation: 0,
+            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFFEF2F2),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: Colors.red.shade300),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Row(
-                        children: [
-                          Icon(Icons.swap_horiz_rounded, size: 22, color: Colors.red.shade700),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Single-Admin Handover by Email ID',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Under the single-admin governance model, there is exactly one active administrator. Naming your successor will transfer all administrative authorities and automatically adjust your account to a standard student role in the same transaction.',
-                        style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.red.shade900),
-                      ),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: _userEmailController,
-                        decoration: InputDecoration(
-                          labelText: 'Successor IISc Email',
-                          hintText: 'e.g. mohammadazam@iisc.ac.in',
-                          prefixIcon: const Icon(Icons.person_search_outlined, size: 18),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.orange.shade800,
-                              side: BorderSide(color: Colors.orange.shade400),
-                            ),
-                            icon: const Icon(Icons.person_off_outlined, size: 16),
-                            label: const Text('Toggle Active / Inactive'),
-                            onPressed: _isUpdatingUser ? null : () => _handleToggleUserStatus(),
-                          ),
-                          const SizedBox(width: 12),
-                          FilledButton.icon(
-                            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-                            icon: _isTransferringAdmin
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                  )
-                                : const Icon(Icons.admin_panel_settings, size: 16),
-                            label: const Text('Handover Admin Role'),
-                            onPressed: _isTransferringAdmin ? null : () => _handleTransferAdmin(),
-                          ),
-                        ],
+                      Icon(Icons.swap_horiz_rounded, size: 22, color: Colors.red.shade700),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text('Single-Admin Handover by Email ID',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                       ),
                     ],
                   ),
-                ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Under the single-admin governance model, there is exactly one active administrator. Naming your successor will transfer all administrative authorities and automatically adjust your account to a standard student role in the same transaction.',
+                    style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.red.shade900),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _userEmailController,
+                    decoration: InputDecoration(
+                      labelText: 'Successor IISc Email',
+                      hintText: 'e.g. name@iisc.ac.in',
+                      prefixIcon: const Icon(Icons.person_search_outlined, size: 18),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+                      icon: _isTransferringAdmin
+                          ? const SizedBox(
+                              width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.admin_panel_settings, size: 16),
+                      label: const Text('Handover Admin Role'),
+                      onPressed: _isTransferringAdmin ? null : () => _handleTransferAdmin(),
+                    ),
+                  ),
+                ],
               ),
-
-              const SizedBox(height: 24),
-              const Text(
-                'Registered Campus Members & Status Overview',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                decoration: InputDecoration(
-                  hintText: 'Search by name or email',
-                  prefixIcon: const Icon(Icons.search, size: 18),
-                  isDense: true,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                onSubmitted: (q) => ref.read(registeredUsersQueryProvider.notifier).state = q.trim(),
-                onChanged: (q) {
-                  // Clearing the box shows everyone again without needing Enter.
-                  if (q.trim().isEmpty) ref.read(registeredUsersQueryProvider.notifier).state = '';
-                },
-              ),
-              const SizedBox(height: 12),
-
-              usersAsync.when(
-                data: (users) {
-                  if (users.isEmpty) {
-                    final query = ref.read(registeredUsersQueryProvider);
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 24),
-                      child: Center(
-                        child: Text(
-                          query.isEmpty ? 'No accounts yet.' : 'No accounts match “$query”.',
-                          style: TextStyle(color: theme.hintColor),
-                        ),
-                      ),
-                    );
-                  }
-                  final list = ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: users.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, idx) {
-                      final u = users[idx];
-                      return Card(
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(
-                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                          ),
-                        ),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: u.isAdmin ? Colors.red.shade100 : Colors.teal.shade100,
-                            child: Text(
-                              u.name.isNotEmpty ? u.name[0].toUpperCase() : 'U',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: u.isAdmin ? Colors.red.shade900 : Colors.teal.shade900,
-                              ),
-                            ),
-                          ),
-                          title: Wrap(
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            spacing: 8,
-                            runSpacing: 4,
-                            children: [
-                              Text(u.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              if (u.isAdmin)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.shade100,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: const Text('ADMIN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red)),
-                                ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: u.isActive ? Colors.green.shade50 : Colors.red.shade50,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: u.isActive ? Colors.green.shade200 : Colors.red.shade200),
-                                ),
-                                child: Text(
-                                  u.isActive ? 'ACTIVE' : 'DEACTIVATED',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: u.isActive ? Colors.green.shade800 : Colors.red.shade800,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          subtitle: Text(
-                            'Email: ${u.email} • ${u.programme ?? "Student"} (${u.graduationYear ?? "—"})',
-                            style: TextStyle(fontSize: 12, color: theme.hintColor),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.copy_rounded, size: 16),
-                            tooltip: 'Fill into email input',
-                            onPressed: () {
-                              _userEmailController.text = u.email;
-                              _showToast('Copied ${u.email} into email field.');
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                  if (users.length < registeredUsersPageSize) return list;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      list,
-                      const SizedBox(height: 10),
-                      Text(
-                        'Showing the first $registeredUsersPageSize accounts. Search to find someone else.',
-                        style: TextStyle(fontSize: 12, color: theme.hintColor),
-                      ),
-                    ],
-                  );
-                },
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Text('Error loading users: ${errorText(e)}', style: const TextStyle(color: Colors.red)),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -592,29 +566,6 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
       } finally {
         if (mounted) setState(() => _isTransferringAdmin = false);
       }
-    }
-  }
-
-  Future<void> _handleToggleUserStatus() async {
-    final email = _userEmailController.text.trim();
-    if (email.isEmpty) {
-      _showToast('Please enter the IISc email address.');
-      return;
-    }
-
-    setState(() => _isUpdatingUser = true);
-    try {
-      final repo = ref.read(adminRepositoryProvider);
-      final user = await repo.lookupUser(email);
-
-      final nextActive = !user.isActive;
-      await repo.updateUserStatus(email: email, isActive: nextActive);
-      ref.invalidate(registeredUsersProvider);
-      _showToast('Account $email is now ${nextActive ? "Active" : "Deactivated"}.');
-    } catch (e) {
-      _showToast('Failed to update status: ${errorText(e)}', isError: true);
-    } finally {
-      if (mounted) setState(() => _isUpdatingUser = false);
     }
   }
 

@@ -1,11 +1,11 @@
-"""Health check, the caller's own profile, other users' public profiles, and admin account controls."""
+"""Health check, the caller's own profile, other users' public profiles, and the admin's account list and hand-over."""
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
 import asyncpg
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 from .. import otp
 from ..auth import CurrentUser, current_user, current_user_allow_deactivated, optional_user
@@ -82,11 +82,6 @@ class PublicProfile(BaseModel):
     programme: str | None
     graduation_year: int | None
     contact: Contact | None = Field(None, description="Email and phone; only shown to signed-in users")
-
-
-class AccountUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")   # admin changes go through POST /users/{id}/make-admin
-    is_active: bool = Field(description="false deactivates the account: every request it makes gets 403")
 
 
 _STATUS_COLUMNS = "id, email::text AS email, name, is_active, base_role = 'admin' AS is_admin"
@@ -223,30 +218,10 @@ async def get_user(user_id: UUID, viewer: CurrentUser | None = Depends(optional_
                          programme=row["programme"], graduation_year=row["graduation_year"], contact=contact)
 
 
-@router.patch("/users/{user_id}", response_model=AccountStatus,
-              summary="Deactivate or reactivate an account (admin)")
-async def update_account(user_id: UUID, body: AccountUpdate, user: CurrentUser = Depends(current_user),
-                         conn: asyncpg.Connection = Depends(get_conn)):
-    if not user.is_admin:
-        raise forbidden("Only the admin can change accounts.")
-    if user_id == user.id:
-        raise HTTPException(422, "You can't deactivate your own account; hand the admin role over first.")
-    async with conn.transaction():
-        if not body.is_active:
-            row = await _deactivate(conn, user_id, by=user.id)
-        else:
-            row = await conn.fetchrow(
-                f"""UPDATE users SET is_active = true WHERE id = $1 RETURNING {_STATUS_COLUMNS}""", user_id)
-        if row is None:
-            raise not_found("User")
-        await log_moderation(conn, user.id, "reactivate_user" if body.is_active else "deactivate_user", "user", user_id)
-    return AccountStatus(**dict(row))
-
-
 async def _deactivate(conn: asyncpg.Connection, user_id: UUID, by: UUID) -> asyncpg.Record | None:
-    """Deactivate an account (a suspension, not a deletion: the owner can reactivate it by signing
-    in again, see reactivate_me) and end its moderator roles -- an admin has to grant any role again
-    after reactivation. Their posts and messages stay, marked as coming from a deactivated account.
+    """Deactivate an account (the owner's own choice, POST /me/deactivate: a suspension, not a deletion --
+    they can reactivate it by signing in again, see reactivate_me) and end its moderator roles -- an admin
+    has to grant any role again after reactivation. Their posts and messages stay, marked as coming from a deactivated account.
     Call inside a transaction."""
     row = await conn.fetchrow(
         f"""UPDATE users SET is_active = false WHERE id = $1 RETURNING {_STATUS_COLUMNS}""", user_id)

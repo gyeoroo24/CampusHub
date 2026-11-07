@@ -218,21 +218,12 @@ def test_admin_edits_others_content_and_it_is_logged(client, campus):
     assert actions == {"edit_listing", "change_listing_status", "rename_thread", "edit_comment"}
 
 
-def test_admin_deactivates_and_reactivates_accounts(client):
-    admin_id = make_admin(client, ADMIN)
+def test_the_admin_cannot_deactivate_accounts(client):
+    """Accounts are deactivated only by their owner (POST /me/deactivate); the admin endpoint is gone."""
+    make_admin(client, ADMIN)
     asha_id = sign_in(client, ASHA)
-    listing = _listing(client, ASHA)
-    assert client.patch(f"{API}/users/{asha_id}", headers=RAVI, json={"is_active": False}).status_code == 403
-    assert client.patch(f"{API}/users/{admin_id}", headers=ADMIN, json={"is_active": False}).status_code == 422
-    r = client.patch(f"{API}/users/{asha_id}", headers=ADMIN, json={"is_active": False})
-    assert r.status_code == 200 and r.json()["is_active"] is False
-    assert client.get(f"{API}/listings", headers=ASHA).status_code == 403      # list pages too, not only details
-    assert client.get(f"{API}/listings/{listing['id']}", headers=RAVI).json()["seller_contact"] is None
-    r = client.patch(f"{API}/users/{asha_id}", headers=ADMIN, json={"is_active": True})
-    assert r.json() | {"id": None} == {"id": None, "email": "asha@iisc.ac.in", "name": "Asha",
-                                       "is_active": True, "is_admin": False}
-    # admin changes only go through the hand-over endpoint
-    assert client.patch(f"{API}/users/{asha_id}", headers=ADMIN, json={"is_admin": True}).status_code == 422
+    assert client.patch(f"{API}/users/{asha_id}", headers=ADMIN, json={"is_active": False}).status_code == 405
+    assert client.get(f"{API}/me", headers=ASHA).status_code == 200
 
 
 def test_admin_hands_over_the_role(client):
@@ -247,7 +238,7 @@ def test_admin_hands_over_the_role(client):
     assert [r["n"] for r in sql("SELECT count(*) AS n FROM users WHERE base_role = 'admin'")] == [1]
     # the old admin can't do it any more; the new one can pass it on
     assert client.post(f"{API}/users/{ravi_id}/make-admin", headers=ADMIN).status_code == 403
-    client.patch(f"{API}/users/{ravi_id}", headers=ASHA, json={"is_active": False})
+    assert client.post(f"{API}/me/deactivate", headers=RAVI).status_code == 204
     assert client.post(f"{API}/users/{ravi_id}/make-admin", headers=ASHA).status_code == 422   # deactivated
     with pytest.raises(asyncpg.UniqueViolationError):   # the database itself allows one admin
         sql("UPDATE users SET base_role = 'admin' WHERE id = $1::uuid", ravi_id)

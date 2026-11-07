@@ -424,7 +424,6 @@ After that, the admin hands the role over from the app (or `POST /api/v1/users/{
 | Task | Who | Where |
 |---|---|---|
 | Grant or revoke a moderator role | Admin | Admin panel → moderator grants (`POST`/`DELETE /api/v1/moderators`) |
-| Deactivate or reactivate an account | Admin | Admin panel, by email (`GET /api/v1/users/lookup`, `PATCH /api/v1/users/{id}`) |
 | Review reported content | Moderators of that module, admin | Reports queue |
 | Handle seller strikes, appeals and unblock requests | Buy & Sell moderators, admin | Admin panel → unblock requests |
 | Import placement sheets, company lists and schedules | Placement Hub moderators | Placement Hub import; formats in [docs/placement-csv-formats.md](docs/placement-csv-formats.md) |

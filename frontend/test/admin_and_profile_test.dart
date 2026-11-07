@@ -71,30 +71,12 @@ void main() {
       expect(result.email, 'cadithya@iisc.ac.in');
       expect(result.isAdmin, isTrue);
 
-      final users = await repo.listRegisteredUsers();
+      final users = (await repo.listRegisteredUsers()).items;
       final adithya = users.firstWhere((u) => u.email == 'cadithya@iisc.ac.in');
       final mukund = users.firstWhere((u) => u.email == 'kmukund@iisc.ac.in');
 
       expect(adithya.isAdmin, isTrue);
       expect(mukund.isAdmin, isFalse); // Demoted in same transaction
-    });
-
-    test('Admin toggles user account active / deactivated by email ID', () async {
-      final repo = MockAdminRepository();
-
-      // Deactivate Aarav by email
-      final deactivated = await repo.updateUserStatus(
-        email: 'student@iisc.ac.in',
-        isActive: false,
-      );
-      expect(deactivated.isActive, isFalse);
-
-      // Reactivate
-      final reactivated = await repo.updateUserStatus(
-        email: 'student@iisc.ac.in',
-        isActive: true,
-      );
-      expect(reactivated.isActive, isTrue);
     });
 
     test('Admin resolves content reports with action and optional removal', () async {

@@ -427,7 +427,7 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout> {
               padding: const EdgeInsets.only(right: 8),
               child: InkWell(
                 borderRadius: BorderRadius.circular(20),
-                onTap: () => context.push('/admin?tab=4'),
+                onTap: () => context.push('/admin?tab=5'),
                 child: Tooltip(
                   message: serverConfig.useMockData
                       ? 'Mock In-Memory Mode active. Click to configure live teammate backend.'

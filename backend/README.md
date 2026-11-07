@@ -292,7 +292,6 @@ local runs only).
 | POST /me/phone/code, POST /me/phone/verify | user | Add or change my phone number: a 6-digit code is sent to it, then checked |
 | GET /users/{id} | guest | Public profile; email and phone only for signed-in viewers |
 | GET /users/lookup?email= | admin | Find an account by email (for deactivating or handing over the admin role) |
-| PATCH /users/{id} | admin | Deactivate or reactivate an account (`is_active`); not your own |
 | POST /users/{id}/make-admin | admin | Hand the admin role over: there is exactly one admin, so the caller becomes a signed-in user |
 | POST /moderators | admin; department moderator for their courses | Grant a moderator role by email |
 | DELETE /moderators/{id} | same, or the moderator themselves | Revoke a role, or step down from your own |

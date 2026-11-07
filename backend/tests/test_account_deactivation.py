@@ -74,8 +74,8 @@ def test_active_listings_are_not_marked(client):
 
 def test_a_deactivated_account_cannot_get_a_moderator_role(client):
     make_admin(client, ADMIN)
-    ravi_id = sign_in(client, RAVI)
-    assert client.patch(f"{API}/users/{ravi_id}", headers=ADMIN, json={"is_active": False}).status_code == 200
+    sign_in(client, RAVI)
+    assert client.post(f"{API}/me/deactivate", headers=RAVI).status_code == 204
     r = grant(client, ADMIN, "ravi@iisc.ac.in", "buy_sell")
     assert r.status_code == 422 and "deactivated" in r.json()["detail"]
 
