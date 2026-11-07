@@ -196,7 +196,7 @@ Users → Route 53 / CloudFront (CDN, edge cache on list endpoints) → S3 (Flut
 
 ### 6.2 EC2 baseline deployment (for comparison)
 
-The same FastAPI application, packaged as a Docker image, runs on an Auto Scaling group of EC2 instances
+The same FastAPI application, packaged as an application zip (backend.zip), runs on an Auto Scaling group of EC2 instances
 (`t4g.micro`, min 3 / desired 3 / max 5, scaling on CPU and request count) behind an Application Load Balancer,
 reached the same way through CloudFront, and backed by the same RDS and Redis.
 
@@ -243,21 +243,18 @@ reached the same way through CloudFront, and backed by the same RDS and Redis.
 ## 8. Evaluation: serverless vs. EC2
 
 The two deployments were load-tested with Locust against identical, read-heavy traffic (Academic Help and
-Placement Hub endpoints, with a Cognito ID token) at 101, 250 and 501 concurrent users, 2 minutes per run,
+Placement Hub endpoints, with a Cognito ID token) at 101 and 501 concurrent users, 2 minutes per run,
 bypassing CloudFront's edge cache.
 
 | Stack | Users | Successful req/s | p50 | p95 | p99 | Errors |
 |---|---:|---:|---:|---:|---:|---:|
 | Lambda | 101 | 54.7 | 53 ms | 74 ms | 140 ms | 0 % |
 | EC2 | 101 | 52.5 | 110 ms | 120 ms | 160 ms | 0 % |
-| Lambda | 250 | 13.5 | 150 ms | 280 ms | 3,200 ms | 88.9 % |
-| EC2 | 250 | 55.4 | 130 ms | 5,800 ms | 24,000 ms | 30.8 % |
 | Lambda | 501 | 31.6 | 430 ms | 1,500 ms | 3,500 ms | 84.2 % |
 | EC2 | 501 | 94.0 | 440 ms | 13,000 ms | 47,000 ms | 7.2 % |
 
-**At normal load (101 users), Lambda answers roughly twice as fast as EC2** (53 ms vs. 110 ms median), with
-zero errors on both stacks, meeting the PRD's latency target (p99 ≤ 600 ms) and throughput target (≥ 50 req/s)
-comfortably. The 101-user run is the traffic level CampusHub is actually sized for.
+**At a load of 101 concurrent users, Lambda answers roughly twice as fast as EC2** (53 ms vs. 110 ms median), with
+zero errors on both stacks, meeting the PRD's latency target (p99 ≤ 600 ms) and throughput target (≥ 50 req/s).
 
 At higher concurrency, the investigation traced the bottleneck precisely: each of up to 399 concurrent Lambda
 containers opened its own database connection pool, which exhausted the `db.t4g.micro` instance's connection
