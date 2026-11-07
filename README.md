@@ -106,13 +106,13 @@ PRD.md        The original project requirements, in Markdown
 DEV.md        Developer guide: what each part of the codebase does
 locust_load_testing/   (on main) Locust load-test suite and benchmark results
 Cloud_Computing_Project-PRD.pdf        Product requirements
-Proposal-Serverless-Architecture.jpg   The serverless design this branch implements
-Baseline-Architecture.jpg              The EC2 baseline design
+Proposal-Architecture-Lambda.jpg   The serverless design this branch implements
+Baseline.jpg              The EC2 baseline design
 ```
 
 ## 5. Deploy to AWS
 
-These are the steps used for the deployment on 6 November 2026, in `ap-south-1`. Module and variable
+These are the steps used for the deployment as of 7 November 2026, in `ap-south-1`. Module and variable
 detail is in [terraform/README.md](terraform/README.md). If a step fails, see
 [Troubleshooting](#13-troubleshooting).
 
@@ -126,7 +126,7 @@ detail is in [terraform/README.md](terraform/README.md). If a step fails, see
 | Docker | Builds the PostgreSQL client layer for the data-tools Lambda |
 | Flutter (stable) | Builds the web app |
 
-### 5.2 Create the Terraform state bucket (once per AWS account)
+### 5.2 Create the Terraform state bucket (once per AWS account) 
 
 ```bash
 cd terraform/bootstrap
@@ -135,7 +135,7 @@ terraform apply
 terraform output state_bucket_name      # e.g. campushub-tfstate-1a2b3c4d
 ```
 
-This creates an encrypted, versioned S3 bucket and the `campushub-tf-locks` DynamoDB table.
+This creates an encrypted, versioned S3 bucket and the `campushub-tf-locks` DynamoDB table --- also called Terraform Backend
 
 ### 5.3 Build the PostgreSQL layer
 
@@ -157,7 +157,7 @@ enable_elasticache = true                # Redis cache; false = app runs uncache
 
 ### 5.5 Initialise and apply
 
-`versions.tf` names one team member's state bucket. Point Terraform at your own bucket at init time
+`versions.tf` names one team's state bucket. Point Terraform at your own bucket at init time
 instead of editing the file:
 
 ```bash
