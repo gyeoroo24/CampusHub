@@ -9,7 +9,7 @@ import 'package:cryptography/cryptography.dart';
 /// Messages are encrypted and decrypted on the device, and the backend stores ciphertext. For
 /// now, though, the app also uploads each user's private key in plain form ([serverHeldUpload]),
 /// so nobody needs a passphrase and the SERVER CAN READ MESSAGES: this is not end-to-end
-/// encryption yet (see the backend's docs/future-plan-2026-10-31-next-level-features.md). The backend's tests use a
+/// encryption yet (true E2E, e.g. passkeys plus device linking, is a planned improvement). The backend's tests use a
 /// Python implementation of the same protocol (backend/tests/chat_crypto.py), and
 /// test/messages/chat_crypto_test.dart checks the two agree byte for byte.
 ///

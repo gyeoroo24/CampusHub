@@ -26,7 +26,7 @@ has seen everything up to N never misses one, whatever order transactions commit
 Key backup: for now the app uploads its private key in plain form (backup_kdf "none"), so the user
 never needs a passphrase and any browser they sign in on can read their messages. GET /me/chat-key
 returns it to its owner only, but the server itself CAN read every message: this is not true
-end-to-end encryption yet (see docs/future-plan-2026-10-31-next-level-features.md). Older keys may
+end-to-end encryption yet (true E2E, e.g. passkeys plus device linking, is a planned improvement). Older keys may
 still have a passphrase-encrypted backup ("pbkdf2-sha256"); the app replaces it with a plain one
 the next time it is unlocked.
 

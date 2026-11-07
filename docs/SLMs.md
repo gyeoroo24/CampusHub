@@ -1,10 +1,8 @@
 # SLMs: AWS-Managed Alternatives & Cost-Benefit Analysis
 
-*As-of 1 Nov 2026 — advisory only, nothing below is implemented. Companion doc to
-[future-plan-2026-10-31-next-level-features.md](future-plan-2026-10-31-next-level-features.md) §4,
-which this doc does not repeat except to summarize.*
+*As-of 1 Nov 2026 — advisory only, nothing below is implemented.*
 
-This doc answers one question: for each of the four small models (SLMs) the future-plan doc
+This doc answers one question: for each of the four small models (SLMs) CampusHub self-hosts or
 proposes self-hosting, what's the AWS-managed equivalent, and is switching to it actually worth it
 — in dollars, latency, engineering effort, and risk — for a project this size, built on the
 AWS stack the [PRD](CampusHub-PRD-v1.pdf) already committed to (Lambda, API Gateway, RDS, S3,

@@ -6,7 +6,7 @@
 --
 -- backup_kdf = 'none' means key_backup is the plain 32-byte private key, so the server can read
 -- messages. Existing passphrase backups ('pbkdf2-sha256') stay valid; the app moves each one to
--- 'none' the next time it is unlocked. See docs/future-plan-2026-10-31-next-level-features.md.
+-- 'none' the next time it is unlocked. True end-to-end encryption is a planned improvement.
 
 BEGIN;
 

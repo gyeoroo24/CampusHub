@@ -1248,8 +1248,8 @@ CREATE INDEX idx_push_devices_user ON push_devices(user_id);
 --                       the app stores the private key here in plain form
 --                       (backup_kdf 'none') so any browser can open messages
 --                       without a passphrase. That means the SERVER CAN READ
---                       MESSAGES for now: true end-to-end encryption is future
---                       work (docs/future-plan-2026-10-31-next-level-features.md).
+--                       MESSAGES for now: true end-to-end encryption is a
+--                       planned improvement, not yet built.
 --                       Old 'pbkdf2-sha256' rows are passphrase-encrypted backups.
 --   chat_conversations  one per pair of people (rev 10), like a WhatsApp chat:
 --                       user_a < user_b. last_seq numbers every change in it;

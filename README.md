@@ -458,7 +458,7 @@ After that, the admin hands the role over from the app (or `POST /api/v1/users/{
 | Grant or revoke a moderator role | Admin | Admin panel → moderator grants (`POST`/`DELETE /api/v1/moderators`) |
 | Review reported content | Moderators of that module, admin | Reports queue |
 | Handle seller strikes, appeals and unblock requests | Buy & Sell moderators, admin | Admin panel → unblock requests |
-| Import placement sheets, company lists and schedules | Placement Hub moderators | Placement Hub import; formats in [docs/placement-csv-formats.md](docs/placement-csv-formats.md) |
+| Import placement sheets, company lists and schedules | Placement Hub moderators | Placement Hub import; column formats in [docs/api-reference.md § Placement Hub](docs/api-reference.md#placement-hub) |
 | Edit landing-page campus services | Admin | `PATCH /api/v1/campus-services/{id}` |
 
 ### 7.4 Using the API directly
@@ -639,7 +639,6 @@ state.
 | [docs/schema/README.md](docs/schema/README.md) | Database diagrams, one per module |
 | [docs/restoring the data snapshot.md](docs/restoring%20the%20data%20snapshot.md) | Export and restore data between deployments |
 | [docs/deployment errors resolution.md](docs/deployment%20errors%20resolution.md) | Errors hit while deploying the Lambda stack, with fixes |
-| [docs/placement-csv-formats.md](docs/placement-csv-formats.md) | Placement sheet import formats |
 | [docs/category-suggest-accuracy.md](docs/category-suggest-accuracy.md), [docs/auto-flag-accuracy.md](docs/auto-flag-accuracy.md) | ML feature evaluations |
 | `docs/session-notes-*.md` | What each work session added and fixed |
 | [Cloud_Computing_Project-PRD.pdf](Cloud_Computing_Project-PRD.pdf) | Product requirements |
