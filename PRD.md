@@ -261,8 +261,7 @@ containers opened its own database connection pool, which exhausted the `db.t4g.
 limit (observed peak: 179 simultaneous connections, with thousands of `TooManyConnectionsError`s in the logs).
 The fix — Amazon RDS Proxy, which multiplexes a bounded pool of database connections across all Lambda
 containers — is already built into the Terraform module (`enable_rds_proxy`) and was simply not switched on
-for this run. EC2 degraded differently under the same load (request queuing rather than connection exhaustion),
-confirming the finding is about the serverless connection model specifically, not the application code.
+for this run as this is not supported in AWS Free Tier. EC2 degraded differently under the same load (request queuing rather than connection exhaustion).
 
 Full per-endpoint results, interactive reports and charts: [`README.md` §9](README.md#9-performance-and-metrics)
 and [`locust_load_testing/output/BENCHMARK_SUMMARY.md`](locust_load_testing/output/BENCHMARK_SUMMARY.md).
