@@ -576,7 +576,7 @@ cd terraform/bootstrap
 terraform destroy
 ```
 
-## 12. Documentation index
+## 11. Documentation index
 
 | Document | Contents |
 |---|---|
@@ -594,7 +594,7 @@ terraform destroy
 | `docs/session-notes-*.md` | What each work session added and fixed |
 | [Cloud_Computing_Project-PRD.pdf](Cloud_Computing_Project-PRD.pdf) | Product requirements |
 
-## 13. Troubleshooting
+## 12. Troubleshooting
 
 | Step | Symptom | Cause | Fix |
 |---|---|---|---|
@@ -615,7 +615,7 @@ Logs: `aws logs tail /aws/lambda/campushub-dev-<function> --since 15m`. More row
 Lambda deployment's errors, are in [terraform/README.md](terraform/README.md#10-troubleshooting) and
 [docs/deployment errors resolution.md](docs/deployment%20errors%20resolution.md).
 
-## 14. Team
+## 13. Team
 
 **Team Order of Phoenix**, DS252 Introduction to Cloud Computing, Indian Institute of Science (IISc).
 
