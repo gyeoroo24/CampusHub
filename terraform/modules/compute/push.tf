@@ -81,10 +81,18 @@ resource "aws_iam_role_policy" "invoke_push_sender" {
   })
 }
 
-# Warm with an empty batch: loads the key and the crypto library, sends nothing.
+# Warm with an empty batch: loads the key and the crypto library, sends nothing. Its own rule:
+# EventBridge allows only 5 targets per rule, and the API warm rule already has the 5 API Lambdas.
+resource "aws_cloudwatch_event_rule" "warm_push_sender" {
+  count               = var.enable_web_push && var.warm_schedule != "" ? 1 : 0
+  name                = "${var.project_name}-${var.environment}-push-sender-warm"
+  description         = "Keeps the CampusHub push-sender function warm"
+  schedule_expression = var.warm_schedule
+}
+
 resource "aws_cloudwatch_event_target" "warm_push_sender" {
   count = var.enable_web_push && var.warm_schedule != "" ? 1 : 0
-  rule  = aws_cloudwatch_event_rule.warm[0].name
+  rule  = aws_cloudwatch_event_rule.warm_push_sender[0].name
   arn   = aws_lambda_function.push_sender[0].arn
   input = jsonencode({ tokens = [] })
 }
@@ -95,5 +103,5 @@ resource "aws_lambda_permission" "warm_push_sender" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.push_sender[0].function_name
   principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.warm[0].arn
+  source_arn    = aws_cloudwatch_event_rule.warm_push_sender[0].arn
 }
