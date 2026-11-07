@@ -4,11 +4,18 @@ CampusHub is one web app for IISc students: Buy & Sell, Lost & Found, Academic H
 Community Events, mess menus and forums. It is the group project of team **Order of Phoenix** for
 **DS252 Introduction to Cloud Computing** (IISc).
 
-The same FastAPI backend and Flutter web app are deployed on AWS in two ways, so that the two can be
+**Live deployment:** this branch's serverless stack, deployed to AWS via Terraform (CloudFront + API
+Gateway + Lambda), is running at **<https://d2ags4xwpd9y7d.cloudfront.net/>** — anyone can open that
+URL and try it.
+
+The same FastAPI backend and Flutter web app were deployed on AWS in two ways, so that the two could be
 compared (PRD section 7):
 
-- **Serverless** (this branch): CloudFront → API Gateway → AWS Lambda.
-- **Baseline** (`baseline-infra-restore`): CloudFront → Application Load Balancer → EC2 Auto Scaling group.
+- **Serverless** (this branch, deployed at the URL above): CloudFront → API Gateway → AWS Lambda.
+- **EC2 baseline**: CloudFront → Application Load Balancer → EC2 Auto Scaling group. This architecture
+  was only built to produce the comparison in [section 3](#3-serverless-vs-ec2-baseline); its branch,
+  `baseline-infra-restore`, was deleted once that comparison was done, so it no longer exists in this
+  repository.
 
 Both use PostgreSQL on RDS, ElastiCache Redis, S3 and Cognito.
 
@@ -37,17 +44,19 @@ Both use PostgreSQL on RDS, ElastiCache Redis, S3 and Cognito.
 
 ## 1. Branches
 
-The submission uses two branches. Each has its own copy of this README, with the deploy steps for its
-own architecture.
+This branch (`fix/cloud-deploy-zip-and-routes`, planned `main`) is the serverless architecture that is
+actually deployed and maintained:
 
 | Branch | Deploys | Compute | Terraform `environment` | State key |
 |---|---|---|---|---|
 | **`fix/cloud-deploy-zip-and-routes`** (this branch, planned `main`) | Serverless | 5 AWS Lambda functions (Python 3.11, zip package) behind API Gateway HTTP API | `dev` | `campushub/dev/terraform.tfstate` |
-| [`baseline-infra-restore`](https://github.com/gyeoroo24/CampusHub/tree/baseline-infra-restore) | EC2 baseline | EC2 Auto Scaling group (Amazon Linux 2023, `t4g.micro`) behind an Application Load Balancer | `baseline` | `campushub/baseline/terraform.tfstate` |
 
-The application code (`backend/`, `frontend/`) is nearly the same on both branches. The differences are
-listed in [section 3](#3-serverless-vs-ec2-baseline). Every AWS resource name includes the
-`environment`, so both stacks can run side by side in one AWS account.
+An EC2-based baseline architecture (Auto Scaling group + Application Load Balancer, `baseline`
+environment, `campushub/baseline/terraform.tfstate`) was also built, purely to produce the serverless
+vs. EC2 comparison in [section 3](#3-serverless-vs-ec2-baseline). That work lived on the
+`baseline-infra-restore` branch, which has since been deleted — it was never meant to be a second
+long-lived deployment, only a point of comparison, and the comparison's results are kept here instead
+of on that branch.
 
 ## 2. Serverless architecture (this branch)
 
@@ -120,8 +129,10 @@ Redis AUTH token are read from Secrets Manager when a container starts.
 | Measured at 101 users ([section 8](#9-performance-and-metrics)) | p50 53 ms, p99 140 ms, 0 % errors | p50 110 ms, p99 160 ms, 0 % errors |
 | Measured at 501 users | 84 % errors (database connections exhausted by 399 concurrent Lambdas) | 7 % errors, p99 47 s (requests queue) |
 
-The design rationale for the baseline is in `Baseline-Architecture.md` on the `baseline-infra-restore`
-branch.
+The design rationale for the baseline was written up in `Baseline-Architecture.md` on the
+`baseline-infra-restore` branch. That branch was deleted after this comparison was produced — it only
+ever existed to measure the EC2 baseline against the serverless architecture above, not as a second
+deployment to maintain.
 
 ## 4. Repository layout
 
@@ -300,7 +311,8 @@ curl -sI $CF/api/v1/departments | grep -i x-cache          # Hit from cloudfront
 curl -s  $CF/api/v1/me                                     # {"detail":"Sign in to do this."} (JSON 401)
 ```
 
-Then open the CloudFront URL and sign up.
+Then open the CloudFront URL and sign up. (This team's own deployment of this stack is at
+<https://d2ags4xwpd9y7d.cloudfront.net/> — see the top of this README.)
 
 ## 6. Deploy locally
 
