@@ -44,12 +44,11 @@ Both use PostgreSQL on RDS, ElastiCache Redis, S3 and Cognito.
 
 ## 1. Branches
 
-This branch (`fix/cloud-deploy-zip-and-routes`, planned `main`) is the serverless architecture that is
-actually deployed and maintained:
+The `main` branch is the serverless architecture that is actually deployed and maintained:
 
 | Branch | Deploys | Compute | Terraform `environment` | State key |
 |---|---|---|---|---|
-| **`fix/cloud-deploy-zip-and-routes`** (this branch, planned `main`) | Serverless | 5 AWS Lambda functions (Python 3.11, zip package) behind API Gateway HTTP API | `dev` | `campushub/dev/terraform.tfstate` |
+| **`main`** | Serverless | 5 AWS Lambda functions (Python 3.11, zip package) behind API Gateway HTTP API | `dev` | `campushub/dev/terraform.tfstate` |
 
 An EC2-based baseline architecture (Auto Scaling group + Application Load Balancer, `baseline`
 environment, `campushub/baseline/terraform.tfstate`) was also built, purely to produce the serverless
@@ -636,6 +635,7 @@ state.
 | [frontend/README.md](frontend/README.md) | Flutter app structure, build flags, deploy |
 | [terraform/README.md](terraform/README.md) | Modules, variables, outputs, troubleshooting |
 | [docs/api-reference.md](docs/api-reference.md) | Every API endpoint, for frontend work |
+| [docs/frontend-design-decisions.md](docs/frontend-design-decisions.md) | Why the Flutter app is structured the way it is, and what was rejected |
 | [docs/schema/README.md](docs/schema/README.md) | Database diagrams, one per module |
 | [docs/restoring the data snapshot.md](docs/restoring%20the%20data%20snapshot.md) | Export and restore data between deployments |
 | [docs/cloud-deployment-checklist.md](docs/cloud-deployment-checklist.md) | What to check before going live |

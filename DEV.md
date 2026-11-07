@@ -197,6 +197,9 @@ Rules the schema enforces itself: IISc-only emails (`iisc_email` domain), exactl
 
 ## 5. Frontend (`frontend/`)
 
+Why the frontend is structured this way (feature-first folders, Riverpod, go_router, and the alternatives
+considered for each): [docs/frontend-design-decisions.md](docs/frontend-design-decisions.md).
+
 ### 5.1 Layout
 
 ```
