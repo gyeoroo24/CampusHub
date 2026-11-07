@@ -60,45 +60,6 @@ of on that branch.
 
 ![Proposed Architecture Diagram](Proposal-Architecture-Lambda.jpg)
 
-
-```
-                         Users (browser)
-                               |
-                               v
-              +----------------------------------+
-              |  Amazon CloudFront               |   HTTPS, *.cloudfront.net certificate
-              |  - /*        -> S3 (Flutter web) |   SPA rewrite function for deep links
-              |  - /api/v1/<list pages> cached   |   20 s default / 60 s max edge cache
-              |  - /api/*    -> API Gateway      |   everything else, uncached
-              +----------------+-----------------+
-                 |                         |
-                 v                         v
-     +-------------------+     +-------------------------+      +----------------------+
-     | S3 frontend bucket|     | API Gateway (HTTP API)  |      | Cognito user pool    |
-     | (Origin Access    |     | per-prefix routes to    |      | Hosted UI, PKCE,     |
-     |  Control)         |     | 5 Lambda integrations   |      | 4 groups             |
-     +-------------------+     +------------+------------+      +----------------------+
-                                            |
-   +----------------------------------------|---------------------------------------------+
-   | VPC 10.0.0.0/16, private subnets in ap-south-1a / 1b / 1c (no NAT, no internet route) |
-   |                                        v                                              |
-   |   +----------------------------------------------------------------------------+     |
-   |   | Lambda: buy-sell | lost-found | placement-hub | academic-hub | community-events|   |
-   |   | (all run the same FastAPI app via Mangum; warmed every 5 min by EventBridge)   |   |
-   |   +---------+----------------------+---------------------+------------------------+   |
-   |             |                      |                     |                            |
-   |             v                      v                     v                            |
-   |   +------------------+   +-------------------+   +--------------------------------+  |
-   |   | ElastiCache Redis|   | RDS PostgreSQL 16 |   | VPC endpoints                  |  |
-   |   | cache.t3.micro   |   | db.t4g.micro      |   | S3 (gateway, free)             |  |
-   |   | TLS + AUTH token |   | Multi-AZ optional |   | Secrets Manager, Cognito, SSM, |  |
-   |   +------------------+   +-------------------+   | KMS (interface)                |  |
-   |                                                   +--------------------------------+  |
-   |   data-tools Lambda (pg_dump / pg_restore / psql) for snapshots and migrations        |
-   +---------------------------------------------------------------------------------------+
-        S3 media bucket (uploads, presigned URLs)   CloudWatch alarms, SNS email, AWS Budgets
-```
-
 **Request path and caching.** A read-heavy GET (for example `/api/v1/listings`) is served in up to three
 ways:
 
