@@ -37,7 +37,7 @@ The same backend code runs in three places. Only configuration changes, never th
 
 | Where | Entry point | Started by |
 |---|---|---|
-| Your machine | `app.main:app` | `uvicorn app.main:app --reload --env-file .env` |
+| Your machine | `app.main:app` | `cd backend && uvicorn app.main:app --reload --env-file .env` |
 | AWS Lambda (this branch) | `app.main.handler` (Mangum wraps the FastAPI app) | API Gateway |
 | EC2 (`baseline-infra-restore`) | `app.main:app` | uvicorn under systemd, behind an ALB |
 
@@ -174,7 +174,7 @@ Without the models (the Lambda zip leaves them out), matching falls back to the 
 | File | Purpose |
 |---|---|
 | `schema.sql` | The complete schema at the latest revision: 57 tables and 19 enum types. Loaded on a brand-new database |
-| `migrations/0NN_*.sql` | One file per revision (`006` to `026`), to upgrade an existing database in order |
+| `migrations/0NN_*.sql` | One file per revision (`006` to `027`), to upgrade an existing database in order |
 | `reference-data.sql` | Real starting data (campus services, default event tags). Safe to run twice |
 | `init-test-db.sql` | Creates the `campushub_test` database used by pytest |
 
@@ -240,7 +240,7 @@ Cognito flags, the app uses the backend's dev sign-in.
 
 ## 6. Infrastructure (`terraform/`)
 
-| Module | Serverless (`main`, `fix/cloud-deploy-zip-and-routes`) | EC2 baseline (`baseline-infra-restore`) |
+| Module | Serverless (`main`) | EC2 baseline (`baseline-infra-restore`) |
 |---|---|---|
 | `networking` | VPC, private Lambda and database subnets, security groups, VPC endpoints | Also public subnets and internet gateway for the ALB |
 | `database` | RDS PostgreSQL, password in Secrets Manager, optional RDS Proxy | same |
@@ -258,7 +258,7 @@ The five Lambdas run the same zip; API Gateway routes by path prefix (for exampl
 [terraform/README.md](terraform/README.md).
 
 Helper scripts in `terraform/scripts/`: `deploy_frontend.sh`, `snapshot_export.sh`, `snapshot_restore.sh`,
-`deactivate_missing_cognito_users.sh`.
+`deactivate_missing_cognito_users.sh`, `create_vapid_keys.sh`.
 
 ## 7. Load testing (`locust_load_testing/`)
 
@@ -267,13 +267,13 @@ On `main` only. A desktop app that generates and runs Locust tests against eithe
 | File | Does |
 |---|---|
 | `locust-automated/app.py` | Tkinter GUI: target, token, endpoints, users, spawn rate, duration |
-| `catalog.py` | Catalogue of 65 endpoints across 10 modules, with read/write class and weights |
-| `generator.py` | Writes a locustfile for the chosen endpoints and weights |
-| `runner.py` | Runs Locust in distributed mode (`--processes -1`) and cleans up workers |
-| `collector.py` | Polls live stats, downloads the HTML report |
-| `chart_generator.py` | Throughput, latency and user charts (Matplotlib) |
-| `auth_utils.py` | Decodes and checks the Cognito token |
-| `presets.py`, `custom_presets/*.json` | Saved endpoint mixes, such as `acad_placement_preset` |
+| `locust-automated/catalog.py` | Catalogue of 65 endpoints across 10 modules, with read/write class and weights |
+| `locust-automated/generator.py` | Writes a locustfile for the chosen endpoints and weights |
+| `locust-automated/runner.py` | Runs Locust in distributed mode (`--processes -1`) and cleans up workers |
+| `locust-automated/collector.py` | Polls live stats, downloads the HTML report |
+| `locust-automated/chart_generator.py` | Throughput, latency and user charts (Matplotlib) |
+| `locust-automated/auth_utils.py` | Decodes and checks the Cognito token |
+| `locust-automated/presets.py`, `custom_presets/*.json` | Saved endpoint mixes, such as `acad_placement_preset` |
 | `output/` | One folder per run, and `BENCHMARK_SUMMARY.md` |
 
 Results and analysis: [README section 9](README.md#9-performance-and-metrics).
@@ -309,7 +309,7 @@ Test files are named after the module or fix they cover (`test_listings.py`, `te
 1. Write `backend/db/migrations/0NN_short_name.sql` (next number, wrapped in `BEGIN`/`COMMIT`, using
    `IF NOT EXISTS` where possible).
 2. Apply the same change to `backend/db/schema.sql` and bump its revision comment.
-3. Locally: `docker exec -i campushub-db-1 psql -U campushub -d campushub < db/migrations/0NN_short_name.sql`.
+3. Locally (from backend/): `docker exec -i campushub-db-1 psql -U campushub -d campushub < db/migrations/0NN_short_name.sql`.
    On AWS: the data-tools Lambda's `migrate` action ([README step 5.7](README.md#57-load-the-database)).
 
 ### Add a frontend screen
