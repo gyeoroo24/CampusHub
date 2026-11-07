@@ -40,7 +40,7 @@ def _register(path: str, table: str, tag: str, module: str) -> None:
 
     @router.get(path + "/suggest", response_model=CategorySuggestion, tags=[tag],
                 summary="Suggest the closest existing category for a title",
-                description="Nearest-neighbor lookup only (future plan §2.4) - never invents a new "
+                description="Nearest-neighbor lookup only - never invents a new "
                             "category. `category` is null if nothing existing is a good enough fit, "
                             "or if the matching models aren't available in this environment.")
     async def suggest(title: str = Query(..., min_length=1, max_length=200),

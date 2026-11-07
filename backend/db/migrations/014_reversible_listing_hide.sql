@@ -1,4 +1,4 @@
--- Rev 14: a report-driven listing removal (future plan §1.5) now hides the listing instead of
+-- Rev 14: a report-driven listing removal now hides the listing instead of
 -- soft-deleting it, and a moderator can reject an appeal (not just overturn it).
 --
 --   docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub \

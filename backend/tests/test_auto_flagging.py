@@ -1,4 +1,4 @@
-"""Automatic flagging of new posts (app/screening.py, future plan §1.6)."""
+"""Automatic flagging of new posts (app/screening.py)."""
 import pytest
 
 import app.matching.trigger as trigger

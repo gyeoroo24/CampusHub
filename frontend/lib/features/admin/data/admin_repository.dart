@@ -39,7 +39,7 @@ abstract class IAdminRepository {
     String? note,
     bool removeContent = false,
     /// Required when removing a listing: 'severe' (illegal item) blocks the seller immediately;
-    /// 'non_severe' counts toward the strike ladder. Seller trust score, future plan §1.5.
+    /// 'non_severe' counts toward the strike ladder. Part of the seller trust score.
     String? severity,
   });
   Future<Map<String, dynamic>> getSystemHealth();

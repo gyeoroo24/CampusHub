@@ -34,14 +34,14 @@ class ListingItem {
   final String location;
   final CategoryRef category;
   final UserRef seller;
-  /// 'negative' or 'blocked', from moderator-confirmed removals against this seller (future plan
-  /// §1.5). Null for everyone else - there is no positive badge, only this warning.
+  /// 'negative' or 'blocked', from moderator-confirmed removals against this seller.
+  /// Null for everyone else - there is no positive badge, only this warning.
   final String? sellerTrustTag;
   final bool sellerDeactivated;
-  /// Seller marked the price as open to offers (future plan §2.3).
+  /// Seller marked the price as open to offers.
   final bool negotiable;
   /// Flagged automatically as a possible prohibited item and hidden from others until a moderator
-  /// decides (future plan §1.6). Only the seller and moderators ever see it true.
+  /// decides. Only the seller and moderators ever see it true.
   final bool heldForReview;
   /// The signed-in viewer is watching it for price changes (detail view only).
   final bool watching;

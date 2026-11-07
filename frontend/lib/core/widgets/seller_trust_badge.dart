@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// Shows "Negative Seller" / "Blocked Seller" for a listing whose seller has crossed a
-/// moderator-confirmed-removal threshold (future plan §1.5). Renders nothing for every other
+/// moderator-confirmed-removal threshold. Renders nothing for every other
 /// seller - there is no positive badge, only this warning, and it's never shown for its own sake.
 class SellerTrustBadge extends StatelessWidget {
   final String? tag; // 'negative' | 'blocked' | null

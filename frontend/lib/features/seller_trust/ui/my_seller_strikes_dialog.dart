@@ -6,7 +6,7 @@ import '../../../core/utils/web_history_support.dart';
 import '../domain/seller_strike.dart';
 import '../providers/seller_trust_providers.dart';
 
-/// My seller-trust strike history (future plan §1.5): what got removed, why, whether the listing
+/// My seller-trust strike history: what got removed, why, whether the listing
 /// is currently hidden pending review, and a way to contest a strike that hasn't been appealed yet.
 /// A blocked seller can also ask the moderators to unblock them.
 class MySellerStrikesDialog extends ConsumerWidget {

@@ -51,7 +51,7 @@ class ListingCreate(BaseModel):
     price: Decimal = Field(ge=0, max_digits=10, decimal_places=2, description="Rupees")
     category_id: CategoryId
     location: text(200, min_length=0) | None = None
-    negotiable: bool = Field(False, description="Show a \"Negotiable\" badge (future plan §2.3)")
+    negotiable: bool = Field(False, description="Show a \"Negotiable\" badge")
     photo_keys: PhotoKeys = Field(default_factory=list,
                                   description="s3_key values from POST /uploads, in display order; first = cover")
 
@@ -86,14 +86,14 @@ class ListingSummary(BaseModel):
                            "from a deactivated account; the seller can't be messaged.")
     seller_trust_tag: Tag | None = Field(
         None, description="'negative' or 'blocked', from moderator-confirmed removals against this "
-                          "seller (future plan §1.5). Null for everyone else - never a positive badge.")
+                          "seller. Null for everyone else - never a positive badge.")
     hidden: bool = Field(
         False, description="True if a moderator removed this listing while resolving a report "
-                           "against it (future plan §1.5) - only the seller and a Buy & Sell "
+                           "against it - only the seller and a Buy & Sell "
                            "moderator/admin ever see it true; everyone else never sees this row.")
     held_for_review: bool = Field(
         False, description="Flagged automatically as a possible prohibited item and hidden until a "
-                           "moderator decides (future plan §1.6). Seen only by the seller and moderators.")
+                           "moderator decides. Seen only by the seller and moderators.")
     negotiable: bool = False
     description: str | None = Field(
         None, description=f"In lists, the first {DESCRIPTION_PREVIEW} characters (a card's preview); "
@@ -350,7 +350,7 @@ async def replace_photos(listing_id: UUID, body: PhotosUpdate, background: Backg
                summary="Remove a listing (seller, Buy & Sell moderator or admin; FR-10)",
                description="A moderator removing a listing that has an open report counts as resolving "
                            "that report: the listing is hidden (the seller can appeal), the seller gets "
-                           "a strike (`severity`, default non_severe; future plan §1.5) and is told why "
+                           "a strike (`severity`, default non_severe) and is told why "
                            "(`reason`). Any other removal (by the seller, a moderator or an admin) is "
                            "permanent: the listing, its photos, watches and reports are deleted from the "
                            "database and storage. A moderator's removal tells the seller the reason.")

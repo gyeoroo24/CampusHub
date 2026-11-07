@@ -7,7 +7,7 @@ class ContentReport {
   final String targetType; // 'listing', 'lost_report', 'found_report', etc.
   final String targetId;
   final String? targetTitle; // short title of the reported item, for the moderation queue
-  final String source; // 'user', or 'system' for an automatic flag (future plan §1.6)
+  final String source; // 'user', or 'system' for an automatic flag
   final String reason;
   final String status; // 'open', 'actioned', 'dismissed'
   final UserRef? reporter;

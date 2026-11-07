@@ -1,4 +1,4 @@
--- Rev 12: Lost & Found matching by description and photo (future plan §1.2, app/matching).
+-- Rev 12: Lost & Found matching by description and photo (app/matching).
 -- Existing reports start pending (matched_rev NULL); match them once with
 --   python -m app.matching --backfill
 -- (or invoke the matcher Lambda with {"backfill": true}).

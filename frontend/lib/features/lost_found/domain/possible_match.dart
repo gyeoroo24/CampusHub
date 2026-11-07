@@ -1,6 +1,6 @@
 import 'lost_found_item.dart';
 
-/// `GET /{kind}-reports/{id}/matches` (future plan §1.2): reports of the other kind that may be
+/// `GET /{kind}-reports/{id}/matches`: reports of the other kind that may be
 /// the same item, best first. Only the report's owner (or an admin) can ask.
 enum MatchStatus {
   /// Ranked by description and photo similarity.

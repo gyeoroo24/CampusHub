@@ -1,4 +1,4 @@
-"""Obscene-photo screening of new posts (future plan §1.6): the image half of app/screening.py.
+"""Obscene-photo screening of new posts: the image half of app/screening.py.
 
 Runs where Lost & Found matching runs (matcher Lambda, or a background task locally), because it
 needs the 87 MB image model; files the same automatic report through app.screening.flag().

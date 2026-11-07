@@ -1,4 +1,4 @@
-"""Seller trust score (future plan §1.5): a "Negative Seller" / "Blocked Seller" tag driven purely
+"""Seller trust score: a "Negative Seller" / "Blocked Seller" tag driven purely
 by moderator-confirmed listing removals, never by raw report counts.
 
 A strike is recorded only from POST /reports/{id}/resolve (remove_content=true, target=listing) -

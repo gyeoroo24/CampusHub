@@ -60,7 +60,7 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
   bool _negotiable = false;
   final _customCategoryController = TextEditingController();
 
-  // Category auto-suggestion (future plan §2.4): a hint only, never auto-applied.
+  // Category auto-suggestion: a hint only, never auto-applied.
   Timer? _suggestDebounce;
   CategoryRef? _suggestedCategory;
   bool _categoryTouchedByUser = false;

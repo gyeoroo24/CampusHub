@@ -1,4 +1,4 @@
-"""Seller trust score (future plan §1.5): a seller's own strike history and appeal, and the Buy &
+"""Seller trust score: a seller's own strike history and appeal, and the Buy &
 Sell moderator side (the contested-appeal queue, overturn a strike, reject an appeal, lift a
 suspension, unblock a seller and the unblock-request queue).
 

@@ -6,7 +6,7 @@ import '../../domain/possible_match.dart';
 import '../../providers/lost_found_providers.dart';
 import 'lost_found_detail_dialog.dart';
 
-/// "Possible matches" for one of your own reports (FR-9, future plan §1.2): reports of the other
+/// "Possible matches" for one of your own reports (FR-9): reports of the other
 /// kind that may be the same item, ranked by description and photo, each with a strength badge
 /// and why it matched. Show it only to the report's owner or an admin.
 class PossibleMatchesSection extends ConsumerWidget {

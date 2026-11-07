@@ -1,4 +1,4 @@
-"""Price watch and the Negotiable badge (future plan §2.3)."""
+"""Price watch and the Negotiable badge."""
 from .conftest import API, ASHA, KIRAN, RAVI, category
 
 

@@ -335,7 +335,7 @@ class BuySellDetailDialog extends ConsumerWidget {
                       ),
                       const SizedBox(height: 8),
                       SizedBox(width: double.infinity, child: ListingBookmarkButton(listingId: item.id)),
-                      // Price watch (future plan §2.3), signed-in buyers only.
+                      // Price watch, signed-in buyers only.
                       if (currentUser != null && !currentUser.isGuest) ...[
                         const SizedBox(height: 8),
                         SizedBox(width: double.infinity, child: WatchPriceButton(item: item)),

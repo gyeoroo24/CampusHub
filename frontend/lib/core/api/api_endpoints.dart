@@ -44,7 +44,7 @@ class ApiEndpoints {
   static const String myBookmarkedListingIds = '$version/me/bookmarked-listing-ids';
   static String listingPhotos(String id) => '$version/listings/$id/photos';
 
-  // --- Seller trust score (future plan §1.5) ---
+  // --- Seller trust score ---
   static const String mySellerStrikes = '$version/me/seller-strikes';
   static const String mySellerStrikeSummary = '$version/me/seller-strikes/summary';
   static String appealSellerStrike(String id) => '$version/me/seller-strikes/$id/appeal';

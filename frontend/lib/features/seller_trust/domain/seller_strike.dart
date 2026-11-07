@@ -12,7 +12,7 @@ enum AppealStatus {
   }
 }
 
-/// One moderator-confirmed listing removal against a seller (future plan §1.5). Never from a raw
+/// One moderator-confirmed listing removal against a seller. Never from a raw
 /// report - only from a moderator resolving a report by removing the listing.
 class SellerStrike {
   final String id;

@@ -79,15 +79,15 @@
 --   Upgrade: db/migrations/016_placement_and_events.sql.
 --
 -- Changes from rev. 14 (automatic flagging and price watch, 2 Nov 2026):
---   1. reports.source ('user' or 'system') and reporter_id nullable for system flags (future
---      plan §1.6); one open system flag per item (uq_reports_one_open_system).
+--   1. reports.source ('user' or 'system') and reporter_id nullable for system flags; one open
+--      system flag per item (uq_reports_one_open_system).
 --   2. listings.held_for_review_at: an automatically flagged listing held back until a moderator
---      decides; listings.negotiable (future plan §2.3).
+--      decides; listings.negotiable.
 --   3. listing_watches and notification type listing_watch: price changes / marked negotiable.
 --   Upgrade: db/migrations/015_auto_flags_and_price_watch.sql.
 --
 -- Changes from rev. 13 (reversible listing hide + appeal review, 1 Nov 2026):
---   1. listings.hidden_by_strike_id: a report-driven removal (future plan §1.5) now hides the
+--   1. listings.hidden_by_strike_id: a report-driven removal now hides the
 --      listing instead of soft-deleting it — visible only to the seller and a Buy & Sell
 --      moderator/admin until the strike is overturned (restores it) or the appeal is rejected
 --      (stays hidden). A direct DELETE /listings/{id} is unaffected and still permanent.
@@ -96,7 +96,7 @@
 --   Upgrade: db/migrations/014_reversible_listing_hide.sql.
 --
 -- Changes from rev. 12 (seller trust score, 1 Nov 2026):
---   1. seller_strikes: one row per moderator-confirmed listing removal (future plan §1.5) —
+--   1. seller_strikes: one row per moderator-confirmed listing removal —
 --      never from a raw report. severity (severe/non_severe) sets the "Negative Seller" /
 --      "Blocked Seller" thresholds (app/seller_trust.py). A seller may appeal a strike
 --      (appeal_message); a moderator may overturn one (excluded), which drops it from the count.
@@ -200,10 +200,10 @@ CREATE TYPE report_target_type   AS ENUM ('listing', 'lost_report', 'found_repor
 CREATE TYPE wanted_status        AS ENUM ('open', 'fulfilled', 'closed');
 CREATE TYPE campus_service_category AS ENUM ('health', 'wellbeing', 'grievance', 'safety', 'other');
 CREATE TYPE report_status        AS ENUM ('open', 'actioned', 'dismissed');
-CREATE TYPE report_source        AS ENUM ('user', 'system');   -- system: automatic flag (§1.6)
+CREATE TYPE report_source        AS ENUM ('user', 'system');   -- system: automatic flag
 CREATE TYPE device_platform      AS ENUM ('android', 'ios', 'web', 'desktop');
 CREATE TYPE chat_message_kind    AS ENUM ('text', 'offer');
-CREATE TYPE seller_strike_severity AS ENUM ('severe', 'non_severe');  -- future plan §1.5
+CREATE TYPE seller_strike_severity AS ENUM ('severe', 'non_severe');
 CREATE TYPE chat_offer_status    AS ENUM ('pending', 'accepted', 'declined', 'withdrawn', 'superseded');
 CREATE TYPE chat_topic_kind      AS ENUM ('listing', 'lost_report', 'found_report');
 
@@ -263,7 +263,7 @@ CREATE TABLE users (
     programme       TEXT,                                    -- e.g. 'M.Tech CSA'
     graduation_year SMALLINT CHECK (graduation_year BETWEEN 1950 AND 2100),
     is_active       BOOLEAN NOT NULL DEFAULT TRUE,
-    -- Seller trust score (future plan §1.5): set once seller_strikes crosses the "Blocked Seller"
+    -- Seller trust score: set once seller_strikes crosses the "Blocked Seller"
     -- threshold (app/seller_trust.py). Checked on listing creation; cleared by a moderator/admin
     -- or automatically when overturning the strike that caused it.
     listing_suspended_at     TIMESTAMPTZ,
@@ -383,7 +383,7 @@ CREATE TABLE listings (
     deleted_at         TIMESTAMPTZ,                        -- soft delete, FR-10
     deleted_by         UUID REFERENCES users(id),          -- owner or moderator who removed it
     held_for_review_at TIMESTAMPTZ,                         -- auto-flagged as prohibited: hidden until a moderator decides
-    negotiable         BOOLEAN NOT NULL DEFAULT FALSE,      -- "Negotiable" badge (future plan §2.3)
+    negotiable         BOOLEAN NOT NULL DEFAULT FALSE,      -- "Negotiable" badge
     -- hidden_by_strike_id (reversible, report-driven removal) is added below, near
     -- seller_strikes, to avoid a circular forward reference.
     CONSTRAINT listings_deleted_pair_chk CHECK ((deleted_at IS NULL) = (deleted_by IS NULL))
@@ -990,7 +990,7 @@ CREATE TABLE moderation_log (
 );
 
 -- ============================================================================
--- BUY & SELL — SELLER TRUST SCORE (future plan §1.5)
+-- BUY & SELL — SELLER TRUST SCORE
 -- One row per moderator-confirmed listing removal against a seller. Never created from a raw
 -- report — only from POST /reports/{id}/resolve with remove_content=true on a listing. Rows are
 -- never deleted (tamper-proof history); a moderator who overturns one sets excluded=true instead,
@@ -1006,7 +1006,7 @@ CREATE TABLE seller_strikes (
     severity       seller_strike_severity NOT NULL,
     moderator_id   UUID NOT NULL REFERENCES users(id),
     moderator_note TEXT,
-    -- The seller's one-shot appeal (future plan §1.5.2's "lightweight appeal"); a moderator
+    -- The seller's one-shot, lightweight appeal; a moderator
     -- resolves it by overturning the strike (restores the listing) or rejecting the appeal
     -- (appeal_resolved_at/by set, excluded stays false, listing stays hidden).
     appeal_message     TEXT,
@@ -1031,7 +1031,7 @@ ALTER TABLE listings ADD COLUMN hidden_by_strike_id UUID REFERENCES seller_strik
 CREATE INDEX idx_listings_hidden ON listings(hidden_by_strike_id) WHERE hidden_by_strike_id IS NOT NULL;
 CREATE INDEX idx_listings_held ON listings(held_for_review_at) WHERE held_for_review_at IS NOT NULL;
 
--- Price watch (future plan §2.3): told when the price changes or the listing is marked negotiable.
+-- Price watch: told when the price changes or the listing is marked negotiable.
 CREATE TABLE listing_watches (
     user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     listing_id UUID NOT NULL REFERENCES listings(id) ON DELETE CASCADE,

@@ -59,7 +59,7 @@ abstract class IBuySellRepository {
     bool? negotiable,
   });
 
-  /// Price watch (future plan §2.3): be told when the price changes or it's marked negotiable.
+  /// Price watch: be told when the price changes or it's marked negotiable.
   Future<void> setWatching(String id, bool watching);
 
   /// Listings the signed-in user is watching, most recently watched first.
@@ -96,8 +96,8 @@ abstract class IBuySellRepository {
   /// Adds a missing category or gets existing one (`POST /api/v1/buy-sell/categories`).
   Future<CategoryRef> createCategory(String name);
 
-  /// Nearest existing category for a typed title (`GET /api/v1/buy-sell/categories/suggest`,
-  /// future plan §2.4) - a hint only, never auto-applied. Returns null if nothing existing fits
+  /// Nearest existing category for a typed title (`GET /api/v1/buy-sell/categories/suggest`)
+  /// - a hint only, never auto-applied. Returns null if nothing existing fits
   /// well, or if the suggestion model isn't available (e.g. mock mode).
   Future<CategoryRef?> suggestCategory(String title);
 

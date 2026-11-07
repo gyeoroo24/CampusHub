@@ -103,7 +103,7 @@ async def _photo_screen_inline(kind: str, item_id: UUID) -> None:
 
 
 def request_photo_screen(background: BackgroundTasks, kind: str, item_id: UUID) -> None:
-    """Check a post's photos for obscene images after the response (future plan §1.6).
+    """Check a post's photos for obscene images after the response.
     kind: listing, lost_report or found_report. Same modes as matching."""
     if not get_settings().auto_flag:
         return

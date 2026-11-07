@@ -1,4 +1,4 @@
--- Rev 13: Seller trust score (future plan §1.5) — moderator-confirmed listing removals accumulate
+-- Rev 13: Seller trust score — moderator-confirmed listing removals accumulate
 -- into a "Negative Seller" / "Blocked Seller" tag, never from raw report counts.
 --
 --   docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub \

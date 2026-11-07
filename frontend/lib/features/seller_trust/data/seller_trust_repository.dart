@@ -3,7 +3,7 @@ import '../../../core/api/api_endpoints.dart';
 import '../../../core/models/user_ref.dart';
 import '../domain/seller_strike.dart';
 
-/// Seller trust score (future plan §1.5): a seller's own strike history and appeal, and the
+/// Seller trust score: a seller's own strike history and appeal, and the
 /// Buy & Sell moderator side (the contested-appeal queue, overturn, reject, lift a suspension, unblock).
 abstract class ISellerTrustRepository {
   /// Strikes against me, newest first.

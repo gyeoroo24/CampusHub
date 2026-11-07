@@ -1,4 +1,4 @@
-"""Category suggestion from a title (app/categories_suggest.py, future plan §2.4)."""
+"""Category suggestion from a title (app/categories_suggest.py)."""
 import numpy as np
 import pytest
 

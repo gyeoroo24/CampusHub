@@ -893,7 +893,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
 
   Future<void> _handleResolveReport(ContentReport r, {required String action, required bool removeContent}) async {
     final noteController = TextEditingController();
-    // Removing a listing needs a severity call for the seller trust score (future plan §1.5):
+    // Removing a listing needs a severity call for the seller trust score:
     // severe (illegal item) blocks the seller immediately; non-severe builds toward a strike ladder.
     final needsSeverity = removeContent && r.targetType == 'listing';
     String severity = 'non_severe';
@@ -966,7 +966,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
   }
 
   // ---------------------------------------------------------------------------
-  // TAB: Seller Strikes (future plan §1.5) - the contested-appeal queue, plus the full history.
+  // TAB: Seller Strikes - the contested-appeal queue, plus the full history.
   // ---------------------------------------------------------------------------
   Widget _buildSellerStrikesTab(bool isDark, ThemeData theme) {
     final strikesAsync = ref.watch(moderatedSellerStrikesProvider);
@@ -1472,7 +1472,7 @@ class _SeverityOption extends StatelessWidget {
 }
 
 /// One strike in the moderator's Seller Strikes tab: what was removed, the seller's appeal if
-/// any, and the two actions that resolve it (future plan §1.5).
+/// any, and the two actions that resolve it.
 class _SellerStrikeCard extends ConsumerStatefulWidget {
   final SellerStrike strike;
   final bool isDark;

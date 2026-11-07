@@ -657,8 +657,8 @@ class MockBuySellRepository implements IBuySellRepository {
     return List.unmodifiable(_categories);
   }
 
-  // No embedding model in mock mode - the real suggestion endpoint (future plan §2.4) needs the
-  // MiniLM-backed backend, so mock mode reports no suggestion rather than faking one.
+  // No embedding model in mock mode - the real suggestion endpoint needs the
+  // model-backed backend, so mock mode reports no suggestion rather than faking one.
   @override
   Future<CategoryRef?> suggestCategory(String title) async => null;
 

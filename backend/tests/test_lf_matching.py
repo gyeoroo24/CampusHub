@@ -1,4 +1,4 @@
-"""Lost & Found matching by description and photo (app/matching, future plan §1.2).
+"""Lost & Found matching by description and photo (app/matching).
 
 The real models aren't needed: FakeEmbedder maps words to fixed directions, so similarities
 are exact and the expected scores follow from app/matching/engine.py's SIGNALS.

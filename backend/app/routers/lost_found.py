@@ -3,7 +3,7 @@
 Lost reports and found reports work the same way, so one factory builds both routers:
   /lost-reports   and   /found-reports
 
-Matching (FR-9, future plan §1.2): when the matcher is available (app/matching), every new,
+Matching (FR-9): when the matcher is available (app/matching), every new,
 edited or reopened report, or one with new photos, is compared by description and photo with
 open reports of the other kind, in any category. Likely pairs are stored and shown to the
 report's owner (GET /{kind}-reports/{id}/matches); a strong one alerts the lost report's owner.

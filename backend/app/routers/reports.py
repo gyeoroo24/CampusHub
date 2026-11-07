@@ -112,7 +112,7 @@ class ResolveRequest(BaseModel):
     severity: Severity = Field(
         "non_severe", description="Used when target_type=listing and remove_content=true: 'severe' "
                           "(illegal items) immediately blocks the seller; 'non_severe' counts "
-                          "toward the strike ladder. Seller trust score, future plan §1.5.")
+                          "toward the strike ladder. Part of the seller trust score.")
 
 
 class Report(BaseModel):
@@ -122,7 +122,7 @@ class Report(BaseModel):
     target_id: UUID
     target_title: str | None = Field(None, description="Short title of the reported item (moderation queue)")
     reason: str
-    source: Literal["user", "system"] = Field("user", description="system: filed automatically (future plan §1.6)")
+    source: Literal["user", "system"] = Field("user", description="system: filed automatically")
     status: Literal["open", "actioned", "dismissed"]
     reporter: UserRef | None = Field(None, description="Shown to moderators only")
     created_at: datetime
@@ -296,7 +296,7 @@ async def resolve_report(report_id: UUID, body: ResolveRequest, background: Back
         if body.remove_content:
             if target_type == "listing":
                 # Hidden, not deleted: a report-driven removal is reversible via the seller-trust
-                # appeal (future plan §1.5) - record_strike() does the actual hiding. A direct
+                # appeal - record_strike() does the actual hiding. A direct
                 # DELETE /listings/{id} is a separate path and stays a permanent soft-delete.
                 row = await conn.fetchrow(
                     "SELECT seller_id, title FROM listings WHERE id = $1 AND deleted_at IS NULL "

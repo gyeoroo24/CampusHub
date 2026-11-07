@@ -1,4 +1,4 @@
-"""Encrypted messaging between two people (future plan §1.1; rev 10: one chat per person).
+"""Encrypted messaging between two people (rev 10: one chat per person).
 
 A conversation is a pair of people, like a WhatsApp chat. What part of it is about is a topic: a
 listing, a lost report or a found report ("Message seller" on a listing opens the chat with that

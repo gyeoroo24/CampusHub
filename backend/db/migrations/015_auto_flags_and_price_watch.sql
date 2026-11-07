@@ -1,8 +1,8 @@
 -- Rev 15 (2 Nov 2026):
---   Future plan §1.6, automatic flagging: the system files reports itself (reports.source =
+--   Automatic flagging: the system files reports itself (reports.source =
 --   'system', no reporter), and can hold a listing back until a moderator looks at it
 --   (listings.held_for_review_at, set when it looks like a prohibited item).
---   Future plan §2.3, price watch: listings.negotiable, listing_watches, and a new notification
+--   Price watch: listings.negotiable, listing_watches, and a new notification
 --   type listing_watch (price change, or marked negotiable).
 --
 --   docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub \

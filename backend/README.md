@@ -158,15 +158,15 @@ Reading mess menus from PDFs and photos needs Tesseract (`brew install tesseract
 Meal alerts (mess menus) go out when an open app fetches its notifications (every minute), so they
 work locally with nothing extra. `python -m app.jobs meals` sends whatever is due by hand.
 
-Automatic flagging (future plan §1.6, `app/screening.py`) is on by default: its text checks use the
+Automatic flagging (`app/screening.py`) is on by default: its text checks use the
 category-suggestion model, and the obscene-photo check needs the full model download below
 (`scripts/fetch_match_models.py`). Without those models only the keyword, gibberish and spam
 checks run. Set `CAMPUSHUB_AUTO_FLAG=false` to turn it off.
 
 ### Lost & Found matching (optional locally)
 
-Reports are matched by description and photo with three small ONNX models (future plan §1.2;
-code in `app/matching`). Without them the API keeps the old same-category rule, so this step is
+Reports are matched by description and photo with three small ONNX models (code in
+`app/matching`). Without them the API keeps the old same-category rule, so this step is
 optional. To turn it on locally:
 
 ```bash

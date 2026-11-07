@@ -5,7 +5,7 @@ import '../../domain/buy_sell_item.dart';
 import '../../providers/buy_sell_providers.dart';
 import 'buy_sell_detail_dialog.dart';
 
-/// "Negotiable" next to a price (future plan §2.3).
+/// "Negotiable" next to a price.
 class NegotiableBadge extends StatelessWidget {
   final double fontSize;
   const NegotiableBadge({super.key, this.fontSize = 10});
@@ -32,7 +32,7 @@ class NegotiableBadge extends StatelessWidget {
 }
 
 /// Shown to the seller (and moderators) on a listing flagged automatically as a possible
-/// prohibited item (future plan §1.6): nobody else can see it until a moderator decides.
+/// prohibited item: nobody else can see it until a moderator decides.
 class HeldForReviewBanner extends StatelessWidget {
   const HeldForReviewBanner({super.key});
 
