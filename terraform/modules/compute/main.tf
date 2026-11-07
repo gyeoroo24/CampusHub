@@ -178,6 +178,12 @@ resource "aws_lambda_function" "services" {
       # rule, and auto-flagging's text checks skip the embedding-similarity part. Nothing crashes;
       # see app/config.py and app/categories_suggest.py's own "if missing, returns None" design.
       },
+      # Web Push (FR-22, push.tf): the public key browsers subscribe with, and the sender to hand pushes to.
+      var.enable_web_push ? {
+        CAMPUSHUB_VAPID_PUBLIC_KEY_PARAMETER = local.vapid_public_param
+        CAMPUSHUB_VAPID_SUBJECT              = var.vapid_subject
+        CAMPUSHUB_PUSH_SENDER_FUNCTION       = local.push_sender_name
+      } : {},
       # ElastiCache Redis (app/cache.py). Like the DB password, the AUTH token itself is never set
       # here -- only its secret's ARN, read from Secrets Manager at startup.
       var.redis_enabled ? {

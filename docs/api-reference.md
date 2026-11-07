@@ -526,7 +526,8 @@ Every notification lands in the user's in-app inbox. Push to phones is registere
 | DELETE | `/me/notifications/{id}` | user | Delete one (204; someone else's id is ignored) |
 | POST | `/me/notifications/delete` | user | `{"ids": [...]}` (1–200): delete several; returns `{"deleted": <count>}` |
 | DELETE | `/me/notifications` | user | Clear all; returns `{"deleted": <count>}` |
-| POST | `/me/devices` | user | Register this device for push: `platform` (`android`, `ios`, `web`, `desktop`) and `push_token` |
+| GET | `/me/push-config` | user | `{"enabled", "public_key"}`: the VAPID key a browser subscribes with (`applicationServerKey`). `enabled` false: this server sends no pushes |
+| POST | `/me/devices` | user | Register this device for push: `platform` (`android`, `ios`, `web`, `desktop`) and `push_token`. For `web`, the token is the JSON of the browser's PushSubscription; its endpoint must be a browser push service (FCM, Mozilla, Apple, Windows), else 422 |
 | DELETE | `/me/devices` | user | Unregister this device; body `{"push_token": "..."}`. Call it on sign-out |
 
 A notification has `id`, `type`, `payload`, `is_read` and `created_at`. Every `payload` has a ready-to-show `message`; the other fields say where tapping should go.
@@ -569,4 +570,4 @@ Health Centre, Wellness Centre, emergency and grievance links for the landing pa
 | Area | What's planned |
 | --- | --- |
 | Landing page highlights | Featured items across modules (FR-21). Campus services links are ready (see Campus services) |
-| Push delivery | Devices register today, but pushes are only logged; the inbox works |
+| Push to native apps | Browsers get Web Push (`GET /me/push-config`, `POST /me/devices` with platform `web`); Android/iOS apps would need FCM/APNs senders |

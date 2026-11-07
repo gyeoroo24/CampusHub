@@ -142,3 +142,19 @@ resource "aws_vpc_endpoint" "cognito_idp" {
     Name = "campushub-${var.environment}-cognito-idp-endpoint"
   }
 }
+
+# VPC Interface Endpoint for Lambda: the API Lambdas (no internet access) call the push-sender Lambda,
+# which runs outside the VPC and delivers Web Push notifications (FR-22, modules/compute/push.tf).
+resource "aws_vpc_endpoint" "lambda" {
+  count               = var.enable_lambda_endpoint ? 1 : 0
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.lambda"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.lambda[*].id
+  security_group_ids  = [aws_security_group.vpce_sg.id]
+  private_dns_enabled = true
+
+  tags = {
+    Name = "campushub-${var.environment}-lambda-endpoint"
+  }
+}

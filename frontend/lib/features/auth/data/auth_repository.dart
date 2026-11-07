@@ -8,6 +8,7 @@ import '../../admin/data/admin_repository.dart';
 import '../domain/account_status.dart';
 import 'cognito_hosted_ui.dart';
 import '../domain/user.dart';
+import '../../../core/push/web_push.dart';
 
 /// Signing in succeeded (a valid Cognito token), but the account was deactivated -- a suspension,
 /// not a deletion. Thrown instead of signing the person out outright, so the app can ask them to
@@ -543,6 +544,16 @@ class ApiAuthRepository implements IAuthRepository {
 
   @override
   Future<void> signOut() async {
+    // Stop push notifications to this browser while still signed in (the API needs the token), so the
+    // next person on a shared computer doesn't get this account's alerts.
+    try {
+      final subscription = await WebPush.instance.unsubscribe();
+      if (subscription != null) {
+        await apiClient.delete(ApiEndpoints.devices, data: {'push_token': subscription});
+      }
+    } catch (_) {
+      // Signing out must work offline too; the server drops the dead subscription on its next push.
+    }
     await tokenStorage.clearAll();
     _cachedUser = null;
     _controller.add(null);

@@ -15,6 +15,7 @@ import '../../lost_found/providers/lost_found_providers.dart';
 import '../../lost_found/ui/widgets/lost_found_detail_dialog.dart';
 import '../domain/alerts_models.dart';
 import '../providers/alerts_providers.dart';
+import '../providers/push_providers.dart';
 
 /// App-bar bell with an unread badge; opens the notification inbox. Hidden for guests.
 class NotificationsButton extends ConsumerWidget {
@@ -23,6 +24,7 @@ class NotificationsButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (ref.watch(isGuestUserProvider)) return const SizedBox.shrink();
+    ref.watch(pushNotificationsProvider); // keeps this browser registered for push (FR-22)
     final unread = ref.watch(unreadNotificationsCountProvider);
     return IconButton(
       tooltip: unread > 0 ? '$unread unread notifications' : 'Notifications',
@@ -265,7 +267,9 @@ class _NotificationsDialogState extends ConsumerState<NotificationsDialog> {
           ],
         ),
         contentPadding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-        content: SizedBox(
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          const _PushToggle(),
+          SizedBox(
           width: 460,
           // At most 420px, less on short screens so the dialog never overflows.
           height: (MediaQuery.of(context).size.height * 0.6).clamp(160.0, 420.0),
@@ -335,6 +339,7 @@ class _NotificationsDialogState extends ConsumerState<NotificationsDialog> {
             },
           ),
         ),
+        ]),
         actions: selecting
             ? [
                 TextButton(onPressed: () => setState(() => _selected = null), child: const Text('Cancel')),
@@ -346,6 +351,59 @@ class _NotificationsDialogState extends ConsumerState<NotificationsDialog> {
                 ),
               ]
             : [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+      ),
+    );
+  }
+}
+
+
+/// "Push notifications on this browser": turn Web Push on or off (FR-22). Hidden where the browser or
+/// the server can't do it.
+class _PushToggle extends ConsumerWidget {
+  const _PushToggle();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final push = ref.watch(pushNotificationsProvider);
+    if (push.status == PushStatus.unsupported || push.status == PushStatus.unavailable) {
+      return const SizedBox.shrink();
+    }
+    final theme = Theme.of(context);
+    final String subtitle;
+    switch (push.status) {
+      case PushStatus.on:
+        subtitle = 'On: matches, replies, messages and event updates pop up even when CampusHub is closed.';
+      case PushStatus.blocked:
+        subtitle = 'Blocked for this site. Allow notifications in your browser’s site settings.';
+      default:
+        subtitle = 'Get matches, replies, messages and event updates even when CampusHub is closed.';
+    }
+    return SizedBox(
+      width: 460,
+      child: SwitchListTile(
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+        secondary: Icon(push.status == PushStatus.on
+            ? Icons.notifications_active_rounded
+            : Icons.notifications_off_outlined),
+        title: const Text('Push notifications on this browser', style: TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(subtitle, style: TextStyle(fontSize: 11.5, color: theme.hintColor)),
+        value: push.status == PushStatus.on,
+        onChanged: push.busy || push.status == PushStatus.blocked
+            ? null
+            : (on) async {
+                final controller = ref.read(pushNotificationsProvider.notifier);
+                String? problem;
+                if (on) {
+                  problem = await controller.turnOn();
+                } else {
+                  await controller.turnOff();
+                }
+                if (problem != null && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(problem), behavior: SnackBarBehavior.floating));
+                }
+              },
       ),
     );
   }

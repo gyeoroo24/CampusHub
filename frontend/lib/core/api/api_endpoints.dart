@@ -90,6 +90,7 @@ class ApiEndpoints {
   static String notification(String id) => '$version/me/notifications/$id';
   static const String notificationsDelete = '$version/me/notifications/delete';
   static const String devices = '$version/me/devices';
+  static const String pushConfig = '$version/me/push-config';
 
   // --- Academic Help ---
   static const String departments = '$version/departments';

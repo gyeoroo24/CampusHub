@@ -513,5 +513,16 @@ database is reachable only inside the VPC (see the [root README](../README.md#57
 
 ### Push notifications
 
-Inbox rows are always written. `app/notify.py` only logs pushes; replace `LogPushSender` with an SNS or
-FCM sender to deliver them.
+Inbox rows are always written. Browsers that turn on "Push notifications on this browser" (the
+notifications panel) also get a Web Push notification (FR-22): a forum reply, a match, a chat message, a
+price drop, an event update and the rest of the alerts above. `app/webpush.py` encrypts each message for
+the browser (RFC 8291) and signs it with the app's VAPID key; the browser shows it from
+`frontend/web/push_sw.js`, and tapping it opens the right page.
+
+- Locally: set `CAMPUSHUB_VAPID_PRIVATE_KEY` (base64url P-256 key, e.g. from `npx web-push
+  generate-vapid-keys`) and the API sends directly. Without it pushes are only logged.
+- In AWS the API Lambdas have no internet access, so they hand pushes to the push-sender Lambda
+  (`terraform/modules/compute/push.tf`), which runs outside the VPC, through a Lambda VPC endpoint.
+  Create the keys once with `terraform/scripts/create_vapid_keys.sh`; until then push stays off.
+- Subscriptions the push service reports as gone (404/410) are deleted; signing out unsubscribes the
+  browser, so a shared computer never gets the previous person's alerts.

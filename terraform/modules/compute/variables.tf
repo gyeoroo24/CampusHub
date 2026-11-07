@@ -136,3 +136,15 @@ variable "cors_allow_origins" {
   type        = list(string)
   default     = []
 }
+
+variable "enable_web_push" {
+  description = "Deploy the Web Push sender Lambda and point the API at it (FR-22)"
+  type        = bool
+  default     = false
+}
+
+variable "vapid_subject" {
+  description = "Contact for the push services, sent with every push (mailto: or https: URL)"
+  type        = string
+  default     = "mailto:admin@campushub.local"
+}

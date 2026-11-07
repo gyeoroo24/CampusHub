@@ -91,7 +91,8 @@ Database constraint errors are turned into clear HTTP 4xx responses by `app/erro
 | `db.py` | The asyncpg connection pool, created on first use and recreated if the event loop changes (Lambda). Reads the database password from Secrets Manager |
 | `cache.py` | Redis cache-aside for list endpoints. No-op without `CAMPUSHUB_REDIS_HOST`; any Redis error counts as a miss |
 | `storage.py` | S3: presigned upload URLs (with signed size and SHA-256 checksum, NFR-8), upload verification, `pending` / `attached` tags, download links (optionally signed CloudFront URLs) |
-| `notify.py` | Notifications: inbox rows plus push through a `PushSender` (currently `LogPushSender`, which only logs) |
+| `notify.py` | Notifications: inbox rows plus push through a `PushSender`: `WebPushSender` to browsers when a VAPID key is set up, else `LogPushSender` |
+| `webpush.py` | Web Push encryption (RFC 8291) and VAPID signing; also the push-sender Lambda's handler |
 | `errors.py` | Maps PostgreSQL constraint violations to HTTP responses |
 | `common.py` | Pagination (`Page`, `page_params`), shared reference models, text types, PATCH helper (`set_clause`), `not_found` / `forbidden` |
 | `cognito_accounts.py` | Checks that a person's Cognito account still exists and is enabled (moderator grants). If the check cannot be made, it logs and allows |

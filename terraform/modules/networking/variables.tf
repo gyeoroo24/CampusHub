@@ -34,3 +34,8 @@ variable "aws_region" {
   default     = "ap-south-1"
 }
 
+variable "enable_lambda_endpoint" {
+  description = "Interface endpoint so Lambdas in the VPC can invoke other Lambdas (the Web Push sender)"
+  type        = bool
+  default     = false
+}

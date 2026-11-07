@@ -28,7 +28,7 @@ flutter build web --release \
 aws s3 sync build/web "s3://$BUCKET/" --delete
 # The app's entry files keep their names across builds, so tell browsers to check for a new version on
 # every load; without a Cache-Control header they may keep running an old build after a deploy.
-for f in index.html flutter_bootstrap.js flutter.js main.dart.js flutter_service_worker.js version.json manifest.json; do
+for f in index.html flutter_bootstrap.js flutter.js main.dart.js flutter_service_worker.js version.json manifest.json push.js push_sw.js; do
   if [ -f "build/web/$f" ]; then aws s3 cp "build/web/$f" "s3://$BUCKET/$f" --cache-control "no-cache" --only-show-errors; fi
 done
 aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*" >/dev/null

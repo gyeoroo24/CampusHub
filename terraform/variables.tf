@@ -156,3 +156,9 @@ variable "cognito_threat_protection" {
   type        = bool
   default     = false
 }
+
+variable "enable_web_push" {
+  description = "Browser push notifications (FR-22): a push-sender Lambda outside the VPC, plus a Lambda VPC endpoint (about USD 0.01 per hour per availability zone) so the API can call it. Run scripts/create_vapid_keys.sh once to create the keys."
+  type        = bool
+  default     = true
+}

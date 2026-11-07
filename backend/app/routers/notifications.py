@@ -4,13 +4,15 @@ from typing import Literal
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from ..auth import CurrentUser, current_user
 from ..common import Page, PageParams, make_page, page_params
 from ..db import get_conn
 from ..mess_alerts import send_due_if_stale
+from ..notify import push_enabled, push_public_key
+from ..webpush import InvalidSubscription, parse_subscription
 
 router = APIRouter(prefix="/me", tags=["Notifications"])
 
@@ -85,9 +87,28 @@ async def clear_notifications(user: CurrentUser = Depends(current_user),
     return {"deleted": int(result.split()[-1])}
 
 
-@router.post("/devices", status_code=204, summary="Register this device for push notifications")
+class PushConfig(BaseModel):
+    enabled: bool = Field(description="False: this server sends no push notifications (the inbox still works)")
+    public_key: str | None = Field(description="VAPID public key, base64url: the browser's applicationServerKey")
+
+
+@router.get("/push-config", response_model=PushConfig,
+            summary="What a browser needs to subscribe to Web Push notifications (FR-22)")
+async def push_config(user: CurrentUser = Depends(current_user)):
+    key = push_public_key() if push_enabled() else None
+    return PushConfig(enabled=key is not None, public_key=key)
+
+
+@router.post("/devices", status_code=204, summary="Register this device for push notifications",
+             description="For a browser (`platform` web), `push_token` is the JSON of its PushSubscription "
+                         "(`subscription.toJSON()`), with an endpoint at a browser push service.")
 async def register_device(body: DeviceIn, user: CurrentUser = Depends(current_user),
                           conn: asyncpg.Connection = Depends(get_conn)):
+    if body.platform == "web":
+        try:
+            parse_subscription(body.push_token)
+        except InvalidSubscription as exc:
+            raise HTTPException(422, str(exc)) from exc
     # A token is unique per device: if another account used this device, it moves to the current user.
     await conn.execute(
         """INSERT INTO push_devices (user_id, platform, push_token) VALUES ($1, $2, $3)

@@ -7,8 +7,9 @@
 module "networking" {
   source = "./modules/networking"
 
-  environment = var.environment
-  aws_region  = var.aws_region
+  environment            = var.environment
+  aws_region             = var.aws_region
+  enable_lambda_endpoint = var.enable_web_push
 }
 
 # 2. DATABASE TIER (RDS PostgreSQL, Subnet Group, Parameter Group, SSM Params)
@@ -98,6 +99,8 @@ module "compute" {
   redis_port                   = var.enable_elasticache ? module.elasticache[0].port : 6379
   redis_auth_secret_arn        = var.enable_elasticache ? module.elasticache[0].auth_token_secret_arn : ""
   cors_allow_origins           = local.web_origins
+  enable_web_push              = var.enable_web_push
+  vapid_subject                = var.alert_email != "" ? "mailto:${var.alert_email}" : "mailto:admin@campushub.local"
 }
 
 # 6. API GATEWAY TIER (HTTP API v2, Cognito JWT Authorizer, Routes, Throttling)

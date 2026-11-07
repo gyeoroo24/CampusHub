@@ -71,6 +71,15 @@ class Settings(BaseSettings):
     # --- Notifications ---
     # On Lambda, background tasks finish before the response is returned, so cap their time.
     push_timeout_seconds: float = 3.0
+    # Web Push to browsers (FR-22, app/webpush.py). The VAPID key pair identifies the app to the browsers'
+    # push services. Locally: set vapid_private_key and the API sends directly. In AWS the API Lambdas
+    # have no internet access: they read only the public key (from SSM) and call push_sender_function,
+    # which runs outside the VPC and holds the private key. Neither set: push is off (inbox only).
+    vapid_private_key: str | None = None
+    vapid_public_key: str | None = None
+    vapid_public_key_parameter: str | None = None   # SSM parameter name, e.g. /campushub/dev/push/vapid_public_key
+    vapid_subject: str = "mailto:admin@campushub.local"
+    push_sender_function: str | None = None
 
     # --- Lost & Found matching (app/matching) ---
     # "lambda": the API asynchronously invokes match_function (the matcher Lambda, Dockerfile.matcher).
