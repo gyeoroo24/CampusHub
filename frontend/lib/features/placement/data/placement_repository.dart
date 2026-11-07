@@ -74,7 +74,8 @@ abstract class IPlacementRepository {
   Future<CsvImportResult> importRoles(String csv, {int? placementYear});
 
   /// Groups of companies that are probably the same one under different names.
-  Future<List<SimilarCompanyGroup>> fetchSimilarCompanies();
+  /// Groups of companies that are probably one company; with [companyIds], only groups including one of them.
+  Future<List<SimilarCompanyGroup>> fetchSimilarCompanies({List<String>? companyIds});
 
   /// Merges [companyIds] into one company called [name]; everything under them moves to it.
   Future<void> mergeCompanies(List<String> companyIds, String name);
@@ -262,8 +263,9 @@ class ApiPlacementRepository implements IPlacementRepository {
   }
 
   @override
-  Future<List<SimilarCompanyGroup>> fetchSimilarCompanies() async {
-    final response = await apiClient.get(ApiEndpoints.similarCompanies);
+  Future<List<SimilarCompanyGroup>> fetchSimilarCompanies({List<String>? companyIds}) async {
+    final response = await apiClient.get(ApiEndpoints.similarCompanies,
+        queryParameters: companyIds == null ? null : {'company_id': companyIds});
     return (response.data as List<dynamic>)
         .map((j) => SimilarCompanyGroup.fromJson(j as Map<String, dynamic>))
         .toList();
@@ -533,7 +535,7 @@ class MockPlacementRepository implements IPlacementRepository {
   Future<CsvImportResult> importRoles(String csv, {int? placementYear}) => importCompanies(csv);
 
   @override
-  Future<List<SimilarCompanyGroup>> fetchSimilarCompanies() async => const [];
+  Future<List<SimilarCompanyGroup>> fetchSimilarCompanies({List<String>? companyIds}) async => const [];
 
   @override
   Future<void> mergeCompanies(List<String> companyIds, String name) async {}

@@ -294,13 +294,72 @@ async def rename_tag(tag_id: int, body: TagIn, user: CurrentUser = Depends(curre
 
 
 @router.delete("/event-tags/{tag_id}", status_code=204,
-               summary="Delete a tag (events moderator or admin). Events keep their other tags; followers of it are dropped")
-async def delete_tag(tag_id: int, user: CurrentUser = Depends(current_user),
-                     conn: asyncpg.Connection = Depends(get_conn)):
+               summary="Delete a tag (events moderator or admin)",
+               description="Like deleting a Buy & Sell or Lost & Found category. If events use the tag, pass "
+                           "`move_to` to put that tag on them instead (its followers follow that tag too), or "
+                           "`delete_posts=true` to remove those events with it (their organizers and the people "
+                           "who saved them are told). With neither the answer is 409 with how many events use it. "
+                           "An unused tag is just deleted; its followers stop following it.")
+async def delete_tag(background: BackgroundTasks, tag_id: int,
+                     move_to: int | None = Query(None, ge=1, le=MAX_INT_ID),
+                     delete_posts: bool = Query(False),
+                     user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
     if not await _is_moderator(conn, user):
         raise forbidden("Only an events moderator or admin can delete event tags.")
-    if not await conn.fetchval("DELETE FROM event_tags WHERE id = $1 RETURNING true", tag_id):
+    name = await conn.fetchval("SELECT name FROM event_tags WHERE id = $1", tag_id)
+    if name is None:
         raise not_found("Tag")
+    if move_to is not None and delete_posts:
+        raise HTTPException(422, "Either move its events to another tag or delete them, not both.")
+    if move_to is not None:
+        if move_to == tag_id:
+            raise HTTPException(422, "Pick a different tag to move its events to.")
+        if not await conn.fetchval("SELECT EXISTS (SELECT 1 FROM event_tags WHERE id = $1)", move_to):
+            raise not_found("Tag to move events to")
+    pushes: list[tuple[list[UUID], str, dict]] = []
+    async with conn.transaction():
+        await conn.execute("SELECT 1 FROM event_tags WHERE id = $1 FOR UPDATE", tag_id)
+        events = await conn.fetch(
+            """SELECT e.id, e.title, e.created_by, e.end_time FROM events e JOIN event_tag_map m ON m.event_id = e.id
+               WHERE m.tag_id = $1 AND e.deleted_at IS NULL""", tag_id)
+        if events and move_to is None and not delete_posts:
+            raise HTTPException(409, f"“{name}” is used by {len(events)} event{'' if len(events) == 1 else 's'}. "
+                                     "Choose a tag to move them to, or delete them with it.")
+        if move_to is not None:
+            await conn.execute(
+                """INSERT INTO event_tag_map (event_id, tag_id) SELECT event_id, $2 FROM event_tag_map WHERE tag_id = $1
+                   ON CONFLICT DO NOTHING""", tag_id, move_to)
+            await conn.execute(
+                """INSERT INTO tag_follows (user_id, tag_id) SELECT user_id, $2 FROM tag_follows WHERE tag_id = $1
+                   ON CONFLICT DO NOTHING""", tag_id, move_to)
+        if delete_posts and events:
+            ids = [e["id"] for e in events]
+            await conn.execute("UPDATE events SET deleted_at = now(), deleted_by = $2 WHERE id = ANY($1::uuid[])",
+                               ids, user.id)
+            now = datetime.now(timezone.utc)
+            for e in events:
+                if e["end_time"] < now:
+                    continue   # over already: nobody needs telling
+                payload = {"event_id": str(e["id"]), "cancelled": True,
+                           "message": f"“{e['title']}” was removed with the event tag “{name}”."}
+                notified = await create_notifications(conn, await _bookmarkers(conn, e["id"], user.id),
+                                                      "bookmarked_event_update", payload)
+                pushes.append((notified, "bookmarked_event_update", payload))
+            organizers = [e["created_by"] for e in events if e["created_by"] != user.id]
+            if organizers:
+                payload = {"message": f"A moderator deleted the event tag “{name}” and removed your events in it.",
+                           "kind": "category_deleted"}
+                pushes.append((await create_notifications(conn, organizers, "moderation_action", payload),
+                               "moderation_action", payload))
+            await conn.execute("DELETE FROM bookmarks WHERE target_type = 'event' AND target_id = ANY($1::uuid[])", ids)
+        await conn.execute("DELETE FROM event_tags WHERE id = $1", tag_id)   # its map rows and follows go with it
+        detail = (f", events moved to tag id {move_to}" if move_to else "") + \
+                 (f", its {len(events)} event(s) removed" if delete_posts and events else "")
+        # moderation_log.target_id is a UUID; tag ids are ints, stored as UUID(int=id).
+        await log_moderation(conn, user.id, "delete_event_tag", "event_tag", UUID(int=tag_id),
+                             f"{name} (id {tag_id}){detail}")
+    for user_ids, notification_type, payload in pushes:
+        background.add_task(deliver_push, user_ids, notification_type, payload)
     return Response(status_code=204)
 
 

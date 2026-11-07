@@ -188,3 +188,25 @@ def test_import_shows_similar_companies_and_merging_clubs_them(client):
     walmart = sql("SELECT id::text FROM companies WHERE name = 'Walmart'")[0]["id"]
     assert client.post(f"{API}/placement/companies/merge", headers=RAVI,
                        json={"company_ids": [merged["id"], walmart], "name": "Walmart"}).status_code == 200
+
+
+def test_adding_companies_or_dates_also_flags_similar_companies(client):
+    """The same review as the placement sheet, after Add companies and Add placement dates (form or file)."""
+    make_admin(client, ADMIN)
+    sign_in(client, RAVI)
+    assert grant(client, ADMIN, "ravi@iisc.ac.in", "placement_hub").status_code == 201
+    r = client.post(f"{API}/placement/companies/import", headers=RAVI,
+                    json={"csv": "Name,Industry\nInfosys,IT\nInfosys [Mock Assessment],IT\nWalmart,Retail\n"}).json()
+    assert [[c["name"] for c in g["companies"]] for g in r["similar_companies"]] == [
+        ["Infosys", "Infosys [Mock Assessment]"]]
+    r = client.post(f"{API}/placement/schedule/import", headers=RAVI, json={
+        "csv": "Company,Type,Date,Time\nWalmart Inc.,PPT,2026-12-01,10:00\n", "file_name": "ppt.csv"}).json()
+    assert r["companies_created"] == ["Walmart Inc."]
+    assert [sorted(c["name"] for c in g["companies"]) for g in r["similar_companies"]] == [
+        ["Walmart", "Walmart Inc."]]
+    # The form adds one company; the app then asks about just that one.
+    client.post(f"{API}/companies", headers=RAVI, json={"name": "Wipro"})
+    new = client.post(f"{API}/companies", headers=RAVI, json={"name": "Wipro [Mock Assessment]"}).json()
+    groups = client.get(f"{API}/placement/companies/similar", headers=RAVI, params={"company_id": new["id"]}).json()
+    assert [sorted(c["name"] for c in g["companies"]) for g in groups] == [["Wipro", "Wipro [Mock Assessment]"]]
+    assert len(client.get(f"{API}/placement/companies/similar", headers=RAVI).json()) == 3

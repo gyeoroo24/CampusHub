@@ -220,8 +220,8 @@ class LostFoundDetailDialog extends ConsumerWidget {
                     if (isOwner || (currentUser?.isAdmin ?? false)) PossibleMatchesSection(item: item),
 
                     // ── Status & Owner Controls (Original Reporter Only) ───────────────
-                    // The backend lets the admin edit anyone's report too.
-                    if (isOwner || (currentUser?.isAdmin ?? false)) ...[
+                    // Only the reporter edits a report; moderators and the admin can remove it (below).
+                    if (isOwner) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -236,7 +236,7 @@ class LostFoundDetailDialog extends ConsumerWidget {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  isOwner ? 'Report Owner Controls' : 'Admin Controls',
+                                  'Report Owner Controls',
                                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                                 ),
                                 Row(

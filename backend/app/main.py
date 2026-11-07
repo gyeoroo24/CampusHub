@@ -8,10 +8,11 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 
+from . import cache
 from .auth import optional_user
 from .config import get_settings, in_lambda
 from .db import close_pool
@@ -94,6 +95,21 @@ def create_app() -> FastAPI:
                        allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?" if allow_localhost else None,
                        allow_methods=["*"], allow_headers=["*"])
     install_error_handlers(app)
+
+    @app.middleware("http")
+    async def fresh_after_changes(request: Request, call_next):
+        response = await call_next(request)
+        if request.method in ("POST", "PUT", "PATCH", "DELETE") and response.status_code < 400:
+            # A change shows on the next read instead of after the cache's TTL (app/cache.py).
+            path = request.url.path.removeprefix(settings.api_prefix)
+            if namespaces := cache.namespaces_for_write(path):
+                await cache.invalidate(*namespaces)
+        elif (request.method == "GET" and "cache-control" not in response.headers
+              and (request.headers.get("authorization") or request.headers.get("x-dev-user"))):
+            # Signed-in reads are personal (saved, following, own posts) and must reflect the person's own
+            # changes at once: CloudFront doesn't cache them. Guests' reads stay edge-cached (terraform cdn).
+            response.headers["Cache-Control"] = "private, no-store"
+        return response
     # Every route checks the caller's token, even ones guests can use, so a bad or expired token
     # always gets 401. Routes that need the user reuse the same (cached) result.
     checked = [Depends(optional_user)]

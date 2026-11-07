@@ -146,3 +146,42 @@ def test_cors_allows_local_dev_but_not_other_websites(client):
     assert preflight("http://localhost:5000").headers.get("access-control-allow-origin") == "http://localhost:5000"
     evil = preflight("https://evil.example.com")
     assert "access-control-allow-origin" not in evil.headers
+
+
+# ---------------------------------------------------------------- only owners edit Buy & Sell / Lost & Found posts
+def test_admins_and_moderators_cannot_edit_other_peoples_posts(client):
+    make_admin(client, ADMIN)
+    sign_in(client, RAVI)
+    grant(client, ADMIN, "ravi@iisc.ac.in", "buy_sell")
+    grant(client, ADMIN, "ravi@iisc.ac.in", "lost_found")
+    cat = category(client, ASHA, "buy-sell", "Cycles")
+    listing = _listing(client, ASHA, cat)
+    wanted = client.post(f"{API}/wanted", headers=ASHA, json={"title": "Need a cycle", "category_id": cat}).json()
+    lf_cat = category(client, ASHA, "lost-found", "Wallet")
+    report = client.post(f"{API}/lost-reports", headers=ASHA, json={
+        "description": "Black wallet", "category_id": lf_cat, "occurred_at": "2026-11-01T10:00:00Z",
+        "location": "Library"}).json()
+    for who in (ADMIN, RAVI):
+        assert client.patch(f"{API}/listings/{listing['id']}", headers=who, json={"title": "x"}).status_code == 403
+        assert client.patch(f"{API}/listings/{listing['id']}/status", headers=who,
+                            json={"status": "sold"}).status_code == 403
+        assert client.put(f"{API}/listings/{listing['id']}/photos", headers=who,
+                          json={"photo_keys": []}).status_code == 403
+        assert client.patch(f"{API}/wanted/{wanted['id']}", headers=who, json={"title": "x"}).status_code == 403
+        assert client.patch(f"{API}/lost-reports/{report['id']}", headers=who,
+                            json={"description": "x"}).status_code == 403
+        assert client.patch(f"{API}/lost-reports/{report['id']}/status", headers=who,
+                            json={"status": "closed"}).status_code == 403
+    # The owner still can, and moderators can still remove the post.
+    assert client.patch(f"{API}/listings/{listing['id']}", headers=ASHA, json={"title": "Bike"}).status_code == 200
+    assert client.delete(f"{API}/listings/{listing['id']}", headers=RAVI).status_code == 204
+
+
+def test_listing_cards_get_a_description_preview(client):
+    cat = category(client, ASHA, "buy-sell", "Books")
+    long = "Barely used. " * 40
+    listing = _listing(client, ASHA, cat, description=long)
+    card = client.get(f"{API}/listings").json()["items"][0]
+    assert card["description"].startswith("Barely used.") and card["description"].endswith("…")
+    assert len(card["description"]) <= 300
+    assert client.get(f"{API}/listings/{listing['id']}").json()["description"] == long.strip()

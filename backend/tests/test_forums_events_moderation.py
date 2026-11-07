@@ -169,9 +169,10 @@ def test_csv_imports(client, people):
     assert client.post(f"{API}/placement/companies/import", headers=ASHA, json={"csv": companies}).status_code == 403
     r = client.post(f"{API}/placement/companies/import", headers=RAVI, json={"csv": companies})
     assert r.status_code == 201, r.text
-    assert r.json() | {"rejected_rows": None, "kinds": None, "past_rows": None} == {
+    assert r.json() | {"rejected_rows": None, "kinds": None, "past_rows": None, "similar_companies": None} == {
         "rows_total": 3, "rows_created": 2, "rows_updated": 0, "rows_rejected": 1,
-        "companies_created": ["IBM", "Nvidia"], "rejected_rows": None, "kinds": None, "past_rows": None}
+        "companies_created": ["IBM", "Nvidia"], "rejected_rows": None, "kinds": None, "past_rows": None,
+        "similar_companies": None}
     r = client.post(f"{API}/placement/companies/import", headers=RAVI, json={"csv": "Name,Industry\nibm,Consulting\n"})
     assert r.json()["rows_updated"] == 1
     ibm = sql("SELECT industry, website FROM companies WHERE name = 'IBM'")[0]

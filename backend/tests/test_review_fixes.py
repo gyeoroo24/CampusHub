@@ -203,19 +203,17 @@ def test_real_iisc_emails_accepted_everywhere():
 
 
 # ---------------------------------------------------------------- admin powers and accounts
-def test_admin_edits_others_content_and_it_is_logged(client, campus):
+def test_admin_edits_forum_content_and_it_is_logged(client, campus):
     listing = _listing(client, ASHA)
     url = f"{API}/listings/{listing['id']}"
     assert client.patch(url, headers=RAVI, json={"title": "x"}).status_code == 403
-    assert client.patch(url, headers=ADMIN, json={"title": "Cycle (edited)"}).status_code == 200
-    assert client.patch(f"{url}/status", headers=ADMIN, json={"status": "sold"}).json()["status"] == "sold"
     assert client.patch(url, headers=ASHA, json={"title": None}).status_code == 422
     thread = _thread(client, ASHA, campus["hpca"]["id"])
     assert client.patch(f"{API}/threads/{thread['id']}", headers=ADMIN, json={"title": "Caches"}).status_code == 200
     comment_id = thread["comments"][0]["id"]
     assert client.patch(f"{API}/comments/{comment_id}", headers=ADMIN, json={"content": "[edited]"}).status_code == 200
     actions = {r["action"] for r in sql("SELECT action FROM moderation_log WHERE action NOT LIKE 'grant%'")}
-    assert actions == {"edit_listing", "change_listing_status", "rename_thread", "edit_comment"}
+    assert actions == {"rename_thread", "edit_comment"}
 
 
 def test_the_admin_cannot_deactivate_accounts(client):

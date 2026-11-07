@@ -98,6 +98,9 @@ async def get_or_set(key: str, ttl_seconds: int | None, fetch: Callable[[], Awai
     try:
         client = await _get_client()
         if client is not None:
+            # The module's version is part of the key, so a write (invalidate()) retires every entry at once.
+            version = await client.get(_version_key(_namespace(key))) or "0"
+            key = f"{key}|v{version}"
             cached = await client.get(key)
             if cached is not None:
                 return json.loads(cached)
@@ -130,3 +133,54 @@ def build_key(prefix: str, viewer_id: Any, *parts: Any) -> str:
     parameter in `parts` -- include everything the response depends on, or two different requests
     that should get different answers will share a cache entry."""
     return f"cache:{prefix}:{viewer_scope(viewer_id)}:" + json.dumps(parts, default=str)
+
+
+# ---------------------------------------------------------------- invalidation
+# Every key belongs to a module ("cache:<module>:..." from build_key, e.g. events, academics). A write in
+# that module bumps the module's version number, and get_or_set puts the version in the key it reads, so
+# the next read after a change misses and fetches fresh data: a change shows at once, not after the TTL.
+# Old entries just expire. A write elsewhere (chat, notifications) leaves the caches alone.
+NAMESPACES = ("buy-sell", "lost-found", "events", "academics", "mess")
+
+
+def _namespace(key: str) -> str:
+    return key.split(":", 2)[1] if key.startswith("cache:") else ""
+
+
+def _version_key(namespace: str) -> str:
+    return f"cachever:{namespace}"
+
+
+async def invalidate(*namespaces: str) -> None:
+    """Retire the cached reads of these modules (all of them if none is named). Best effort."""
+    try:
+        client = await _get_client()
+        if client is None:
+            return
+        for ns in namespaces or NAMESPACES:
+            await client.incr(_version_key(ns))
+    except Exception:  # noqa: BLE001 - the TTL still bounds how stale a read can be
+        log.warning("Couldn't invalidate the cache for %s", namespaces or "every module", exc_info=True)
+
+
+# Which modules a write to a path can change. Moderation and account changes touch every module
+# (a removed post, a deactivated seller); paths not listed (chat, notifications, uploads) touch none.
+_WRITE_PATHS = (
+    (("/listings", "/wanted", "/buy-sell/"), ("buy-sell",)),
+    (("/lost-reports", "/found-reports", "/lost-found/"), ("lost-found",)),
+    (("/events", "/event-tags", "/event-updates", "/me/followed-tags", "/me/bookmarks"), ("events",)),
+    (("/departments", "/courses", "/materials", "/feedback", "/forums", "/threads", "/comments"), ("academics",)),
+    (("/messes", "/mess-menus"), ("mess",)),
+    (("/reports", "/seller-strikes", "/users", "/me/deactivate", "/me/reactivate", "/moderators",
+      "/me/seller-unblock-request", "/seller-unblock-requests"), NAMESPACES),
+)
+
+
+def namespaces_for_write(path: str) -> tuple[str, ...]:
+    """The modules whose cached reads a successful write to `path` (without the API prefix) may change."""
+    hit: list[str] = []
+    for prefixes, namespaces in _WRITE_PATHS:
+        if any(path == p or path.startswith(p if p.endswith("/") else p + "/") or path.startswith(p + "?")
+               for p in prefixes):
+            hit += [ns for ns in namespaces if ns not in hit]
+    return tuple(hit)

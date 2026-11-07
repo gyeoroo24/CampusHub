@@ -117,16 +117,19 @@ class _PlacementScreenState extends ConsumerState<PlacementScreen> with TickerPr
 // ---------------------------------------------------------------- manage (moderators)
 Future<void> _runManageAction(BuildContext context, WidgetRef ref, String action) async {
   final container = ProviderScope.containerOf(context, listen: false);
-  final saved = await showDialog<bool>(
+  final result = await showDialog<Object>(
     context: context,
     builder: (_) => switch (action) {
       'company' => const AddOrImportDialog(kind: CsvImportKind.companies),
       'date' => const AddOrImportDialog(kind: CsvImportKind.schedule),
-      'similar' => const SimilarCompaniesDialog(),
       _ => const ImportSheetDialog(),
     },
   );
-  if (saved == true) {
+  // Added with a form: check that company for look-alikes, the same review a file or sheet import gets.
+  if (result is SavedCompany && context.mounted) {
+    await showDialog<bool>(context: context, builder: (_) => SimilarCompaniesDialog(companyIds: [result.id]));
+  }
+  if (result == true || result is SavedCompany) {
     container.read(companiesPaginationProvider.notifier).loadInitial();
     container.invalidate(placementOverviewProvider);
     container.invalidate(upcomingPptsProvider);
@@ -140,8 +143,6 @@ const _manageActions = [
       'Pre-placement talks, online tests and interviews, by hand or from a schedule file.'),
   ('sheet', Icons.table_view_rounded, 'Import placement sheet',
       'Selected students (hiring numbers, seniors), or roles with their compensation and skills.'),
-  ('similar', Icons.merge_rounded, 'Club duplicate companies',
-      'Find companies listed under slightly different names (e.g. "Accenture [Mock Assessment]") and merge them.'),
 ];
 
 class _ManageTab extends ConsumerWidget {

@@ -33,6 +33,7 @@ _ORDER = {"newest": "l.created_at DESC, l.id DESC",
           "price_asc": "l.price ASC, l.created_at DESC, l.id DESC",
           "price_desc": "l.price DESC, l.created_at DESC, l.id DESC"}
 MAX_PHOTOS = 10
+DESCRIPTION_PREVIEW = 300
 
 
 def _unique_keys(keys: list[str]) -> list[str]:
@@ -94,12 +95,14 @@ class ListingSummary(BaseModel):
         False, description="Flagged automatically as a possible prohibited item and hidden until a "
                            "moderator decides (future plan §1.6). Seen only by the seller and moderators.")
     negotiable: bool = False
+    description: str | None = Field(
+        None, description=f"In lists, the first {DESCRIPTION_PREVIEW} characters (a card's preview); "
+                          "the whole description in the listing's own detail")
     cover_photo_url: str | None
     created_at: datetime
 
 
 class ListingDetail(ListingSummary):
-    description: str | None
     photos: list[Photo]
     seller_contact: Contact | None = Field(description="Shown to signed-in users only (scenario 1)")
     watching: bool = Field(False, description="The viewer is watching this listing for price changes (§2.3)")
@@ -126,8 +129,15 @@ def _summary(r: asyncpg.Record, tag: Tag | None = None) -> ListingSummary:
         seller_deactivated=not r["seller_active"],
         hidden=r["hidden_by_strike_id"] is not None,
         held_for_review=r["held_for_review_at"] is not None, negotiable=r["negotiable"],
+        description=_preview(r["description"]),
         cover_photo_url=file_url(r["cover_key"]) if r["cover_key"] else None,
         created_at=r["created_at"])
+
+
+def _preview(text: str | None) -> str | None:
+    if not text or len(text) <= DESCRIPTION_PREVIEW:
+        return text
+    return text[:DESCRIPTION_PREVIEW - 1].rstrip() + "…"
 
 
 async def _may_see_hidden(conn: asyncpg.Connection, seller_id: UUID, viewer: CurrentUser | None) -> bool:
@@ -149,25 +159,21 @@ async def _detail(conn: asyncpg.Connection, listing_id: UUID, viewer: CurrentUse
     watching = bool(viewer) and await conn.fetchval(
         "SELECT EXISTS (SELECT 1 FROM listing_watches WHERE user_id = $1 AND listing_id = $2)", viewer.id, listing_id)
     return ListingDetail(
-        **_summary(r, tag).model_dump(),
-        description=r["description"], watching=watching,
+        **(_summary(r, tag).model_dump() | {"description": r["description"]}), watching=watching,
         photos=[Photo(s3_key=p["s3_key"], url=file_url(p["s3_key"]), sort_order=p["sort_order"]) for p in photos],
         seller_contact=(Contact(email=r["seller_email"], phone=r["seller_phone"])
                         if viewer and r["seller_active"] else None),
         updated_at=r["updated_at"])
 
 
-async def _editable_listing(conn: asyncpg.Connection, listing_id: UUID, user: CurrentUser) -> bool:
-    """The seller or an admin may change a listing. Returns True when it's an admin editing someone else's."""
+async def _editable_listing(conn: asyncpg.Connection, listing_id: UUID, user: CurrentUser) -> None:
+    """Only the seller may change a listing. Moderators and the admin can remove it (DELETE), not edit it."""
     seller_id = await conn.fetchval(
         "SELECT seller_id FROM listings WHERE id = $1 AND deleted_at IS NULL", listing_id)
     if seller_id is None:
         raise not_found("Listing")
-    if seller_id == user.id:
-        return False
-    if not user.is_admin:
+    if seller_id != user.id:
         raise forbidden("Only the seller can change this listing.")
-    return True
 
 
 async def _insert_photos(conn: asyncpg.Connection, listing_id: UUID, keys: list[str]) -> None:
@@ -247,10 +253,10 @@ async def create_listing(body: ListingCreate, background: BackgroundTasks, user:
     return await _detail(conn, listing_id, user)
 
 
-@router.patch("/{listing_id}", response_model=ListingDetail, summary="Edit a listing (seller or admin)")
+@router.patch("/{listing_id}", response_model=ListingDetail, summary="Edit a listing (seller only)")
 async def update_listing(listing_id: UUID, body: ListingUpdate, background: BackgroundTasks,
                          user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
-    by_admin = await _editable_listing(conn, listing_id, user)
+    await _editable_listing(conn, listing_id, user)
     changes = body.model_dump(exclude_unset=True)
     for required in ("title", "price", "category_id"):
         if required in changes and changes[required] is None:
@@ -260,8 +266,6 @@ async def update_listing(listing_id: UUID, body: ListingUpdate, background: Back
         before = await conn.fetchrow(
             "SELECT title, price, negotiable FROM listings WHERE id = $1 FOR UPDATE", listing_id)
         await conn.execute(f"UPDATE listings SET {sql} WHERE id = $1", listing_id, *values)
-        if by_admin:
-            await log_moderation(conn, user.id, "edit_listing", "listing", listing_id)
         held = False
         if changes.keys() & {"title", "description"}:
             held = await screen_text(conn, background, "listing", listing_id)
@@ -310,14 +314,12 @@ async def _notify_watchers(conn: asyncpg.Connection, listing_id: UUID, before: a
 
 
 @router.patch("/{listing_id}/status", response_model=ListingDetail,
-              summary="Mark available / reserved / sold (seller or admin, FR-5)")
+              summary="Mark available / reserved / sold (seller only, FR-5)")
 async def update_status(listing_id: UUID, body: StatusUpdate, background: BackgroundTasks,
                         user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
-    by_admin = await _editable_listing(conn, listing_id, user)
+    await _editable_listing(conn, listing_id, user)
     async with conn.transaction():
         await conn.execute("UPDATE listings SET status = $2 WHERE id = $1", listing_id, body.status)
-        if by_admin:
-            await log_moderation(conn, user.id, "change_listing_status", "listing", listing_id, body.status)
         # Back on sale (e.g. a reservation fell through): alert anyone not told yet.
         pushes = await listing_alerts(conn, listing_id) if body.status == "available" else []
     push_alerts(background, pushes)
@@ -325,10 +327,10 @@ async def update_status(listing_id: UUID, body: StatusUpdate, background: Backgr
 
 
 @router.put("/{listing_id}/photos", response_model=ListingDetail,
-            summary="Replace the photo list (add, remove or reorder; seller or admin)")
+            summary="Replace the photo list (add, remove or reorder; seller only)")
 async def replace_photos(listing_id: UUID, body: PhotosUpdate, background: BackgroundTasks,
                          user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
-    by_admin = await _editable_listing(conn, listing_id, user)
+    await _editable_listing(conn, listing_id, user)
     old_keys = {r["s3_key"] for r in await conn.fetch(
         "SELECT s3_key FROM listing_photos WHERE listing_id = $1", listing_id)}
     new_keys = [k for k in body.photo_keys if k not in old_keys]
@@ -337,8 +339,6 @@ async def replace_photos(listing_id: UUID, body: PhotosUpdate, background: Backg
         await conn.execute("DELETE FROM listing_photos WHERE listing_id = $1", listing_id)
         await _insert_photos(conn, listing_id, body.photo_keys)
         await conn.execute("UPDATE listings SET updated_at = now() WHERE id = $1", listing_id)
-        if by_admin:
-            await log_moderation(conn, user.id, "replace_listing_photos", "listing", listing_id)
     await mark_attached(new_keys)
     background.add_task(delete_objects, sorted(old_keys - set(body.photo_keys)))
     if new_keys:

@@ -113,16 +113,13 @@ async def _matches(conn: asyncpg.Connection, post_id: UUID) -> list[ListingSumma
     return [listing_summary(r) for r in rows]
 
 
-async def _editable(conn: asyncpg.Connection, post_id: UUID, user: CurrentUser) -> bool:
-    """The author or an admin may change a post. Returns True when it's an admin editing someone else's."""
+async def _editable(conn: asyncpg.Connection, post_id: UUID, user: CurrentUser) -> None:
+    """Only the author may change a post. Moderators and the admin can remove it (DELETE), not edit it."""
     author_id = await conn.fetchval("SELECT author_id FROM wanted_posts WHERE id = $1 AND deleted_at IS NULL", post_id)
     if author_id is None:
         raise not_found("Wanted post")
-    if author_id == user.id:
-        return False
-    if not user.is_admin:
+    if author_id != user.id:
         raise forbidden("Only the author can change this post.")
-    return True
 
 
 @router.get("", response_model=Page[WantedSummary], summary="Browse Wanted posts, newest first (guests allowed)")
@@ -184,10 +181,10 @@ async def create_wanted(body: WantedCreate, user: CurrentUser = Depends(current_
     return result
 
 
-@router.patch("/{post_id}", response_model=WantedDetail, summary="Edit a Wanted post (author or admin)")
+@router.patch("/{post_id}", response_model=WantedDetail, summary="Edit a Wanted post (author only)")
 async def update_wanted(post_id: UUID, body: WantedUpdate, user: CurrentUser = Depends(current_user),
                         conn: asyncpg.Connection = Depends(get_conn)):
-    by_admin = await _editable(conn, post_id, user)
+    await _editable(conn, post_id, user)
     changes = body.model_dump(exclude_unset=True)
     for required in ("title", "category_id"):
         if required in changes and changes[required] is None:
@@ -198,20 +195,16 @@ async def update_wanted(post_id: UUID, body: WantedUpdate, user: CurrentUser = D
     sql, values = set_clause(changes, start=2)
     async with conn.transaction():
         await conn.execute(f"UPDATE wanted_posts SET {sql} WHERE id = $1", post_id, *values)
-        if by_admin:
-            await log_moderation(conn, user.id, "edit_wanted_post", "wanted_post", post_id)
     return await _detail(conn, post_id, user)
 
 
 @router.patch("/{post_id}/status", response_model=WantedDetail,
-              summary="Mark open / fulfilled / closed (author or admin)")
+              summary="Mark open / fulfilled / closed (author only)")
 async def update_status(post_id: UUID, body: StatusUpdate, user: CurrentUser = Depends(current_user),
                         conn: asyncpg.Connection = Depends(get_conn)):
-    by_admin = await _editable(conn, post_id, user)
+    await _editable(conn, post_id, user)
     async with conn.transaction():
         await conn.execute("UPDATE wanted_posts SET status = $2 WHERE id = $1", post_id, body.status)
-        if by_admin:
-            await log_moderation(conn, user.id, "change_wanted_post_status", "wanted_post", post_id, body.status)
     return await _detail(conn, post_id, user)
 
 

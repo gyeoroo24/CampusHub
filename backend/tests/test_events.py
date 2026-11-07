@@ -181,3 +181,33 @@ def test_bookmarks_for_listings_and_guest_import(client, tags):
     assert [b["target_type"] for b in client.get(f"{API}/me/bookmarks", headers=KIRAN).json()] == ["event"]
     assert client.delete(f"{API}/me/bookmarks/event/{event['id']}", headers=KIRAN).status_code == 204
     assert client.get(f"{API}/me/bookmarks", headers=KIRAN).json() == []
+
+
+def test_deleting_a_tag_works_like_deleting_a_category(client, tags):
+    """In use: move its events to another tag or delete them with it; unused: just deleted (events moderators/admin)."""
+    sports, culture = tags["Sports"], tags["Culture"]
+    run = _event(client, ASHA, [sports], title="Campus run")
+    both = _event(client, ASHA, [sports, culture], title="Sports day")
+    client.put(f"{API}/me/followed-tags/{sports}", headers=RAVI)
+    client.put(f"{API}/me/bookmarks/event/{run['id']}", headers=MEERA)
+
+    assert client.delete(f"{API}/event-tags/{sports}", headers=ASHA).status_code == 403
+    r = client.delete(f"{API}/event-tags/{sports}", headers=ADMIN)
+    assert r.status_code == 409 and "2 events" in r.json()["detail"]
+    assert client.delete(f"{API}/event-tags/{sports}?move_to={culture}&delete_posts=true",
+                         headers=ADMIN).status_code == 422
+
+    # Move: its events get the other tag, its followers follow that tag instead.
+    assert client.delete(f"{API}/event-tags/{sports}?move_to={culture}", headers=ADMIN).status_code == 204
+    assert [t["name"] for t in client.get(f"{API}/events/{run['id']}").json()["tags"]] == ["Culture"]
+    assert [t["name"] for t in client.get(f"{API}/events/{both['id']}").json()["tags"]] == ["Culture"]
+    assert [t["name"] for t in client.get(f"{API}/me/followed-tags", headers=RAVI).json()] == ["Culture"]
+
+    # Delete with its events: they're removed, and whoever saved one is told.
+    assert client.delete(f"{API}/event-tags/{culture}?delete_posts=true", headers=ADMIN).status_code == 204
+    assert client.get(f"{API}/events/{run['id']}").status_code == 404
+    assert any(a.get("cancelled") for a in _alerts(client, MEERA, "bookmarked_event_update"))
+    assert [t["name"] for t in client.get(f"{API}/event-tags").json()] == ["Photography"]
+
+    # Unused: deleted straight away.
+    assert client.delete(f"{API}/event-tags/{tags['Photography']}", headers=ADMIN).status_code == 204

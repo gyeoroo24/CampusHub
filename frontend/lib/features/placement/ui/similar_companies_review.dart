@@ -147,21 +147,33 @@ class _SimilarCompaniesReviewState extends ConsumerState<SimilarCompaniesReview>
   }
 }
 
-/// Manage → "Club duplicate companies": the same review for companies already in Placement Hub.
+/// The same review after adding a company or a placement date with a form (Manage → Add companies / Add
+/// placement dates): only groups with [companyIds]. Closes by itself when nothing looks like a duplicate.
 class SimilarCompaniesDialog extends ConsumerStatefulWidget {
-  const SimilarCompaniesDialog({super.key});
+  final List<String> companyIds;
+
+  const SimilarCompaniesDialog({super.key, required this.companyIds});
 
   @override
   ConsumerState<SimilarCompaniesDialog> createState() => _SimilarCompaniesDialogState();
 }
 
 class _SimilarCompaniesDialogState extends ConsumerState<SimilarCompaniesDialog> {
-  late final Future<List<SimilarCompanyGroup>> _groups = ref.read(placementRepositoryProvider).fetchSimilarCompanies();
+  late final Future<List<SimilarCompanyGroup>> _groups =
+      ref.read(placementRepositoryProvider).fetchSimilarCompanies(companyIds: widget.companyIds).then((groups) {
+    // Nothing to review: close without showing anything.
+    if (groups.isEmpty && mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.pop(context, false);
+      });
+    }
+    return groups;
+  });
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Club duplicate companies'),
+      title: const Text('Similar companies'),
       content: SizedBox(
         width: 620,
         child: SingleChildScrollView(
@@ -173,7 +185,7 @@ class _SimilarCompaniesDialogState extends ConsumerState<SimilarCompaniesDialog>
                 return const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()));
               }
               final groups = snap.data!;
-              if (groups.isEmpty) return const Text('No companies look like duplicates of each other.');
+              if (groups.isEmpty) return const SizedBox.shrink();
               return SimilarCompaniesReview(
                 groups: groups,
                 onDone: (merged) => Navigator.pop(context, merged > 0),

@@ -144,9 +144,9 @@ Guests can browse and search listings. Sellers create, edit and mark their own l
 | GET | `/listings` | guest | Browse. Filters: `q` (title and description), `category_id`, `min_price`, `max_price`, `status` (repeatable), `seller_id`. `sort`: `newest` (default), `price_asc`, `price_desc` |
 | POST | `/listings` | user | Create: `title`, `price`, `category_id`, `description`, `location`, `photo_keys` (up to 10) |
 | GET | `/listings/{id}` | guest | One listing with all photos; `seller_contact` for signed-in users |
-| PATCH | `/listings/{id}` | owner, admin | Edit `title`, `description`, `price`, `category_id`, `location` |
-| PATCH | `/listings/{id}/status` | owner, admin | Set `status`: `available`, `reserved` or `sold` |
-| PUT | `/listings/{id}/photos` | owner, admin | Replace the photo list: `photo_keys` in the new order |
+| PATCH | `/listings/{id}` | owner | Edit `title`, `description`, `price`, `category_id`, `location` |
+| PATCH | `/listings/{id}/status` | owner | Set `status`: `available`, `reserved` or `sold` |
+| PUT | `/listings/{id}/photos` | owner | Replace the photo list: `photo_keys` in the new order |
 | DELETE | `/listings/{id}` | owner, Buy & Sell moderator, admin | Remove for good: the listing, its photos, watches and reports are deleted from the database and storage (rev 23), so it also leaves the moderation queue and history. Moderators can add `?reason=`. One exception: a moderator removing a listing that has an open report hides it with a strike instead (the seller can appeal); the seller can still delete it afterwards. Strikes and chats about a deleted listing keep its title (`listing_id` becomes null on the strike) |
 
 **Fields to design with:**
@@ -172,9 +172,9 @@ Lost reports and found reports have identical endpoints. Swap `/lost-reports` fo
 | GET | `/lost-reports` | guest | Browse. Filters: `q` (description), `category_id`, `status` (repeatable), `reporter_id`, `from_date` and `to_date` (when the item was lost or found; send a time zone). `sort`: `newest` (default) or `oldest`, by when the report was filed |
 | POST | `/lost-reports` | user | File a report: `title` (optional, up to 120 characters; rev 25), `description`, `category_id`, `occurred_at`, `location`, `photo_keys` (up to 10). The reply includes `possible_matches` |
 | GET | `/lost-reports/{id}` | guest | One report with photos; `reporter_contact` for signed-in users |
-| PATCH | `/lost-reports/{id}` | owner, admin | Edit `description`, `category_id`, `occurred_at`, `location` |
-| PATCH | `/lost-reports/{id}/status` | owner, admin | Set `status`: `open` or `closed` |
-| PUT | `/lost-reports/{id}/photos` | owner, admin | Replace the photo list |
+| PATCH | `/lost-reports/{id}` | owner | Edit `description`, `category_id`, `occurred_at`, `location` |
+| PATCH | `/lost-reports/{id}/status` | owner | Set `status`: `open` or `closed` |
+| PUT | `/lost-reports/{id}/photos` | owner | Replace the photo list |
 | DELETE | `/lost-reports/{id}` | owner, Lost & Found moderator, admin | Remove. Moderators can add `?reason=` |
 | GET | `/lost-reports/{id}/matches` | owner, admin | Possible matches for your own report, best first (up to 10). Anyone else gets 403 |
 
@@ -203,8 +203,8 @@ A buyer says what they need ("Need a cycle, budget ₹3,000") instead of waiting
 | POST | `/wanted` | user | Post one: `title`, `category_id` (a Buy & Sell category), `description`, `max_price` (leave out for "open to offers"). The reply includes `possible_matches` |
 | GET | `/wanted/{id}` | guest | One post; `author_contact` for signed-in users |
 | GET | `/wanted/{id}/matches` | guest | Up to 10 available listings that match the post, best first (listing cards) |
-| PATCH | `/wanted/{id}` | owner, admin | Edit `title`, `description`, `category_id`, `max_price` |
-| PATCH | `/wanted/{id}/status` | owner, admin | Set `status`: `open`, `fulfilled` (got it) or `closed` (no longer needed) |
+| PATCH | `/wanted/{id}` | owner | Edit `title`, `description`, `category_id`, `max_price` |
+| PATCH | `/wanted/{id}/status` | owner | Set `status`: `open`, `fulfilled` (got it) or `closed` (no longer needed) |
 | DELETE | `/wanted/{id}` | owner, Buy & Sell moderator, admin | Remove for good, with its reports (rev 23). Moderators can add `?reason=`. Resolving a report with `remove_content` also deletes the post |
 
 **Fields to design with:**
@@ -305,7 +305,7 @@ A campus events timeline (FR-18, FR-19, FR-20): sports, culture, talks, food and
 | --- | --- | --- | --- |
 | GET | `/event-tags` | guest | All tags with `upcoming_count` and, for signed-in users, `following` |
 | POST | `/event-tags` | events moderator, admin | Add a tag: `name` |
-| PATCH / DELETE | `/event-tags/{id}` | events moderator, admin | Rename or delete a tag |
+| PATCH / DELETE | `/event-tags/{id}` | events moderator, admin | Rename or delete a tag. Delete works like a category's: if events use it, pass `move_to` (another tag for them and its followers) or `delete_posts=true` (remove those events too); with neither, 409 |
 | GET | `/events` | guest | The timeline. Filters: `when` (repeatable `present`, `upcoming`, `past`; default present + upcoming), `tag_id` (repeatable; events with any of them), `q` (title, description, place), `from_time` / `to_time`, `organizer_id`, `bookmarked=true` (signed in) |
 | GET | `/events/{id}` | guest | One event |
 | POST | `/events` | events moderator, admin | Post one (rev 21: students can't add events): `title`, `start_time`, `end_time` (with a timezone), `tag_ids` (1–5), `location`, `description`, optional `poster_s3_key` (upload kind `event_poster`: JPEG, PNG, WebP or HEIC, up to 10 MB) |

@@ -254,8 +254,8 @@ class BuySellDetailDialog extends ConsumerWidget {
                     const SizedBox(height: 20),
 
                     // ── Status & Owner Controls (Original Author Only) ─────────────────────────
-                    // The backend lets the admin edit anyone's listing too.
-                    if (isOwner || (currentUser?.isAdmin ?? false)) ...[
+                    // Only the seller edits a listing; moderators and the admin can remove it (below).
+                    if (isOwner) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -270,7 +270,7 @@ class BuySellDetailDialog extends ConsumerWidget {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  isOwner ? 'Listing Owner Controls' : 'Admin Controls',
+                                  'Listing Owner Controls',
                                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                                 ),
                                 Row(

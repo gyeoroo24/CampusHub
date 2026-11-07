@@ -37,6 +37,12 @@ abstract class IEventsRepository {
   Future<void> deleteUpdate(String updateId);
 
   Future<EventTag> createTag(String name);
+
+  Future<EventTag> renameTag(int id, String name);
+
+  /// Deletes a tag (events moderators and the admin). If events use it, pass [moveTo] (another tag for them
+  /// and its followers) or [deletePosts] (remove those events too); with neither the server refuses (409).
+  Future<void> deleteTag(int id, {int? moveTo, bool deletePosts = false});
 }
 
 class ApiEventsRepository implements IEventsRepository {
@@ -143,6 +149,20 @@ class ApiEventsRepository implements IEventsRepository {
   Future<EventTag> createTag(String name) async {
     final response = await apiClient.post(ApiEndpoints.eventTags, data: {'name': name});
     return EventTag.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  @override
+  Future<EventTag> renameTag(int id, String name) async {
+    final response = await apiClient.patch(ApiEndpoints.eventTag(id), data: {'name': name});
+    return EventTag.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  @override
+  Future<void> deleteTag(int id, {int? moveTo, bool deletePosts = false}) async {
+    await apiClient.delete(ApiEndpoints.eventTag(id), queryParameters: {
+      if (moveTo != null) 'move_to': moveTo,
+      if (deletePosts) 'delete_posts': true,
+    });
   }
 }
 
@@ -298,6 +318,18 @@ class MockEventsRepository implements IEventsRepository {
     final tag = EventTag(id: _tags.length + 1, name: name);
     _tags.add(tag);
     return tag;
+  }
+
+  @override
+  Future<EventTag> renameTag(int id, String name) async {
+    final i = _tags.indexWhere((t) => t.id == id);
+    _tags[i] = EventTag(id: id, name: name);
+    return _tags[i];
+  }
+
+  @override
+  Future<void> deleteTag(int id, {int? moveTo, bool deletePosts = false}) async {
+    _tags.removeWhere((t) => t.id == id);
   }
 
   static final _updates = <String, List<EventUpdate>>{};

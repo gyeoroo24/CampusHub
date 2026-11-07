@@ -191,14 +191,13 @@ def build_router(kind: Kind) -> APIRouter:
             updated_at=r["updated_at"])
 
     async def editable(conn: asyncpg.Connection, report_id: UUID, user: CurrentUser) -> asyncpg.Record:
-        """The reporter or an admin may change a report; `by_admin` is True when an admin edits someone else's."""
+        """Only the reporter may change a report. Moderators and the admin can remove it (DELETE), not edit it."""
         row = await conn.fetchrow(
-            f"""SELECT reporter_id, category_id, {kind.when} AS occurred_at, status::text AS status,
-                       reporter_id <> $2 AS by_admin
-                FROM {kind.table} WHERE id = $1 AND deleted_at IS NULL""", report_id, user.id)
+            f"""SELECT reporter_id, category_id, {kind.when} AS occurred_at, status::text AS status
+                FROM {kind.table} WHERE id = $1 AND deleted_at IS NULL""", report_id)
         if row is None:
             raise not_found(f"{kind.name.capitalize()} report")
-        if row["by_admin"] and not user.is_admin:
+        if row["reporter_id"] != user.id:
             raise forbidden("Only the person who filed this report can change it.")
         return row
 
@@ -314,7 +313,7 @@ def build_router(kind: Kind) -> APIRouter:
         result.possible_matches = await possible_matches(conn, body.category_id, body.occurred_at, user.id)
         return result
 
-    @router.patch("/{report_id}", response_model=ReportDetail, summary="Edit a report (reporter or admin)")
+    @router.patch("/{report_id}", response_model=ReportDetail, summary="Edit a report (reporter only)")
     async def update_report(report_id: UUID, body: ReportUpdate, background: BackgroundTasks,
                             user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
         before = await editable(conn, report_id, user)
@@ -333,8 +332,6 @@ def build_router(kind: Kind) -> APIRouter:
         sql, values = set_clause(changes, start=2)
         async with conn.transaction():
             await conn.execute(f"UPDATE {kind.table} SET {sql} WHERE id = $1", report_id, *values)
-            if before["by_admin"]:
-                await log_moderation(conn, user.id, f"edit_{kind.name}_report", f"{kind.name}_report", report_id)
             if changes.keys() & {"title", "description"}:
                 await screen_text(conn, background, f"{kind.name}_report", report_id)
             if content_changed:
@@ -346,15 +343,12 @@ def build_router(kind: Kind) -> APIRouter:
         return await detail(conn, report_id, user)
 
     @router.patch("/{report_id}/status", response_model=ReportDetail,
-                  summary="Mark open / closed (reporter or admin)")
+                  summary="Mark open / closed (reporter only)")
     async def update_status(report_id: UUID, body: StatusUpdate, background: BackgroundTasks,
                             user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
         before = await editable(conn, report_id, user)
         async with conn.transaction():
             await conn.execute(f"UPDATE {kind.table} SET status = $2 WHERE id = $1", report_id, body.status)
-            if before["by_admin"]:
-                await log_moderation(conn, user.id, f"change_{kind.name}_report_status", f"{kind.name}_report",
-                                     report_id, body.status)
             reopened = body.status == "open" and before["status"] != "open"
             if reopened:
                 await needs_rematch(conn, report_id)
@@ -365,7 +359,7 @@ def build_router(kind: Kind) -> APIRouter:
         return await detail(conn, report_id, user)
 
     @router.put("/{report_id}/photos", response_model=ReportDetail,
-                summary="Replace the photo list (reporter or admin)")
+                summary="Replace the photo list (reporter only)")
     async def replace_photos(report_id: UUID, body: PhotosUpdate, background: BackgroundTasks,
                              user: CurrentUser = Depends(current_user),
                              conn: asyncpg.Connection = Depends(get_conn)):
@@ -379,9 +373,6 @@ def build_router(kind: Kind) -> APIRouter:
             await insert_photos(conn, report_id, body.photo_keys)
             await conn.execute(f"UPDATE {kind.table} SET updated_at = now(), match_rev = match_rev + 1 WHERE id = $1",
                                report_id)
-            if before["by_admin"]:
-                await log_moderation(conn, user.id, f"replace_{kind.name}_report_photos", f"{kind.name}_report",
-                                     report_id)
         await mark_attached(new_keys)
         background.add_task(delete_objects, sorted(old_keys - set(body.photo_keys)))
         request_match(background, kind.name, report_id)

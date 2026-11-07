@@ -465,6 +465,9 @@ class CsvImportResult {
   final Map<PptKind, int> kinds;
   final int pastRows;
 
+  /// Companies in the file that are probably the same as another company, for review (like a sheet import).
+  final List<SimilarCompanyGroup> similarCompanies;
+
   const CsvImportResult({
     this.kinds = const {},
     this.pastRows = 0,
@@ -474,9 +477,11 @@ class CsvImportResult {
     required this.rowsRejected,
     this.companiesCreated = const [],
     this.rejectedRows = const [],
+    this.similarCompanies = const [],
   });
 
   factory CsvImportResult.fromJson(Map<String, dynamic> json) => CsvImportResult(
+        similarCompanies: _list(json['similar_companies']).map(SimilarCompanyGroup.fromJson).toList(),
         rowsTotal: _int(json['rows_total']),
         kinds: {
           for (final e in ((json['kinds'] as Map?) ?? const {}).entries) PptKind.parse(e.key): _int(e.value),

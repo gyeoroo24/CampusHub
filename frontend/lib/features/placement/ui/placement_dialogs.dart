@@ -8,12 +8,18 @@ import 'similar_companies_review.dart';
 import '../providers/placement_providers.dart';
 
 /// Shared frame for the Placement Hub forms: a title, the fields, and Cancel / Save. [onSave] throws to
-/// show its error under the fields; the dialog closes with `true` when it succeeds.
+/// show its error under the fields; the dialog closes with what it returns (`true` if nothing) when it succeeds.
+/// What an "Add companies" / "Add placement dates" form saved for, from Manage: checked for look-alikes.
+class SavedCompany {
+  final String id;
+  const SavedCompany(this.id);
+}
+
 class _FormDialog extends StatefulWidget {
   final String title;
   final String saveLabel;
   final List<Widget> children;
-  final Future<void> Function() onSave;
+  final Future<Object?> Function() onSave;
   final double width;
   final Widget? header;
 
@@ -42,8 +48,8 @@ class _FormDialogState extends State<_FormDialog> {
       _error = null;
     });
     try {
-      await widget.onSave();
-      if (mounted) Navigator.pop(context, true);
+      final result = await widget.onSave();
+      if (mounted) Navigator.pop(context, result ?? true);
     } catch (e) {
       if (mounted) setState(() => _error = errorText(e));
     } finally {
@@ -123,13 +129,15 @@ class _CompanyFormDialogState extends ConsumerState<CompanyFormDialog> {
       header: widget.header,
       width: widget.header == null ? 480 : 640,
       onSave: () async {
-        await ref.read(placementRepositoryProvider).saveCompany(
+        final saved = await ref.read(placementRepositoryProvider).saveCompany(
               companyId: widget.company?.id,
               name: _name.text.trim(),
               industry: _industry.text,
               website: _website.text,
               description: _description.text,
             );
+        // From Manage: the new company, so the caller can check it for look-alike companies.
+        return widget.header != null ? SavedCompany(saved.id) : null;
       },
       children: [
         TextFormField(controller: _name, decoration: _field('Company name'), validator: _required, maxLength: 120),
@@ -194,6 +202,7 @@ class _JobDescriptionFormDialogState extends ConsumerState<JobDescriptionFormDia
               base: _base.text,
               skills: _skills.text,
             );
+        return null;
       },
       children: [
         TextFormField(controller: _role, decoration: _field('Role', hint: 'e.g. Software Engineer'),
@@ -312,6 +321,7 @@ class _PptFormDialogState extends ConsumerState<PptFormDialog> {
               details: _details.text,
               scheduledAt: _when,
             );
+        return widget.header != null ? SavedCompany(companyId) : null;
       },
       children: [
         if (widget.companyId == null)
@@ -415,6 +425,7 @@ class _InterviewFormDialogState extends ConsumerState<InterviewFormDialog> {
           await repo.updateInterview(widget.interview!.id, roleTitle: _role.text.trim(), placementYear: year,
               content: _content.text.trim(), anonymous: _anonymous);
         }
+        return null;
       },
       children: [
         Row(
@@ -900,6 +911,8 @@ class _CsvImportDialogState extends ConsumerState<CsvImportDialog> {
   bool _busy = false;
   String? _error;
   CsvImportResult? _result;
+  bool _reviewing = false;
+  int? _merged;
 
   /// The chosen file's name: "slot 2 interview schedule.csv" tells the server the rows are interviews.
   String? _fileName;
@@ -948,8 +961,16 @@ class _CsvImportDialogState extends ConsumerState<CsvImportDialog> {
       content: SizedBox(
         width: 640,
         child: SingleChildScrollView(
-          child: result != null
-              ? _CsvSummary(result: result)
+          child: result != null && _reviewing
+              ? SimilarCompaniesReview(
+                  groups: result.similarCompanies,
+                  onDone: (merged) => setState(() {
+                    _reviewing = false;
+                    _merged = merged;
+                  }),
+                )
+              : result != null
+              ? _CsvSummary(result: result, merged: _merged)
               : Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -972,7 +993,19 @@ class _CsvImportDialogState extends ConsumerState<CsvImportDialog> {
                 ),
         ),
       ),
-      actions: result != null
+      actions: _reviewing
+          ? null
+          : result != null && result.similarCompanies.isNotEmpty && _merged == null
+          ? [
+              TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Skip review')),
+              FilledButton.icon(
+                onPressed: () => setState(() => _reviewing = true),
+                icon: const Icon(Icons.merge_rounded, size: 16),
+                label: Text('Review ${result.similarCompanies.length} similar compan'
+                    '${result.similarCompanies.length == 1 ? 'y' : 'ies'}'),
+              ),
+            ]
+          : result != null
           ? [FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Done'))]
           : [
               TextButton(onPressed: _busy ? null : () => Navigator.pop(context, false), child: const Text('Cancel')),
@@ -991,7 +1024,10 @@ class _CsvImportDialogState extends ConsumerState<CsvImportDialog> {
 class _CsvSummary extends StatelessWidget {
   final CsvImportResult result;
 
-  const _CsvSummary({required this.result});
+  /// After reviewing similar companies: how many groups were merged (0 = kept apart); null before.
+  final int? merged;
+
+  const _CsvSummary({required this.result, this.merged});
 
   @override
   Widget build(BuildContext context) {
@@ -1030,6 +1066,36 @@ class _CsvSummary extends StatelessWidget {
         if (result.companiesCreated.isNotEmpty) ...[
           const SizedBox(height: 12),
           Text('New companies: ${result.companiesCreated.join(', ')}', style: const TextStyle(fontSize: 13)),
+        ],
+        if (result.similarCompanies.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Icon(merged == null ? Icons.merge_rounded : Icons.check_circle_outline_rounded,
+                    size: 18, color: Colors.amber.shade900),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    merged == null
+                        ? '${result.similarCompanies.length} group${result.similarCompanies.length == 1 ? '' : 's'} of '
+                            'companies look like the same company under different names, e.g. '
+                            '${result.similarCompanies.first.companies.map((c) => '"${c.name}"').take(3).join(', ')}. '
+                            'Review them to club them together.'
+                        : merged == 0
+                            ? 'Similar companies were kept as they are.'
+                            : 'Merged $merged group${merged == 1 ? '' : 's'} of similar companies.',
+                    style: const TextStyle(fontSize: 12.5),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
         if (result.rejectedRows.isNotEmpty) ...[
           const SizedBox(height: 12),

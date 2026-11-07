@@ -306,6 +306,9 @@ class CsvImportResult(BaseModel):
     kinds: dict[str, int] = Field(default_factory=dict,
                                   description="Schedule imports: rows saved per type, e.g. {\"interview\": 7}")
     past_rows: int = Field(0, description="Schedule imports: saved dates that have already passed")
+    similar_companies: list[SimilarCompanyGroup] = Field(
+        default_factory=list, description="Companies in this file that are probably the same as another company "
+                                          "(e.g. \"Accenture [Mock Assessment]\" and \"Accenture\"), for review")
 
 
 class ImportSummary(BaseModel):
@@ -954,16 +957,18 @@ async def import_companies(body: CsvImportRequest, user: CurrentUser = Depends(c
     except SheetError as exc:
         raise HTTPException(422, str(exc)) from exc
     created: list[str] = []
+    touched: set[UUID] = set()
     updated = 0
     async with conn.transaction():
         for row in rows:
-            was_created = await conn.fetchval(
+            company_id, was_created = await conn.fetchrow(
                 """INSERT INTO companies (name, industry, website, description, created_by) VALUES ($1, $2, $3, $4, $5)
                    ON CONFLICT (name_key) DO UPDATE
                      SET industry = coalesce(EXCLUDED.industry, companies.industry),
                          website = coalesce(EXCLUDED.website, companies.website),
                          description = coalesce(EXCLUDED.description, companies.description)
-                   RETURNING (xmax = 0)""", row.name, row.industry, row.website, row.description, user.id)
+                   RETURNING id, (xmax = 0)""", row.name, row.industry, row.website, row.description, user.id)
+            touched.add(company_id)
             if was_created:
                 created.append(row.name)
             else:
@@ -972,7 +977,8 @@ async def import_companies(body: CsvImportRequest, user: CurrentUser = Depends(c
                              f"{len(created)} created, {updated} updated, {len(rejected)} rejected")
     return CsvImportResult(rows_total=len(rows) + len(rejected), rows_created=len(created), rows_updated=updated,
                            rows_rejected=len(rejected), companies_created=created,
-                           rejected_rows=[RejectedRowOut(line=r.line, reason=r.reason) for r in rejected])
+                           rejected_rows=[RejectedRowOut(line=r.line, reason=r.reason) for r in rejected],
+                           similar_companies=await _similar_groups(conn, touched))
 
 
 @router.post("/placement/schedule/import", response_model=CsvImportResult, status_code=201,
@@ -1023,7 +1029,8 @@ async def import_schedule(body: CsvImportRequest, user: CurrentUser = Depends(cu
     return CsvImportResult(rows_total=len(rows) + len(rejected), rows_created=created, rows_updated=updated,
                            rows_rejected=len(rejected), companies_created=new_companies,
                            rejected_rows=[RejectedRowOut(line=r.line, reason=r.reason) for r in rejected],
-                           kinds=kinds, past_rows=past)
+                           kinds=kinds, past_rows=past,
+                           similar_companies=await _similar_groups(conn, set(company_ids.values())))
 
 
 # ---------------------------------------------------------------- seniors to contact (rev 18)
@@ -1250,7 +1257,8 @@ async def import_roles(body: RolesImportRequest, user: CurrentUser = Depends(cur
                              f"{created} created, {updated} updated, {len(rejected)} rejected")
     return CsvImportResult(rows_total=len(rows) + len(rejected), rows_created=created, rows_updated=updated,
                            rows_rejected=len(rejected), companies_created=new_companies,
-                           rejected_rows=[RejectedRowOut(line=r.line, reason=r.reason) for r in rejected])
+                           rejected_rows=[RejectedRowOut(line=r.line, reason=r.reason) for r in rejected],
+                           similar_companies=await _similar_groups(conn, set(company_ids.values())))
 
 
 # ---------------------------------------------------------------- similar companies and merging them
@@ -1274,9 +1282,12 @@ async def _similar_groups(conn: asyncpg.Connection, touching: set[UUID] | None =
 
 @router.get("/placement/companies/similar", response_model=list[SimilarCompanyGroup],
             summary="Companies that are probably the same one under different names (Placement Hub moderator or admin)")
-async def similar_companies(user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
+async def similar_companies(
+        company_id: list[UUID] | None = Query(None, description="Only groups with one of these companies, e.g. "
+                                                              "the one just added (repeat for several)"),
+        user: CurrentUser = Depends(current_user), conn: asyncpg.Connection = Depends(get_conn)):
     await _require_moderator(conn, user)
-    return await _similar_groups(conn)
+    return await _similar_groups(conn, set(company_id) if company_id else None)
 
 
 @router.post("/placement/companies/merge", response_model=CompanyDetail,
