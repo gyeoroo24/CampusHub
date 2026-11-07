@@ -14,8 +14,7 @@ compared (PRD section 7):
 - **Serverless** (this branch, deployed at the URL above): CloudFront → API Gateway → AWS Lambda.
 - **EC2 baseline**: CloudFront → Application Load Balancer → EC2 Auto Scaling group. This architecture
   was only built to produce the comparison in [section 3](#3-serverless-vs-ec2-baseline); its branch,
-  `baseline-infra-restore`, was deleted once that comparison was done, so it no longer exists in this
-  repository.
+  `[STALE]-baseline-infra`, was created for the purpose of comparison and is no longer active.
 
 Both use PostgreSQL on RDS, ElastiCache Redis, S3 and Cognito.
 
