@@ -88,13 +88,11 @@ Redis AUTH token are read from Secrets Manager when a container starts.
 | Idle cost | Lambda/API Gateway: near zero | Instance and ALB billed every hour |
 | Schema on a new database | Load it yourself (restore or `migrate` action) | User data creates it at first boot |
 | Frontend token refresh | Refreshes the Cognito ID token on a 401 and retries | Not included; users are signed out when the token expires (about 1 hour) |
-| Measured at 101 users ([section 8](#9-performance-and-metrics)) | p50 53 ms, p99 140 ms, 0 % errors | p50 110 ms, p99 160 ms, 0 % errors |
-| Measured at 501 users | 84 % errors (database connections exhausted by 399 concurrent Lambdas) | 7 % errors, p99 47 s (requests queue) |
+| Measured performance at 101 users ([section 8](#9-performance-and-metrics)) | p50 53 ms, p99 140 ms, 0 % errors | p50 110 ms, p99 160 ms, 0 % errors |
+| Measured performance at 501 users | 84 % errors (database connections exhausted by 399 concurrent Lambdas) | 7 % errors, p99 47 s (requests queue) |
 
-The design rationale for the baseline was written up in `Baseline-Architecture.md` on the
-`baseline-infra-restore` branch. That branch was deleted after this comparison was produced — it only
-ever existed to measure the EC2 baseline against the serverless architecture above, not as a second
-deployment to maintain.
+**Baseline Architecture**
+![Baseline Architecture Diagram](Baseline.jpg)
 
 ## 4. Repository layout
 
