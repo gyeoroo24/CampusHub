@@ -6,7 +6,16 @@ DS252 Introduction to Cloud Computing [Aug 2026], PRD of Order of Phoenix
 
 > This is the Markdown version of the original plan, [`Cloud_Computing_Project-PRD.pdf`](Cloud_Computing_Project-PRD.pdf)
 > (v1, 24 October 2026; first issued 30 September 2026 as [`docs/CampusHub-PRD-v1.pdf`](docs/CampusHub-PRD-v1.pdf)).
-> The content is unchanged. What was built, and how it differs from this plan, is described in
+> The original content is unchanged. **Implementation status marks were added on 7 November 2026**, in a
+> **Status** column or in front of list items:
+>
+> | Mark | Meaning |
+> |---|---|
+> | ✅ | Implemented |
+> | ⚠️ | Partly implemented (the note says what is missing) |
+> | ❌ | Not implemented |
+>
+> A summary is in [Implementation summary](#implementation-summary). How it was built is described in
 > [README.md](README.md) and [DEV.md](DEV.md).
 
 | | |
@@ -28,6 +37,7 @@ DS252 Introduction to Cloud Computing [Aug 2026], PRD of Order of Phoenix
 7. [Evaluation plan](#7-evaluation-plan)
 8. [Work plan, milestones and risks](#8-work-plan-milestones-and-risks)
 9. [References](#9-references)
+10. [Implementation summary](#implementation-summary)
 
 ## 1. Problem Statement and Motivation
 
@@ -51,30 +61,35 @@ database and object store rather than a single machine's disk.
 
 ### 2.1 In scope
 
-- A four-role permission model (Guest, Signed-in User, Moderator, Administrator), enforced independently per
+- ✅ A four-role permission model (Guest, Signed-in User, Moderator, Administrator), enforced independently per
   module.
-- Buy & Sell: listings with status tracking (Available/Reserved/Sold), search/filter.
-- Lost & Found: separate lost/found reporting flows.
-- Academic Help: university wide course feedback/reviews segregated by departments, exam materials and a
+- ✅ Buy & Sell: listings with status tracking (Available/Reserved/Sold), search/filter.
+- ✅ Lost & Found: separate lost/found reporting flows.
+- ✅ Academic Help: university wide course feedback/reviews segregated by departments, exam materials and a
   discussion forum for signed-in users.
-- Placement Hub: company details, JD, pre-placement-talk (PPT) info, aggregated hiring statistics and past
+- ✅ Placement Hub: company details, JD, pre-placement-talk (PPT) info, aggregated hiring statistics and past
   trends, interview-experiences, a forum.
-- Community/Culture: a category-based events timeline (Past/Present/Upcoming) and the feature to
+- ✅ Community/Culture: a category-based events timeline (Past/Present/Upcoming) and the feature to
   bookmark/favorite it to receive alerts.
-- Bookmarks: on-device for guest users, account-synced for signed-in users.
-- IISc-email-integrated authentication, push notifications, and a cross-platform (website + iOS + Android +
+- ✅ Bookmarks: on-device for guest users, account-synced for signed-in users.
+  *(Guest bookmarks are kept in the browser and moved to the account at sign-in.)*
+- ⚠️ IISc-email-integrated authentication, push notifications, and a cross-platform (website + iOS + Android +
   desktop) client.
+  *(IISc sign-in ✅. Notifications are delivered in-app; push to devices is only logged. The Flutter project
+  has iOS, Android and desktop targets, but only the web app is built and deployed.)*
 
 ### 2.2 Future scope
 
-- In app 1-1 chat feature for messaging between signed-in users.
+- ✅ In app 1-1 chat feature for messaging between signed-in users. *(Built: one chat per person, with offers
+  that reserve a listing.)*
 
 ### 2.3 Out of scope
 
 - In-app payments for Buy & Sell (item handoff and payment remains in-person/off-app).
 - Any AI chatbot / Q&A assistant
 - Mock-interview-round scheduling.
-- Automated (ML-based) content moderation instead of human moderator.
+- Automated (ML-based) content moderation instead of human moderator. *(Still out of scope: the automatic
+  flagging that was added only flags posts for human moderators.)*
 - Support for institutions other than IISc, or multi-campus federation.
 - Migration of existing data / posts from WhatsApp groups to our application.
 - Any Backup or Disaster recovery drills are out of scope.
@@ -129,44 +144,44 @@ We have majorly four different categories of users which are enforced per module
 
 ## 4. Functional requirements
 
-| ID | Pri. | Requirement | Acceptance criterion |
-|---|---|---|---|
-| FR-1 | Must | Sign Up/Log In only with a valid IISc email; Guests browse read-only without an account. | SignUp with a non-IISc email address is rejected before account creation; a Guest session reads public feeds with no login. |
-| FR-2 | Must | Enforce the four-role permission matrix (Guest/Signed-in/Moderator/Administrator) independently per module. | An automated test suite covering all role × module combinations confirms every out-of-scope action is rejected with 401/403. |
-| FR-3 | Must | An Administrator grants/revokes the Moderator role, scoped to a module (and, for Academic Help, a department or single course). | A revoked Moderator's next privileged call is rejected; a newly granted one succeeds. |
-| FR-4 | Must | Create a Buy/Sell listing (title, description, price, category, location, photo). | Listing is retrievable by ID within reasonable time (in seconds) of submission, including the photo and location. |
-| FR-5 | Must | Owner changes listing status (Available/Reserved/Sold). | New status visible to other users in near-real time of status update. |
-| FR-6 | Should | Search/filter listings by category, price range, keyword. | A combined category + price query returns only matching listings (0 false positives). |
-| FR-7 | Must | Submit a lost-item report (description, category, date, location). | Report visible in the Lost feed in near-real time of event reported. |
-| FR-8 | Must | Submit a found-item report (description, category, date, location). | Report visible in the Found feed in near real-time – visually distinct from Lost. |
-| FR-9 | Should | Notify a lost-item reporter of a found-item report. | For a synthetic matching tag, a push notification is delivered of the found report's creation. |
-| FR-10 | Must | A Moderator removes (soft-deletes) any Buy & Sell or Lost & Found post. | Removed post disappears from the public feed in near real-time; a non-owner, non-moderator attempt is rejected (FR-2). |
-| FR-11 | Must | Browse departments → courses; see whether feedback/material content exists for a course. | A course with no content returns an explicit "no data yet" response, never an error or blank page. |
-| FR-12 | Must | Submit a text course-feedback post tied to a course. | Post visible on the course page in near real-time of feedback submission. |
-| FR-13 | Should | Department-level Moderator has full CRUD on their department's courses' materials; course-level Moderator has read+edit+delete only on, on their own course's material. | A course-level Moderator's edit/delete attempt for their own course's material is only accepted; a department-level Moderator's create/update/delete on any course's material in-department succeeds. |
-| FR-14 | Should | Post/reply within a course or department discussion forum. | A reply is visible in the thread in near real-time, preserving thread order. |
-| FR-15 | Must | Browse a company page: details, JD, PPT information, aggregated hiring statistics. | For available data, returned statistics match the data exactly; missing PPT/JD shows an explicit empty state. |
-| FR-16 | Must | Submit an interview-experience post tied to a company/role. | Post visible under the company page. |
-| FR-17 | Should | Moderator bulk-imports historical placement records from an existing spreadsheet. | Importing N well-formed rows creates/updates exactly N records; malformed rows are rejected and reported, not silently dropped. |
-| FR-18 | Must | Browse events filtered by category/tag (Sports, Food/Mess, Nature, Photography, Culture, etc . . . ). | Filtering by a tag returns only events carrying it. |
-| FR-19 | Must | Each event auto-classifies Past/Present/Upcoming by time. | An event with start ≤ now ≤ end shows Present; one past its end time shows Past automatically |
-| FR-20 | Should | Bookmark an event; get notified when a bookmarked/followed-tag event updates. | A triggered test update is delivered to the device within the bound set by NFR-1/NFR-2. |
-| FR-21 | Must | Landing page surfaces highlights from all four modules. | Each section renders populated content when data exists, and a defined empty-state otherwise. |
-| FR-22 | Should | Push notification for events relevant to the user (sale, match, forum reply, bookmarked-event update). | Triggered test event results in a delivered notification within the bound set by NFR-1/NFR-2. |
-| FR-23 | Could | One to one personal chat with users | Messages sent by user A intended for user B must reach user B and the acknowledgment should be sent back to user A. |
+| ID | Pri. | Requirement | Acceptance criterion | Status |
+|---|---|---|---|---|
+| FR-1 | Must | Sign Up/Log In only with a valid IISc email; Guests browse read-only without an account. | SignUp with a non-IISc email address is rejected before account creation; a Guest session reads public feeds with no login. | ✅ The API refuses non-IISc and unverified emails (403); guests read every feed. A Cognito pre sign-up trigger is provided (`backend/lambdas/cognito_pre_signup.py`) but not attached by Terraform |
+| FR-2 | Must | Enforce the four-role permission matrix (Guest/Signed-in/Moderator/Administrator) independently per module. | An automated test suite covering all role × module combinations confirms every out-of-scope action is rejected with 401/403. | ⚠️ Enforced on every route from the database; backend tests cover the role checks. The 16-combination matrix script (`terraform/tests/test_permission_matrix.py`) is out of date |
+| FR-3 | Must | An Administrator grants/revokes the Moderator role, scoped to a module (and, for Academic Help, a department or single course). | A revoked Moderator's next privileged call is rejected; a newly granted one succeeds. | ✅ Grants scoped to module, department or course; a revoked moderator's next call is rejected (tested) |
+| FR-4 | Must | Create a Buy/Sell listing (title, description, price, category, location, photo). | Listing is retrievable by ID within reasonable time (in seconds) of submission, including the photo and location. | ✅ |
+| FR-5 | Must | Owner changes listing status (Available/Reserved/Sold). | New status visible to other users in near-real time of status update. | ✅ |
+| FR-6 | Should | Search/filter listings by category, price range, keyword. | A combined category + price query returns only matching listings (0 false positives). | ✅ Tested: the combined filter returns no false positives |
+| FR-7 | Must | Submit a lost-item report (description, category, date, location). | Report visible in the Lost feed in near-real time of event reported. | ✅ |
+| FR-8 | Must | Submit a found-item report (description, category, date, location). | Report visible in the Found feed in near real-time – visually distinct from Lost. | ✅ |
+| FR-9 | Should | Notify a lost-item reporter of a found-item report. | For a synthetic matching tag, a push notification is delivered of the found report's creation. | ✅ Match notifications in the inbox (description and photo matching locally; same-category rule on Lambda). Push to devices is only logged |
+| FR-10 | Must | A Moderator removes (soft-deletes) any Buy & Sell or Lost & Found post. | Removed post disappears from the public feed in near real-time; a non-owner, non-moderator attempt is rejected (FR-2). | ✅ |
+| FR-11 | Must | Browse departments → courses; see whether feedback/material content exists for a course. | A course with no content returns an explicit "no data yet" response, never an error or blank page. | ✅ Explicit "no data yet" flag (tested) |
+| FR-12 | Must | Submit a text course-feedback post tied to a course. | Post visible on the course page in near real-time of feedback submission. | ✅ |
+| FR-13 | Should | Department-level Moderator has full CRUD on their department's courses' materials; course-level Moderator has read+edit+delete only on, on their own course's material. | A course-level Moderator's edit/delete attempt for their own course's material is only accepted; a department-level Moderator's create/update/delete on any course's material in-department succeeds. | ✅ Department and course moderators (tested) |
+| FR-14 | Should | Post/reply within a course or department discussion forum. | A reply is visible in the thread in near real-time, preserving thread order. | ✅ Course, department and company forums, with votes |
+| FR-15 | Must | Browse a company page: details, JD, PPT information, aggregated hiring statistics. | For available data, returned statistics match the data exactly; missing PPT/JD shows an explicit empty state. | ✅ Including multi-year hiring statistics |
+| FR-16 | Must | Submit an interview-experience post tied to a company/role. | Post visible under the company page. | ✅ |
+| FR-17 | Should | Moderator bulk-imports historical placement records from an existing spreadsheet. | Importing N well-formed rows creates/updates exactly N records; malformed rows are rejected and reported, not silently dropped. | ✅ CSV import of placement sheets, company lists and schedules; malformed rows are reported |
+| FR-18 | Must | Browse events filtered by category/tag (Sports, Food/Mess, Nature, Photography, Culture, etc . . . ). | Filtering by a tag returns only events carrying it. | ✅ |
+| FR-19 | Must | Each event auto-classifies Past/Present/Upcoming by time. | An event with start ≤ now ≤ end shows Present; one past its end time shows Past automatically | ✅ |
+| FR-20 | Should | Bookmark an event; get notified when a bookmarked/followed-tag event updates. | A triggered test update is delivered to the device within the bound set by NFR-1/NFR-2. | ✅ Bookmarks and followed tags notify on event updates (in-app; push only logged) |
+| FR-21 | Must | Landing page surfaces highlights from all four modules. | Each section renders populated content when data exists, and a defined empty-state otherwise. | ❌ No landing page: the app opens on Buy & Sell. The API serves campus-service links for it |
+| FR-22 | Should | Push notification for events relevant to the user (sale, match, forum reply, bookmarked-event update). | Triggered test event results in a delivered notification within the bound set by NFR-1/NFR-2. | ⚠️ In-app notifications for sales, matches, replies and event updates; push to devices is only logged (`LogPushSender`) |
+| FR-23 | Could | One to one personal chat with users | Messages sent by user A intended for user B must reach user B and the acknowledgment should be sent back to user A. | ✅ One-to-one chat with delivery to the recipient (polling, not WebSockets) |
 
 ## 5. Non-functional requirements
 
-| ID | Target (value, unit) | Workload | Measurement method |
-|---|---|---|---|
-| NFR-1 (Latency) | p99 ≤ 600 ms incl. cold starts, Lambda config. | – | Locust / k6 identical harness – quantifies the serverless trade-off. |
-| NFR-2 (Throughput) | ≥50 req/s aggregate, error rate <1%. | Mixed listing - create / search / notification-read traffic, 10-min ramp. | Locust / k6 ramping load. |
-| NFR-3 (Scalability) | ≥ 500 concurrent sessions without p99 exceeding NFR-1 by >2×. | Simulated-user count ramp, fixed request mix. | Locust / k6 |
-| NFR-4 (High Availability) | ≥ 99.0% over a 2-week window. | Continuous health-check polling. | CloudWatch synthetic canary, 5-min interval. |
-| NFR-5 (Cost) | Within free tier credits. | Same load as NFR-1. | AWS Cost Explorer/Budgets over the load-test window. |
-| NFR-6 (Identity Security) | 100% of unauth. /expired-token requests and all 16 role × module permission combinations (Guest /Signed-in /Moderator /Administrator × 4 modules) resolve correctly. | Missing / malformed / expired-JWT suite + full permission-matrix suite. | Automated integration test suite, run in CI on every deploy. |
-| NFR-7 (Network and Data Security) | TLS 1.2+ in transit; KMS-backed encryption at rest (AWS RDS and S3). | N/A (configuration check). | AWS Config rule / manual audit checklist per milestone. |
-| NFR-8 (Data Integrity) | 0% upload corruption. | 100 uploads, 100 KB–10 MB. | Checksum comparison. |
+| ID | Target (value, unit) | Workload | Measurement method | Status |
+|---|---|---|---|---|
+| NFR-1 (Latency) | p99 ≤ 600 ms incl. cold starts, Lambda config. | – | Locust / k6 identical harness – quantifies the serverless trade-off. | ✅ p99 140 ms (Lambda) and 160 ms (EC2) at 101 users. Lambda cold starts reached 4.1 to 4.7 s on each user's first request |
+| NFR-2 (Throughput) | ≥50 req/s aggregate, error rate <1%. | Mixed listing - create / search / notification-read traffic, 10-min ramp. | Locust / k6 ramping load. | ⚠️ 54.7 req/s (Lambda) and 52.5 req/s (EC2) with 0 % errors at 101 users, but with a read-only workload for 2 minutes, not the mixed 10-minute ramp |
+| NFR-3 (Scalability) | ≥ 500 concurrent sessions without p99 exceeding NFR-1 by >2×. | Simulated-user count ramp, fixed request mix. | Locust / k6 | ❌ At 501 users: Lambda p99 3.5 s with 84 % errors (database connections exhausted; RDS Proxy was off), EC2 p99 47 s |
+| NFR-4 (High Availability) | ≥ 99.0% over a 2-week window. | Continuous health-check polling. | CloudWatch synthetic canary, 5-min interval. | ❌ Not measured: no CloudWatch synthetic canary was set up |
+| NFR-5 (Cost) | Within free tier credits. | Same load as NFR-1. | AWS Cost Explorer/Budgets over the load-test window. | ⚠️ AWS Budgets alert is configured; the cost over a load-test window (Experiment 2) was not measured |
+| NFR-6 (Identity Security) | 100% of unauth. /expired-token requests and all 16 role × module permission combinations (Guest /Signed-in /Moderator /Administrator × 4 modules) resolve correctly. | Missing / malformed / expired-JWT suite + full permission-matrix suite. | Automated integration test suite, run in CI on every deploy. | ⚠️ Bad, missing and expired tokens are rejected on every route (tested), but the full matrix suite is out of date and not run in CI |
+| NFR-7 (Network and Data Security) | TLS 1.2+ in transit; KMS-backed encryption at rest (AWS RDS and S3). | N/A (configuration check). | AWS Config rule / manual audit checklist per milestone. | ⚠️ TLS 1.2+ (CloudFront, RDS `force_ssl`, Redis TLS) and RDS encryption at rest with KMS. S3 uses S3-managed keys (AES-256), not KMS |
+| NFR-8 (Data Integrity) | 0% upload corruption. | 100 uploads, 100 KB–10 MB. | Checksum comparison. | ✅ Every upload is a presigned PUT with a signed size and SHA-256 checksum, which S3 enforces (tested) |
 
 ## 6. System architecture and technology stack
 
@@ -176,31 +191,42 @@ We have majorly four different categories of users which are enforced per module
 
 ### 6.1 Infrastructure and managed services
 
-- **Edge & delivery:** Route 53 resolves the domain → AWS WAF inspects inbound traffic → CloudFront (CDN)
+- ⚠️ **Edge & delivery:** Route 53 resolves the domain → AWS WAF inspects inbound traffic → CloudFront (CDN)
   serves the static Flutter-web bundle and fronts the API.
-- **Storage:** S3 holds the static site plus all module objects (Buy & Sell listings, Lost & Found reports,
+- ✅ **Storage:** S3 holds the static site plus all module objects (Buy & Sell listings, Lost & Found reports,
   Academic Materials, Placement Hub docs); the bucket is private, reachable only via CloudFront's origin access
   control, and client uploads go directly to S3 through Lambda-signed presigned URLs.
-- **Compute & API:** API Gateway (HTTPS/WebSocket) validates the Cognito JWT and invokes per-module Lambda
+- ⚠️ **Compute & API:** API Gateway (HTTPS/WebSocket) validates the Cognito JWT and invokes per-module Lambda
   functions (Buy&Sell, Lost&Found, Placement Hub, Academic Help, Community Events) running in private subnets
   across three Availability Zones, packaged from the same FastAPI container so it redeploys unmodified to
   Fargate for the Sec. 7 evaluation.
-- **Data tier:** AWS RDS (Cluster), reached from the Lambda subnets via direct private subnet routing.–
+- ✅ **Data tier:** AWS RDS (Cluster), reached from the Lambda subnets via direct private subnet routing.–
   persistent records (listings, reports, materials, profiles) and high-write, TTL-expiring data (notification
   and chat streams) alike.
-- **Auth & security:** Cognito gates sign-up to IISc email addresses (current student or alumni) and issues
+- ⚠️ **Auth & security:** Cognito gates sign-up to IISc email addresses (current student or alumni) and issues
   JWTs carrying Cognito Group claims (Guest/ Signed-in/ Moderator/ Admin, with Moderator groups further scoped
   per department for Academic Help), checked by a single shared FastAPI authorization dependency on every
   route; IAM enforces least-privilege roles per service; KMS manages secrets and encryption at rest.
-- **Operations & IaC:** Terraform provisions all of the above from a GitHub-hosted IaC repo, triggered by the
+- ⚠️ **Operations & IaC:** Terraform provisions all of the above from a GitHub-hosted IaC repo, triggered by the
   CI/CD pipeline; CloudWatch collects logs, metrics, and traces; AWS Budgets tracks spend and alerts on cost
   overruns.
 
+**Status of 6.1:**
+
+| Item | Status |
+|---|---|
+| Edge & delivery | ⚠️ CloudFront serves the Flutter bundle and fronts the API ✅. WAF is an optional Terraform module, off by default. Route 53 is not used (the `*.cloudfront.net` address is used) |
+| Storage | ✅ Private S3 buckets, CloudFront origin access control, presigned uploads straight to S3 |
+| Compute & API | ⚠️ API Gateway (HTTP API) invokes 5 per-module Lambda functions in private subnets across 3 AZs ✅. Token validation is done by the FastAPI app, not the gateway; no WebSocket API; the functions are a zip package, not a container. The comparison uses EC2 rather than Fargate |
+| Data tier | ✅ RDS PostgreSQL (a Multi-AZ instance rather than a cluster) in private subnets, plus ElastiCache Redis as a read cache |
+| Auth & security | ⚠️ Cognito sign-in ✅, least-privilege IAM ✅, KMS-backed RDS encryption and Secrets Manager ✅. Roles come from the database, not Cognito group claims; the IISc-only pre sign-up trigger is not attached by Terraform |
+| Operations & IaC | ⚠️ Terraform provisions everything ✅, CloudWatch logs and alarms ✅, AWS Budgets ✅. CI/CD only builds and publishes the web app; Terraform is applied by hand |
+
 ### 6.2 Software
 
-- **Flutter:** A single Dart codebase compiles to native iOS/Android/desktop/web-browser build for the
+- ✅ **Flutter:** A single Dart codebase compiles to native iOS/Android/desktop/web-browser build for the
   Frontend.
-- **FastAPI (Python):** Async I/O suits concurrent calls to AWS RDS and S3 in one request path, and it packages
+- ✅ **FastAPI (Python):** Async I/O suits concurrent calls to AWS RDS and S3 in one request path, and it packages
   cleanly into a Lambda function via a Lambda-compatible ASGI adapter (e.g. Mangum), which is what lets
   Sec. 7's Lambda-vs-EC2 instances comparison run against the same codebase rather than two separate backends.
 
@@ -238,15 +264,18 @@ notification-read traffic.
 
 **Experimental Configurations Traceability:**
 
-- **Experiment 1: Concurrency and Scalability (Validates NFR-1, NFR-2, NFR-3).** Replay the workload trace
+- ⚠️ **Experiment 1: Concurrency and Scalability (Validates NFR-1, NFR-2, NFR-3).** Replay the workload trace
   across both the Lambda and EC2 baseline configurations at three concurrency levels (100, 300, and 500
   simulated clients) with a 10-minute steady-state run.
-- **Experiment 2: Cost Efficiency Under Bursty Load (Validates NFR-5).** Simulate a 24-hour campus traffic
+  *(Run on 6 November 2026 at 101, 250 and 501 users for 2 minutes each, read-only; results in
+  [README.md](README.md#9-performance-and-metrics).)*
+- ❌ **Experiment 2: Cost Efficiency Under Bursty Load (Validates NFR-5).** Simulate a 24-hour campus traffic
   profile featuring sharp semester-boundary traffic spikes followed by idle night hours. Calculate the AWS bill
   (compute + data transfer) for both the Lambda and EC2 configurations over this window.
-- **Experiment 3: Permission Matrix Validation (Validates FR-2, NFR-6).** Execute an automated integration test
+- ⚠️ **Experiment 3: Permission Matrix Validation (Validates FR-2, NFR-6).** Execute an automated integration test
   suite generating 16 cross-combinations of roles (Guest, Signed-in, Moderator, Admin) attempting CRUD
   operations across all four modules to confirm 100% rejection of unauthorized calls.
+  *(The backend test suite covers the role checks; the dedicated matrix script is out of date.)*
 
 **Cost Model:** Total AWS spend (Compute + API Gateway + Database I/O) attributed to the duration of the
 load-test window, divided by the total number of successful requests served, expressed as $USD per 1,000
@@ -275,19 +304,20 @@ requests.
 The MVP delivers the core, persistent campus platform deployed entirely on AWS Lambda and Amazon RDS
 (PostgreSQL). It includes:
 
-- **Identity Access:** IISc Email Cognito integration (FR-1) and full Role-Based Access Control (FR-2, FR-3).
-- **Core Modules:** Buy Sell CRUD and relational filtering (FR-4, FR-5, FR-6), Lost Found reporting (FR-7,
+- ✅ **Identity Access:** IISc Email Cognito integration (FR-1) and full Role-Based Access Control (FR-2, FR-3).
+- ✅ **Core Modules:** Buy Sell CRUD and relational filtering (FR-4, FR-5, FR-6), Lost Found reporting (FR-7,
   FR-8, FR-10), Academic Help course browsing and feedback (FR-11, FR-12),Department level Course information
   access privilege (FR13,FR14) Placement Hub browsing (FR-15, FR-16), and Community Events (FR-18, FR-19,
   FR-21).
-- **Infrastructure Base:** Complete Terraform automation of the VPC, Lambda tier, RDS cluster, S3 static
+- ✅ **Infrastructure Base:** Complete Terraform automation of the VPC, Lambda tier, RDS cluster, S3 static
   hosting, and API Gateway.
 
 ### 8.3 Stretch Goals (Out of MVP Scope)
 
-- Real-time 1-to-1 Chat via WebSockets (FR-23).
-- Automated push notifications for Lost & Found matching (FR-9) and bookmarked events (FR-20, FR-22).
-- Moderator bulk-import of historical placement data via Excel spreadsheets (FR-17).
+- ⚠️ Real-time 1-to-1 Chat via WebSockets (FR-23). *(Chat is built, using polling instead of WebSockets.)*
+- ⚠️ Automated push notifications for Lost & Found matching (FR-9) and bookmarked events (FR-20, FR-22).
+  *(Delivered in-app; push to devices is only logged.)*
+- ✅ Moderator bulk-import of historical placement data via Excel spreadsheets (FR-17). *(As CSV files exported from the spreadsheet.)*
 
 ### 8.4 Principal Risks and Mitigations
 
@@ -297,6 +327,7 @@ The MVP delivers the core, persistent campus platform deployed entirely on AWS L
      a steady-state rate of 50 requests per second and a burst limit of 100). API Gateway intercepts and drops
      excessive requests with an HTTP 429 ("Too Many Requests") status code at the edge before invoking Lambda
      compute, preventing unexpected billing spikes.
+   - ✅ *Status: API Gateway stage throttling is configured (default 1,000 req/s, burst 2,000).*
 2. **Risk:** Generating 500 concurrent simulated clients for the baseline load tests (NFR-3) overwhelms local
    compute resources, leading to false-positive latency metrics caused by client-side CPU bottlenecks rather
    than actual cloud infrastructure limits.
@@ -304,12 +335,15 @@ The MVP delivers the core, persistent campus platform deployed entirely on AWS L
      load-testing suite onto a dedicated, compute-optimized AWS EC2 instance (e.g., c5.large) in the Mumbai
      region. This guarantees the load generator has sufficient network and CPU overhead to accurately saturate
      and measure the API.
+   - ❌ *Status: the load tests were run from a local machine.*
 3. **Risk:** Removing DynamoDB to rely strictly on Amazon RDS introduces connection-pool exhaustion if
    thousands of concurrent Lambda instances attempt to open independent database connections during a sudden
    traffic spike (e.g., beginning of placements).
    - **Mitigation:** Implement Amazon RDS Proxy between the Lambda execution tier and the PostgreSQL database.
      RDS Proxy automatically pools and shares a bounded number of database connections, allowing massive
      serverless concurrency to safely multiplex without overwhelming the database's memory.
+   - ⚠️ *Status: RDS Proxy is available in Terraform (`enable_rds_proxy`) but was off during the load tests,
+     and this exact failure occurred at 250+ users.*
 
 ## 9. References
 
@@ -323,3 +357,19 @@ The MVP delivers the core, persistent campus platform deployed entirely on AWS L
 7. Tooling: this PRD's architecture analysis and requirements drafting were iterated on with Claude
    (Anthropic) and Google Gemini, per the course's encouraged LLM use. The architecture diagram is created
    using Draw.io
+
+## Implementation summary
+
+| Group | ✅ Implemented | ⚠️ Partly | ❌ Not implemented |
+|---|---:|---:|---:|
+| Functional requirements (23) | 20 | 2 | 1 |
+| Non-functional requirements (8) | 2 | 4 | 2 |
+
+- **Not implemented:** FR-21 (landing page), NFR-3 (500-user scalability target), NFR-4 (availability
+  canary), Experiment 2 (cost under bursty load).
+- **Partly implemented:** FR-2 and NFR-6 (matrix test suite out of date), FR-22 (device push is only
+  logged), NFR-2 (read-only, shorter test), NFR-5 (budget alert only), NFR-7 (S3 not KMS-encrypted).
+- **Built beyond the plan:** Wanted posts, seller trust scores and appeals, saved searches with alerts, price
+  watch, mess menus with meal alerts and menu reading from PDFs/photos, course survival guide with
+  sentiment, automatic flagging for moderators, category suggestion, a Redis cache and CloudFront API
+  caching, and the EC2 baseline deployment for the comparison.
