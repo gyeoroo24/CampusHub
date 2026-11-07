@@ -452,7 +452,7 @@ The root-cause figures in 8.4 come from CloudWatch for the serverless stack.
 | Item | Serverless (Lambda) | EC2 baseline |
 |---|---|---|
 | Target | API Gateway URL of the `dev` stack | ALB of the `baseline` stack |
-| Compute | 5 Lambda functions, account limit 400 concurrent executions | 3 x `t4g.micro` in the Auto Scaling group |
+| Compute | 5 Lambda functions, account limit 400 concurrent executions | 3 x `t4g.micro` in the Auto Scaling group at desired capacity and max capacity is 5 x `t4g.micro` |
 | Database | RDS PostgreSQL `db.t4g.micro` (Multi-AZ), RDS Proxy **off** | RDS PostgreSQL `db.t4g.micro` |
 | Load tool | Locust 2.47.0, distributed over all local CPU cores (`--processes -1`) | same |
 | Workload | Preset `acad_placement_preset`: 17 weighted read-only `GET` endpoints from Academic Help and Placement Hub, plus `/health`, with a Cognito ID token | same |
@@ -558,23 +558,8 @@ and verify it, load the `acad_placement_preset` preset, set users, spawn rate an
 Results are written to `locust_load_testing/output/<run>/`. Details:
 [`locust_load_testing/README.md`](https://github.com/gyeoroo24/CampusHub/blob/main/locust_load_testing/README.md).
 
-## 10. Cost
 
-Approximate monthly cost in `ap-south-1` if left running, at development traffic:
-
-| Item | Approx. per month |
-|---|---|
-| 4 VPC interface endpoints x 3 AZs (Secrets Manager, Cognito, SSM, KMS) | ~$90 |
-| RDS `db.t4g.micro`, 20 GB gp3 | ~$13 single-AZ, ~$26 Multi-AZ |
-| ElastiCache `cache.t3.micro` | free for 12 months on a new account, then ~$12 |
-| Lambda, API Gateway, CloudFront, S3, Cognito | mostly within the free tier |
-
-The interface endpoints let the Lambdas reach AWS APIs without a NAT Gateway or internet route. They are
-billed per endpoint, per AZ, per hour. The app code calls only Secrets Manager, Cognito and S3 directly,
-so the SSM and KMS endpoints are candidates for removal (check first). The `monthly_budget_usd` alert
-defaults to $50.
-
-## 11. Tear down
+## 10. Tear down
 
 ```bash
 cd terraform
@@ -584,7 +569,12 @@ terraform destroy
 
 Both S3 buckets use `force_destroy`, so their contents are deleted too. The state bucket from
 `bootstrap/` is not removed by this; destroy it from `terraform/bootstrap` when you no longer need the
-state.
+state using 
+
+```bash
+cd terraform/bootstrap
+terraform destroy
+```
 
 ## 12. Documentation index
 
