@@ -201,9 +201,13 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
                           for (final t in tags)
                             Padding(
                               padding: const EdgeInsets.only(right: 6),
-                              child: ChoiceChip(
+                              // InputChip: selectable like the others, plus its own ✕ (delete) target.
+                              child: InputChip(
                                 visualDensity: VisualDensity.compact,
                                 showCheckmark: false,
+                                onDeleted: canManageTags ? () => confirmDeleteEventTag(context, ref, t, tags) : null,
+                                deleteIcon: const Icon(Icons.close_rounded, size: 14),
+                                deleteButtonTooltipMessage: 'Delete "${t.name}"',
                                 avatar: Icon(eventTagIcon(t.name), size: 16),
                                 label: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -212,20 +216,6 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
                                     if (t.following) ...[
                                       const SizedBox(width: 4),
                                       const Icon(Icons.notifications_active_rounded, size: 13),
-                                    ],
-                                    if (canManageTags) ...[
-                                      const SizedBox(width: 4),
-                                      Tooltip(
-                                        message: 'Delete "${t.name}"',
-                                        child: InkWell(
-                                          customBorder: const CircleBorder(),
-                                          onTap: () => confirmDeleteEventTag(context, ref, t, tags),
-                                          child: const Padding(
-                                            padding: EdgeInsets.all(2),
-                                            child: Icon(Icons.close_rounded, size: 14),
-                                          ),
-                                        ),
-                                      ),
                                     ],
                                   ],
                                 ),
