@@ -203,8 +203,6 @@ Errors seen while deploying this stack, and their fixes.
 | Cognito Hosted UI shows `redirect_mismatch` | The site URL is not a callback URL | Add it to `additional_callback_urls` and apply |
 | Cognito callback refused for an `http://` S3 website URL | Cognito accepts HTTPS callbacks only (except localhost) | Serve the site through CloudFront |
 | Every plan shows CloudFront `minimum_protocol_version` and RDS `rds.force_ssl` updates | Provider quirks; the default certificate always reports `TLSv1` | Harmless, apply or ignore |
-| `tests/smoke_test.py` reports 0/10 against a working stack | It calls `/api/<module>/health`, not `/api/v1/...` | Out of date; check with `curl` as in [root README 5.9](../README.md#59-check-it) |
-| Calls to Comprehend or to another Lambda time out | No VPC endpoint for those services (only used if `CAMPUSHUB_SENTIMENT_BACKEND=comprehend` or `CAMPUSHUB_MATCH_MODE=lambda`) | Add `comprehend`/`lambda` interface endpoints or a NAT Gateway first |
 
 Lambda logs: `aws logs tail /aws/lambda/campushub-dev-<function> --since 15m`.
 
