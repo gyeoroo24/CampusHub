@@ -273,7 +273,7 @@ On `main` only. A desktop app that generates and runs Locust tests against eithe
 | `locust-automated/collector.py` | Polls live stats, downloads the HTML report |
 | `locust-automated/chart_generator.py` | Throughput, latency and user charts (Matplotlib) |
 | `locust-automated/auth_utils.py` | Decodes and checks the Cognito token |
-| `locust-automated/presets.py`, `custom_presets/*.json` | Saved endpoint mixes, such as `acad_placement_preset` |
+| `locust-automated/presets.py`, `locust-automated/custom_presets/*.json` | Saved endpoint mixes, such as `acad_placement_preset` |
 | `output/` | One folder per run, and `BENCHMARK_SUMMARY.md` |
 
 Results and analysis: [README section 9](README.md#9-performance-and-metrics).
