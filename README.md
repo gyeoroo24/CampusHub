@@ -52,11 +52,14 @@ The `main` branch is the serverless architecture that is actually deployed and m
 An EC2-based baseline architecture (Auto Scaling group + Application Load Balancer, `baseline`
 environment, `campushub/baseline/terraform.tfstate`) was also built, purely to produce the serverless
 vs. EC2 comparison in [section 3](#3-serverless-vs-ec2-baseline). That work lived on the
-`baseline-infra-restore` branch, which has since been deleted — it was never meant to be a second
+`[STALE]-baseline-infra` branch --- it was never meant to be a second
 long-lived deployment, only a point of comparison, and the comparison's results are kept here instead
 of on that branch.
 
 ## 2. Serverless architecture (this branch)
+
+![Proposed Architecture Diagram](Proposal-Architecture-Lambda.jpg)
+
 
 ```
                          Users (browser)
