@@ -1,16 +1,15 @@
 # CampusHub API Reference
 
-Last updated 1 Nov 2026. For the exact JSON of every request and response, run the backend and open Swagger at `http://localhost:8000/docs`.
+Last updated 7 Nov 2026. For the exact JSON of every request and response, run the backend and open Swagger at `http://localhost:8000/docs`.
 
 ## Overview
 
-The CampusHub backend exposes 152 endpoints under `/api/v1`. This page lists each one, who may call it, and the fields it takes and returns, so screens can be designed around real data.
+The CampusHub backend exposes 202 endpoints under `/api/v1` (plus 2 local-only sign-in endpoints that 404 outside dev mode; see Sign-in and roles). This page lists each one, who may call it, and the fields it takes and returns, so screens can be designed around real data.
 
-- **Base URL (local):** `http://localhost:8000/api/v1`. The cloud host isn't set up yet; only the host part will change.
+- **Base URL (local):** `http://localhost:8000/api/v1`.
+- **Base URL (cloud):** `https://<cloudfront-domain>/api/v1` — same paths, the host changes. See [README.md](../README.md#5-deploy-to-aws) for how a deployment's domain is found.
 - **Try it live:** `http://localhost:8000/docs` (Swagger) shows the exact JSON for every request and response, and lets you send real calls.
-- **Built so far:** sign-in and profiles, Buy & Sell, Lost & Found, Academic Help, forums, reports and moderation, notifications, messaging, Placement Hub, Community Events and bookmarks.
-- **New on 1 Nov 2026 (`backend_v3`):** Placement Hub (companies, JDs, pre-placement talks, hiring statistics, interview experiences, company forums, placement sheet import) and Community Events (tags, Past/Present/Upcoming, bookmarks, followed tags and their alerts). Both have app screens.
-- **New on 24 Oct 2026 (from "Taking it further"):** saved searches and alerts, Wanted posts, campus services for the landing page, and the course survival guide. Each has its own section below; the backend is done and the app screens aren't built yet.
+- **Modules:** sign-in and profiles, Buy & Sell, Wanted posts, seller trust and moderation, Lost & Found, saved searches and alerts, Academic Help (with the course survival guide), forums, Placement Hub, Community Events, Mess menus, reports and moderation, messages, notifications and campus services.
 
 The **Who** column in every table below uses these roles:
 
@@ -32,6 +31,7 @@ Guests send nothing. Signed-in users send their token on every call, and the API
 | Signed in (cloud) | `Authorization: Bearer <Cognito ID token>` (the ID token, not the access token) |
 | Local testing | `X-Dev-User: name@iisc.ac.in`, and optionally `X-Dev-Name: Asha` (works only on the machine running the API) |
 
+- **Local-only email codes:** `POST /auth/otp/request` and `POST /auth/otp/verify` back the local dev sign-in dialog (an emailed 6-digit code, no Cognito needed). Both 404 outside dev mode (`CAMPUSHUB_AUTH_MODE=cognito`, the default and the only mode allowed on Lambda), so they're not part of the deployed API surface.
 - **No sign-up endpoint.** The user's account is created on their first signed-in call.
 - **Email must be verified first.** First-time sign-up: the user enters their IISc email and a password, Cognito emails them a code, they type it in, then sign in. Until then the API answers **403** asking them to enter the code.
 - **IISc emails only.** Addresses ending in `iisc.ac.in` (including subdomains such as `alum.iisc.ac.in`) are accepted. Others get **403** with a readable message to show the user.
@@ -159,6 +159,41 @@ Guests can browse and search listings. Sellers create, edit and mark their own l
 - **Limits:** title 1–120 characters, description up to 5,000, location up to 200, price ≥ 0, category name 1–50.
 - **Sold items:** browse returns every status unless you filter. To hide sold items, send `status=available&status=reserved`.
 - **My listings:** browse with `seller_id` set to my own `id` from `GET /me`.
+
+## Seller trust and moderation
+
+A seller's trust score is built entirely from moderator-confirmed strikes, never from an automated judgment. A strike is created only when a Buy & Sell moderator resolves a report with `remove_content: true` (`POST /reports/{id}/resolve`) — nothing here creates one directly. Strikes drive two things shown on a seller's listings: a `negative` or `blocked` tag (`seller_trust_tags`), and whether posting is currently suspended.
+
+| Method | Path | Who | What it does |
+| --- | --- | --- | --- |
+| GET | `/me/seller-strikes` | user | My full strike history, newest first |
+| GET | `/me/seller-strikes/summary` | user | My strikes against the limits: `strikes`, `severe`, `non_severe`, `limit`, `negative_at`, `severe_limit`, `tag`, `suspended`. Show "Strikes: 1/3" |
+| POST | `/me/seller-strikes/{id}/appeal` | owner (the struck seller) | `{"message"}`: appeal a strike. 409 if it doesn't exist, isn't mine, or already has an appeal — one appeal per strike |
+| GET | `/seller-strikes` | Buy & Sell moderator, admin | Moderator queue across all sellers. `appeal_status`: `pending` (default; the actionable queue), `resolved`, `none`, `all`. Optional `seller_id` narrows to one seller |
+| POST | `/seller-strikes/{id}/overturn` | Buy & Sell moderator, admin | `{"note"}` (optional): the strike stops counting, any listing it hid becomes visible again, and it may lift a suspension it caused |
+| POST | `/seller-strikes/{id}/reject-appeal` | Buy & Sell moderator, admin | Reject a pending appeal: the strike stands and the listing stays hidden, but it drops out of the queue |
+| POST | `/users/{seller_id}/lift-listing-suspension` | Buy & Sell moderator, admin | Lift a posting suspension without overturning any strike |
+| GET | `/me/seller-unblock-request` | user | My latest request to be unblocked, or `null` if I never asked |
+| POST | `/me/seller-unblock-request` | user | `{"message"}`: ask to be unblocked. 409 if I'm not currently blocked, or already have a request waiting |
+| GET | `/seller-unblock-requests` | Buy & Sell moderator, admin | The unblock-request queue. `status`: `pending` (default), `resolved`, `all` |
+| GET | `/blocked-sellers` | Buy & Sell moderator, admin | Everyone blocked right now (suspended, or tagged `blocked`), with strike counts and any pending unblock request |
+| POST | `/users/{seller_id}/unblock` | Buy & Sell moderator, admin | `{"note"}` (optional): reset the seller's strikes, lift the suspension, and approve any waiting request. They're notified |
+| POST | `/seller-unblock-requests/{id}/approve` | Buy & Sell moderator, admin | Same effect as the unblock endpoint above, tied to one request |
+| POST | `/seller-unblock-requests/{id}/reject` | Buy & Sell moderator, admin | Decline a request: the seller stays blocked and is told why |
+
+**Fields to design with:**
+
+| Object | Fields |
+| --- | --- |
+| Strike | `id`, `seller` (`id`, `name`), `listing_id` (`null` once the seller deleted the listing), `listing_title`, `listing_hidden` (this strike is why the listing is hidden right now), `severity` (`severe`, `non_severe`), `moderator_note`, `excluded` (overturned, no longer counts), `appeal_message`, `appeal_created_at`, `appeal_status` (`none`, `pending`, `rejected`, `overturned`), `created_at` |
+| Strike summary | `strikes`, `severe`, `non_severe`, `limit` (non-severe strikes that block posting), `negative_at` (non-severe strikes that show the Negative Seller tag), `severe_limit` (severe strikes that block posting — one does it), `tag` (`negative`, `blocked`, or `null`), `suspended` |
+| Unblock request | `id`, `seller`, `message`, `status` (`pending`, `approved`, `rejected`), `resolution_note`, `created_at`, `resolved_at` |
+| Blocked seller | `seller`, `email`, `strikes`, `severe`, `suspended`, `suspended_reason`, `pending_request` (an unblock request, or `null`) |
+
+- **Default thresholds:** 1 severe strike, or 3 non-severe strikes, blocks posting (`listing_suspended_at` set) and shows the "Blocked Seller" tag; 2 non-severe strikes alone show "Negative Seller". Configurable (`CAMPUSHUB_SELLER_STRIKE_*` settings).
+- **Overturning** a strike is not the same as unblocking: it removes one strike from the count and may lift a suspension as a side effect, but a seller with other strikes can still be blocked.
+- **Unblocking** (directly, or by approving a request) resets every strike that still counts, not just one.
+- **Notifications:** filing an appeal tells the Buy & Sell moderators and the admin; an overturn, a rejected appeal, a lifted suspension, or an unblock decision each tell the seller.
 
 ## Lost & Found
 
@@ -497,7 +532,6 @@ One chat per pair of people, like WhatsApp (since rev 10). What part of a chat i
 | POST | `/chat/messages/{id}/hide` | participant | Delete for me: I stop seeing this message (anyone's); the other person still does |
 | DELETE | `/chat/conversations/{id}` | participant | Delete the chat for me: it leaves my list and its messages so far stay hidden from me. Nothing is erased for the other person; when they write again the chat comes back for me with only the new messages |
 | GET | `/users/search?q=` | user | Find people to chat with by name or email (2+ characters): `id`, `name`, `email`, `programme`. Then start a general chat with `POST /chat/conversations {"user_id": ...}` |
-| GET | `/me/seller-strikes/summary` | user | My strikes against the limits: `strikes`, `severe`, `non_severe`, `limit` (non-severe strikes that block posting), `negative_at`, `severe_limit`, `tag`, `suspended`. Show "Strikes: 1/3" |
 | GET | `/chat/blocks` | user | People I've blocked |
 | PUT / DELETE | `/chat/blocks/{user_id}` | user | Block / unblock. A blocked person can't send to you or start chats with you, and isn't told why |
 

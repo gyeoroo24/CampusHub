@@ -638,7 +638,6 @@ state.
 | [docs/frontend-design-decisions.md](docs/frontend-design-decisions.md) | Why the Flutter app is structured the way it is, and what was rejected |
 | [docs/schema/README.md](docs/schema/README.md) | Database diagrams, one per module |
 | [docs/restoring the data snapshot.md](docs/restoring%20the%20data%20snapshot.md) | Export and restore data between deployments |
-| [docs/cloud-deployment-checklist.md](docs/cloud-deployment-checklist.md) | What to check before going live |
 | [docs/deployment errors resolution.md](docs/deployment%20errors%20resolution.md) | Errors hit while deploying the Lambda stack, with fixes |
 | [docs/placement-csv-formats.md](docs/placement-csv-formats.md) | Placement sheet import formats |
 | [docs/category-suggest-accuracy.md](docs/category-suggest-accuracy.md), [docs/auto-flag-accuracy.md](docs/auto-flag-accuracy.md) | ML feature evaluations |

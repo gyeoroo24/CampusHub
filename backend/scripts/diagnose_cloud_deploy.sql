@@ -5,8 +5,8 @@
 -- or through whatever bastion / RDS Proxy connection you normally use to reach it.
 --
 -- Companion to diagnose_cloud_deploy.sh (which checks the Lambda/engine side). Compare the
--- output below against backend/db/schema.sql (currently "Revision 16") and the migration list
--- in docs/cloud-deployment-checklist.md to see what's actually applied vs. what's missing.
+-- output below against backend/db/schema.sql and the migration files in backend/db/migrations/
+-- (applied in order) to see what's actually applied vs. what's missing.
 
 \echo '--- Postgres engine version (schema.sql needs 15+ for NULLS NOT DISTINCT) ---'
 SELECT version();

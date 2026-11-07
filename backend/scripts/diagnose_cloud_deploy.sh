@@ -87,6 +87,6 @@ done
 echo "=================================================================="
 echo "Done. Hand back: the Handler/PackageType line for each function, the EngineVersion, and"
 echo "any ERROR tracebacks — that's enough to confirm the real root cause and scope the actual"
-echo "fix (see docs/cloud-deployment-checklist.md and the diagnose_cloud_deploy.sql companion"
+echo "fix (see docs/deployment errors resolution.md and the diagnose_cloud_deploy.sql companion"
 echo "script for the matching database-side checks)."
 echo "=================================================================="
