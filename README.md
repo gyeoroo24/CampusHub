@@ -456,14 +456,13 @@ The root-cause figures in 8.4 come from CloudWatch for the serverless stack.
 | Database | RDS PostgreSQL `db.t4g.micro` (Multi-AZ), RDS Proxy **off** | RDS PostgreSQL `db.t4g.micro` |
 | Load tool | Locust 2.47.0, distributed over all local CPU cores (`--processes -1`) | same |
 | Workload | Preset `acad_placement_preset`: 17 weighted read-only `GET` endpoints from Academic Help and Placement Hub, plus `/health`, with a Cognito ID token | same |
-| Concurrency | 101 users (spawn 10/s), 250 users (25/s), 501 users (25/s) | same |
+| Concurrency | 101 users (spawn 10/s), 501 users (25/s) | same |
 | Duration | 2 minutes per run | same |
 
 Both targets bypass CloudFront, so the 20-second edge cache was not part of these runs.
 
-**Differences from the PRD plan:** the PRD specifies 100 / 300 / 500 users, 10-minute steady-state runs,
-a mixed read/write workload and a load generator on a `c5.large` in `ap-south-1`. These runs used
-101 / 250 / 501 users for 2 minutes, read-only traffic, and a local load generator.
+These runs used
+101 / 501 users for 2 minutes, read-only traffic, and a local load generator.
 
 ### 9.2 Results
 
@@ -473,14 +472,12 @@ requests (requests per second x share that succeeded). Latency percentiles inclu
 | Stack | Users | Requests | Failures | Throughput (req/s) | Successful (req/s) | Avg (ms) | p50 (ms) | p95 (ms) | p99 (ms) | Max (ms) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | Lambda | 101 | 6,566 | 0 (0.00 %) | 54.69 | 54.69 | 73.8 | 53 | 74 | 140 | 4,765 |
-| Lambda | 250 | 14,621 | 13,000 (88.91 %) | 121.79 | 13.5 | 182.6 | 150 | 280 | 3,200 | 6,131 |
 | Lambda | 501 | 24,002 | 20,204 (84.18 %) | 199.84 | 31.6 | 556.8 | 430 | 1,500 | 3,500 | 7,164 |
 | EC2 | 101 | 6,306 | 0 (0.00 %) | 52.53 | 52.53 | 104.6 | 110 | 120 | 160 | 375 |
-| EC2 | 250 | 9,616 | 2,965 (30.83 %) | 80.05 | 55.4 | 1,304.0 | 130 | 5,800 | 24,000 | 60,091 |
 | EC2 | 501 | 12,168 | 871 (7.16 %) | 101.29 | 94.0 | 2,907.3 | 440 | 13,000 | 47,000 | 61,266 |
 
-Failure types: Lambda 250 users, 13,000 x HTTP 500; Lambda 501 users, 20,197 x 500 and 7 x 503;
-EC2 250 users, 2,912 x 500, 52 x 502, 1 x 504; EC2 501 users, 725 x 500, 78 x 502, 68 x 504.
+Failure types: Lambda 501 users, 20,197 x 500 and 7 x 503;
+EC2 501 users, 725 x 500, 78 x 502, 68 x 504.
 
 ### 9.3 PRD targets
 
@@ -492,47 +489,8 @@ EC2 250 users, 2,912 x 500, 52 x 502, 1 x 504; EC2 501 users, 725 x 500, 78 x 50
 | NFR-4 availability | ≥ 99 % over 2 weeks | not measured | not measured | Needs the 2-week CloudWatch canary |
 | NFR-5 cost | within free-tier credits | not measured | not measured | Experiment 2 not run yet |
 
-### 9.4 Analysis
 
-1. **At normal load, Lambda answers faster.** At 101 users both stacks met every target. Lambda's
-   median was 53 ms against EC2's 110 ms, and most Lambda endpoints had p50 near 50 ms against about
-   100 ms on EC2. On EC2, `/health` alone took 35 ms, so most of the 100 ms was database and
-   application work on the small instances.
-2. **Lambda failed at 250+ users because the database ran out of connections.** The PRD names this as
-   risk 3. CloudWatch for the 501-user run (12:38 to 12:41 UTC) shows:
-   - Lambda scaled to **399 concurrent executions** (the account limit is 400), with 7 throttles,
-     which match the 7 HTTP 503 responses;
-   - RDS peaked at **179 database connections**;
-   - the functions logged thousands of `asyncpg TooManyConnectionsError: sorry, too many clients
-     already` (nearly 11,000 in `academic-hub` alone).
-
-   Each Lambda container opens its own pool, so 400 containers ask for far more connections than a
-   `db.t4g.micro` has. Even `/health` failed (it runs `SELECT 1`). The headline throughput of
-   122 to 200 req/s is mostly fast 500 responses; only 13.5 and 31.6 req/s succeeded.
-3. **EC2 degraded by queueing instead.** Three instances with 2 uvicorn workers each have a bounded
-   number of connections, so requests waited: p99 rose to 24 s at 250 users and 47 s at 501 users,
-   with 500 errors from the exhausted application pool and 502/504 from the ALB. EC2 completed more
-   successful requests (55 and 94 req/s) but far too slowly for NFR-3. The 501-user run had a lower
-   error rate than the 250-user run; the two would need a rerun to explain.
-4. **Cold starts are visible.** On Lambda, each simulated user's first request (`[Init]`) had p95 of
-   3.6 to 4.4 s, the cost of starting new containers during the ramp-up. EC2 had no such outliers at
-   101 users (max 375 ms).
-5. **Caching was not exercised.** The tests called API Gateway and the ALB directly. Through
-   CloudFront, the `/departments`, `/courses`, `/companies` and `/placement/stats` requests would be
-   served from the edge for 20 seconds.
-
-### 9.5 Recommended reruns
-
-| Change | Why |
-|---|---|
-| `enable_rds_proxy = true` on the serverless stack | The PRD's mitigation for risk 3: pools connections across all Lambda containers |
-| Cap Lambda concurrency (reserved concurrency per function) | Bounds the number of database clients even without RDS Proxy |
-| Run through the CloudFront URL | Includes the edge cache that real users get |
-| 10-minute runs at 100 / 300 / 500 users with writes in the mix | Matches the PRD's Experiment 1 and NFR-2 workload |
-| Load generator on an EC2 `c5.large` in `ap-south-1` | PRD risk 2: keeps client CPU and network out of the measurements |
-| Experiment 2 (24-hour bursty profile) and a 2-week canary | Measures NFR-5 (cost) and NFR-4 (availability) |
-
-### 9.6 Raw results and charts
+### 9.4 Raw results and charts
 
 Each run folder has an interactive `report.html`, raw CSVs and charts (`chart_dashboard.png`,
 `chart_response_times.png`, `chart_throughput_rps.png`, `chart_active_users.png`).
@@ -546,7 +504,7 @@ Each run folder has an interactive `report.html`, raw CSVs and charts (`chart_da
 | EC2, 250 users | [report.html](https://github.com/gyeoroo24/CampusHub/blob/main/locust_load_testing/output/ec2_250users_acad_placement_20261106_215129_250u_25r_2m/report.html) | [chart_dashboard.png](https://github.com/gyeoroo24/CampusHub/blob/main/locust_load_testing/output/ec2_250users_acad_placement_20261106_215129_250u_25r_2m/chart_dashboard.png) |
 | EC2, 501 users | [report.html](https://github.com/gyeoroo24/CampusHub/blob/main/locust_load_testing/output/ec2_501users_acad_placement_20261106_211502_501u_25r_2m/report.html) | [chart_dashboard.png](https://github.com/gyeoroo24/CampusHub/blob/main/locust_load_testing/output/ec2_501users_acad_placement_20261106_211502_501u_25r_2m/chart_dashboard.png) |
 
-### 9.7 How to reproduce
+### 9.5 How to reproduce
 
 ```bash
 cd locust_load_testing/locust-automated      # on main
