@@ -60,7 +60,7 @@ of on that branch.
 
 ![Proposed Architecture Diagram](Proposal-Architecture-Lambda.jpg)
 
-**Request path and caching.** A read-heavy GET (for example `/api/v1/listings`) is served in up to three
+- **Request path and caching : ** A read-heavy GET (for example `/api/v1/listings`) is served in up to three
 ways:
 
 1. **CloudFront edge cache.** 11 list/browse paths (`listings`, `lost-reports`, `found-reports`, `wanted`,
@@ -71,9 +71,9 @@ ways:
    querying Postgres, for 7 of those paths (`listings`, `lost-reports`, `found-reports`, `events`,
    `departments`, `courses`, `messes`). If Redis is down, the app serves the request uncached; it never fails because of
    Redis.
-3. **RDS PostgreSQL**, the system of record.
+3. **RDS PostgreSQL**, the system of record. RDS Proxy is a poposed (best-practice) in addition to RDS for connection pooling but due to constraints in Free-Tier account, that couldn't be tested. For now, only RDS Single Instance (Multi-AZ for HA) is enabled.
 
-**Secrets.** Lambda environment variables hold only Secrets Manager ARNs. The database password and the
+ - **Secrets :** Lambda environment variables hold only Secrets Manager ARNs. The database password and the
 Redis AUTH token are read from Secrets Manager when a container starts.
 
 ## 3. Serverless vs EC2 baseline
