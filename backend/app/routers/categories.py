@@ -23,7 +23,7 @@ router = APIRouter(tags=["Categories"])
 
 
 class CategoryCreate(BaseModel):
-    name: text(50)
+    name: text(50, single_line=True)
 
 
 class CategorySuggestion(BaseModel):
@@ -131,11 +131,15 @@ async def _delete_posts(conn: asyncpg.Connection, table: str, category_id: int, 
     owners: set = set()
     keys: list[str] = []
     if table == "bs_categories":
+        await _close_out_reports(conn, category_id, moderator_id)
         keys = [r["s3_key"] for r in await conn.fetch(
             """SELECT p.s3_key FROM listing_photos p JOIN listings l ON l.id = p.listing_id
                WHERE l.category_id = $1""", category_id)]
-        owners |= {r["seller_id"] for r in await conn.fetch(
-            "DELETE FROM listings WHERE category_id = $1 RETURNING seller_id", category_id)}
+        deleted = await conn.fetch("DELETE FROM listings WHERE category_id = $1 RETURNING id, seller_id", category_id)
+        owners |= {r["seller_id"] for r in deleted}
+        # bookmarks.target_id has no foreign key (it can be a listing or an event), so clear it here.
+        await conn.execute("DELETE FROM bookmarks WHERE target_type = 'listing' AND target_id = ANY($1::uuid[])",
+                           [r["id"] for r in deleted])
         owners |= {r["author_id"] for r in await conn.fetch(
             "DELETE FROM wanted_posts WHERE category_id = $1 RETURNING author_id", category_id)}
         await conn.execute("DELETE FROM saved_searches WHERE bs_category_id = $1", category_id)
@@ -146,11 +150,41 @@ async def _delete_posts(conn: asyncpg.Connection, table: str, category_id: int, 
                     WHERE category_id = $1 AND deleted_at IS NULL RETURNING id, reporter_id""",
                 category_id, moderator_id)
             owners |= {r["reporter_id"] for r in removed}
+            keys += [r["s3_key"] for r in await conn.fetch(
+                f"DELETE FROM {kind}_report_photos WHERE {kind}_report_id = ANY($1::uuid[]) RETURNING s3_key",
+                [r["id"] for r in removed])]
             await close_reports(conn, f"{kind}_report", [r["id"] for r in removed], moderator_id,
                                 "Removed with its category")
             await conn.execute(f"UPDATE {kind}_reports SET category_id = NULL WHERE category_id = $1", category_id)
         await conn.execute("DELETE FROM saved_searches WHERE lf_category_id = $1", category_id)
     return owners, keys
+
+
+async def _close_out_reports(conn: asyncpg.Connection, category_id: int, moderator_id: UUID) -> None:
+    """Buy & Sell posts are deleted outright, and their reports go with them (ON DELETE CASCADE). Before that
+    happens, keep a moderation-log entry for every reported post and tell whoever filed an open report that
+    the post was removed - the same outcome Lost & Found records by closing its reports."""
+    reported = await conn.fetch(
+        """SELECT r.target_type::text AS target_type, r.target_id,
+                  coalesce(l.title, w.title) AS title,
+                  count(*) AS reports,
+                  array_agg(DISTINCT r.reporter_id) FILTER (WHERE r.status = 'open' AND r.reporter_id IS NOT NULL)
+                      AS open_reporters
+           FROM reports r
+           LEFT JOIN listings l ON l.id = r.listing_id
+           LEFT JOIN wanted_posts w ON w.id = r.wanted_post_id
+           WHERE l.category_id = $1 OR w.category_id = $1
+           GROUP BY r.target_type, r.target_id, l.title, w.title""", category_id)
+    reporters: set = set()
+    for r in reported:
+        await log_moderation(conn, moderator_id, "delete_reported_post_with_category", r["target_type"],
+                             r["target_id"], f"“{r['title']}” ({r['reports']} report(s)) removed with its category")
+        reporters |= set(r["open_reporters"] or [])
+    reporters.discard(moderator_id)
+    if reporters:
+        await create_notifications(conn, list(reporters), "moderation_action", {
+            "message": "A Buy & Sell post you reported has been removed by a moderator.",
+            "kind": "report_resolved"})
 
 
 # What uses each table's categories: (label for the 409 message, table, column)

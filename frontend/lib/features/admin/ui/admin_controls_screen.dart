@@ -427,10 +427,36 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const SizedBox(height: 12),
+              TextField(
+                decoration: InputDecoration(
+                  hintText: 'Search by name or email',
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  isDense: true,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onSubmitted: (q) => ref.read(registeredUsersQueryProvider.notifier).state = q.trim(),
+                onChanged: (q) {
+                  // Clearing the box shows everyone again without needing Enter.
+                  if (q.trim().isEmpty) ref.read(registeredUsersQueryProvider.notifier).state = '';
+                },
+              ),
+              const SizedBox(height: 12),
 
               usersAsync.when(
                 data: (users) {
-                  return ListView.separated(
+                  if (users.isEmpty) {
+                    final query = ref.read(registeredUsersQueryProvider);
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: Text(
+                          query.isEmpty ? 'No accounts yet.' : 'No accounts match “$query”.',
+                          style: TextStyle(color: theme.hintColor),
+                        ),
+                      ),
+                    );
+                  }
+                  final list = ListView.separated(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: users.length,
@@ -505,6 +531,18 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
                       );
                     },
                   );
+                  if (users.length < registeredUsersPageSize) return list;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      list,
+                      const SizedBox(height: 10),
+                      Text(
+                        'Showing the first $registeredUsersPageSize accounts. Search to find someone else.',
+                        style: TextStyle(fontSize: 12, color: theme.hintColor),
+                      ),
+                    ],
+                  );
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Text('Error loading users: ${errorText(e)}', style: const TextStyle(color: Colors.red)),
@@ -567,11 +605,7 @@ class _AdminControlsScreenState extends ConsumerState<AdminControlsScreen>
     setState(() => _isUpdatingUser = true);
     try {
       final repo = ref.read(adminRepositoryProvider);
-      final users = await repo.listRegisteredUsers();
-      final user = users.firstWhere(
-        (u) => u.email.toLowerCase() == email.toLowerCase(),
-        orElse: () => throw Exception('User $email not found.'),
-      );
+      final user = await repo.lookupUser(email);
 
       final nextActive = !user.isActive;
       await repo.updateUserStatus(email: email, isActive: nextActive);

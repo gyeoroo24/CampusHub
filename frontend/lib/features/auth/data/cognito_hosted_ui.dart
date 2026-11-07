@@ -59,6 +59,9 @@ class CognitoHostedUi {
       'code_challenge': challenge,
       'code_challenge_method': 'S256',
       if (email != null && email.isNotEmpty) 'login_hint': email,
+      // Always ask for the password: a Hosted UI session left over from the previous user (sign-out's
+      // /logout redirect may not have finished) must never sign the next person straight in as them.
+      if (!signUp) 'prompt': 'login',
     });
     await launchUrl(url, webOnlyWindowName: '_self');
   }

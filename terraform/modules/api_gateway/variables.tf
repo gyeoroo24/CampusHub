@@ -46,3 +46,9 @@ variable "throttling_burst_limit" {
   type        = number
   default     = 100
 }
+
+variable "cors_allow_origins" {
+  description = "Origins allowed to call the API from a browser on another origin (the web app's)"
+  type        = list(string)
+  default     = []
+}

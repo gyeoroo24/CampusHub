@@ -31,7 +31,7 @@ Module = Literal["buy_sell", "lost_found"]
 
 class SavedSearchCreate(BaseModel):
     module: Module = Field(description="buy_sell watches new listings; lost_found watches new found reports")
-    name: text(80) = Field(examples=["Cycle under ₹3,000"])
+    name: text(80, single_line=True) = Field(examples=["Cycle under ₹3,000"])
     q: text(200, min_length=0) | None = Field(None, description="Keywords, as in the search box")
     category_id: CategoryId | None = Field(None, description="A Buy & Sell or Lost & Found category, by module")
     min_price: Decimal | None = Field(None, ge=0, max_digits=10, decimal_places=2, description="buy_sell only")
@@ -54,7 +54,7 @@ class SavedSearchCreate(BaseModel):
 
 class SavedSearchUpdate(BaseModel):
     """Send only what changes. The module can't change; send null to clear a filter."""
-    name: text(80) | None = None
+    name: text(80, single_line=True) | None = None
     q: text(200, min_length=0) | None = None
     category_id: CategoryId | None = None
     min_price: Decimal | None = Field(None, ge=0, max_digits=10, decimal_places=2)

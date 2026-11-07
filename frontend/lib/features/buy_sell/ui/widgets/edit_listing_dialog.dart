@@ -38,14 +38,41 @@ class _EditListingDialogState extends ConsumerState<EditListingDialog> {
   late bool _negotiable = widget.item.negotiable;
   bool _isSaving = false;
 
+  /// The listing as saved, which the form starts from and Save compares against. Lists (e.g. My
+  /// Postings) don't carry the description, so the full listing is loaded before the form shows.
+  late ListingItem _original = widget.item;
+  bool _isLoading = true;
+
   @override
   void initState() {
     super.initState();
-    _titleController = TextEditingController(text: widget.item.title);
-    _priceController = TextEditingController(text: widget.item.price.toStringAsFixed(0));
-    _locationController = TextEditingController(text: widget.item.location);
-    _descController = TextEditingController(text: widget.item.description);
-    _selectedCategory = widget.item.category;
+    _titleController = TextEditingController();
+    _priceController = TextEditingController();
+    _locationController = TextEditingController();
+    _descController = TextEditingController();
+    _fill(widget.item);
+    _loadFullListing();
+  }
+
+  void _fill(ListingItem item) {
+    _original = item;
+    _titleController.text = item.title;
+    _priceController.text = item.price.toStringAsFixed(item.price == item.price.roundToDouble() ? 0 : 2);
+    _locationController.text = item.location;
+    _descController.text = item.description;
+    _selectedCategory = item.category;
+    _negotiable = item.negotiable;
+  }
+
+  Future<void> _loadFullListing() async {
+    try {
+      final full = await ref.read(buySellRepositoryProvider).getListingById(widget.item.id);
+      if (full != null && mounted) setState(() => _fill(full));
+    } catch (_) {
+      // Keep what we have: Save only sends the fields the seller changed, so nothing is wiped.
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -61,17 +88,33 @@ class _EditListingDialogState extends ConsumerState<EditListingDialog> {
   Future<void> _handleSave() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Send only what changed, so a field the form never showed correctly can't overwrite the saved value.
+    final title = _titleController.text.trim();
+    final description = _descController.text.trim();
+    final location = _locationController.text.trim();
+    final price = double.parse(_priceController.text.trim());
+    final categoryId = _selectedCategory?.id;
+    final changed = title != _original.title.trim() ||
+        description != _original.description.trim() ||
+        location != _original.location.trim() ||
+        price != _original.price ||
+        (categoryId != null && categoryId != _original.category.id) ||
+        _negotiable != _original.negotiable;
+    if (!changed) {
+      Navigator.pop(context, false);
+      return;
+    }
+
     setState(() => _isSaving = true);
     try {
-      final price = double.parse(_priceController.text.trim());
       await ref.read(buySellRepositoryProvider).updateListing(
             widget.item.id,
-            title: _titleController.text.trim(),
-            description: _descController.text.trim(),
-            price: price,
-            categoryId: _selectedCategory?.id,
-            location: _locationController.text.trim(),
-            negotiable: _negotiable,
+            title: title != _original.title.trim() ? title : null,
+            description: description != _original.description.trim() ? description : null,
+            price: price != _original.price ? price : null,
+            categoryId: categoryId != _original.category.id ? categoryId : null,
+            location: location != _original.location.trim() ? location : null,
+            negotiable: _negotiable != _original.negotiable ? _negotiable : null,
           );
 
       ref.invalidate(buySellListingsProvider);
@@ -112,7 +155,9 @@ class _EditListingDialogState extends ConsumerState<EditListingDialog> {
       backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
-        child: SingleChildScrollView(
+        child: _isLoading
+            ? const SizedBox(width: 480, height: 160, child: Center(child: CircularProgressIndicator()))
+            : SingleChildScrollView(
           child: Form(
             key: _formKey,
             child: Column(
@@ -222,7 +267,7 @@ class _EditListingDialogState extends ConsumerState<EditListingDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: _isSaving ? null : _handleSave,
+          onPressed: _isSaving || _isLoading ? null : _handleSave,
           child: _isSaving
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
               : const Text('Save Changes'),

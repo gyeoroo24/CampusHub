@@ -22,7 +22,7 @@ Phone = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^\+?[0
 
 
 class ServiceCreate(BaseModel):
-    name: text(80)
+    name: text(80, single_line=True)
     description: text(300, min_length=0) | None = None
     category: Category
     url: Url | None = None
@@ -38,7 +38,7 @@ class ServiceCreate(BaseModel):
 
 
 class ServiceUpdate(BaseModel):
-    name: text(80) | None = None
+    name: text(80, single_line=True) | None = None
     description: text(300, min_length=0) | None = None
     category: Category | None = None
     url: Url | None = None

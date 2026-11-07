@@ -27,11 +27,12 @@ class PossibleMatchesSection extends ConsumerWidget {
     final String note;
     if (looking && matches.isEmpty) {
       note = 'Looking for matching $otherKind reports…';
-    } else if (data?.status == MatchStatus.unavailable) {
-      note = 'Open $otherKind reports in "${item.category.name}". Tap one to see the details.';
     } else if (matches.isEmpty) {
+      // Checked before "unavailable": that note says "tap one", which is wrong with nothing listed.
       note = "No likely matches yet. If someone files a $otherKind report that looks like this item, "
           "${item.kind == PostType.lost ? "you'll get a notification" : "its owner will be notified"}.";
+    } else if (data?.status == MatchStatus.unavailable) {
+      note = 'Open $otherKind reports in "${item.category.name}". Tap one to see the details.';
     } else {
       note = 'Ranked by how closely the description and photos match. Tap one to see the details.';
     }

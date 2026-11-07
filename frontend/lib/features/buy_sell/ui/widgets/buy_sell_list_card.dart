@@ -6,8 +6,8 @@ import '../../../../core/utils/date_time_formatter.dart';
 import '../../../../core/widgets/no_photo_placeholder.dart';
 import '../../../../core/widgets/seller_trust_badge.dart';
 import '../../domain/buy_sell_item.dart';
-import 'buy_sell_detail_dialog.dart';
 import 'price_watch.dart';
+import '../listing_links.dart';
 
 class BuySellListCard extends StatefulWidget {
   final ListingItem item;
@@ -78,15 +78,7 @@ class _BuySellListCardState extends State<BuySellListCard> {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () {
-            showDialog(
-              context: context,
-              builder: (ctx) => BuySellDetailDialog(
-                item: item,
-                onStatusChange: widget.onStatusChange,
-              ),
-            );
-          },
+          onTap: () => showListingDetail(context, item),
           child: Padding(
             padding: const EdgeInsets.all(12.0),
             child: Column(

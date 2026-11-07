@@ -7,7 +7,9 @@ import '../widgets/super_search_bar.dart';
 import '../../features/auth/domain/user.dart';
 import '../../features/auth/providers/auth_providers.dart';
 import '../../features/auth/ui/account_menu_button.dart';
+import '../../features/buy_sell/domain/buy_sell_item.dart';
 import '../../features/buy_sell/ui/buy_sell_feed_screen.dart';
+import '../../features/buy_sell/ui/listing_links.dart';
 import '../../features/lost_found/ui/lost_found_feed_screen.dart';
 import '../../features/admin/ui/admin_controls_screen.dart';
 import '../../features/profile/ui/user_profile_screen.dart';
@@ -52,6 +54,17 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/buy',
       pageBuilder: (context, state) => const NoTransitionPage(key: _shellPageKey, child: AppShellLayout(initialTab: 0)),
+      routes: [
+        // One listing's shareable address: its dialog over the feed (see listing_links.dart).
+        GoRoute(
+          path: ':id',
+          pageBuilder: (context, state) => ListingDialogPage(
+            key: state.pageKey,
+            listingId: state.pathParameters['id']!,
+            summary: state.extra is ListingItem ? state.extra as ListingItem : null,
+          ),
+        ),
+      ],
     ),
     GoRoute(
       path: '/lost-found',
@@ -150,31 +163,37 @@ final GoRouter appRouter = GoRouter(
 // ---------------------------------------------------------------------------
 // Tab definitions
 // ---------------------------------------------------------------------------
+// shortLabel: for the phone's bottom bar, where five labels share ~75px each.
 const _tabDestinations = [
   (
     icon: Icons.shopping_bag_outlined,
     selectedIcon: Icons.shopping_bag_rounded,
     label: 'Buy & Sell',
+    shortLabel: 'Buy & Sell',
   ),
   (
     icon: Icons.find_in_page_outlined,
     selectedIcon: Icons.find_in_page_rounded,
     label: 'Lost & Found',
+    shortLabel: 'Lost & Found',
   ),
   (
     icon: Icons.school_outlined,
     selectedIcon: Icons.school_rounded,
     label: 'Courses',
+    shortLabel: 'Courses',
   ),
   (
     icon: Icons.work_outline_rounded,
     selectedIcon: Icons.work_rounded,
     label: 'Placement Hub',
+    shortLabel: 'Placements',
   ),
   (
     icon: Icons.event_outlined,
     selectedIcon: Icons.event_rounded,
     label: 'Events',
+    shortLabel: 'Events',
   ),
 ];
 
@@ -535,7 +554,8 @@ class _AppShellLayoutState extends ConsumerState<AppShellLayout> {
                   BottomNavigationBarItem(
                     icon: Icon(dest.icon),
                     activeIcon: Icon(dest.selectedIcon),
-                    label: dest.label,
+                    label: dest.shortLabel,
+                    tooltip: dest.label,
                   ),
               ],
             ),

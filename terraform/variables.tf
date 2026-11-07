@@ -150,3 +150,9 @@ variable "throttling_burst_limit" {
   type        = number
   default     = 2000
 }
+
+variable "cognito_threat_protection" {
+  description = "Cognito threat protection (adaptive authentication, compromised-credential checks) in ENFORCED mode. Needs the Plus feature plan, which is billed per monthly active user, so it is off by default."
+  type        = bool
+  default     = false
+}

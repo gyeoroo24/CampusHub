@@ -122,10 +122,9 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
       final cats = await ref.read(buySellRepositoryProvider).fetchCategories();
       if (mounted) {
         setState(() {
+          // No category picked for the user: the first one alphabetically is rarely right, and a wrong
+          // default is easy to miss. The picker's validator asks for one instead.
           _availableCategories = cats;
-          if (cats.isNotEmpty) {
-            _selectedCategory = cats.first;
-          }
           _isLoadingCategories = false;
         });
       }
@@ -140,7 +139,6 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
             CategoryRef(id: 5, name: 'Lab Equipment'),
             CategoryRef(id: 6, name: 'Others'),
           ];
-          _selectedCategory = _availableCategories.first;
           _isLoadingCategories = false;
         });
       }
@@ -229,6 +227,8 @@ class _CreateListingDialogState extends ConsumerState<CreateListingDialog> {
                     categories: _availableCategories,
                     value: _selectedCategory,
                     addNewLabel: CategoryPicker.addNew.name,
+                    validator: (_) =>
+                        !_isCustomCategory && _selectedCategory == null ? 'Please select a category.' : null,
                     onChanged: (val) {
                       if (val.id == -1) {
                         setState(() {

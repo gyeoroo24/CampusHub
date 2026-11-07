@@ -1,5 +1,6 @@
 """Health check, the caller's own profile, other users' public profiles, and admin account controls."""
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 import asyncpg
@@ -8,7 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .. import otp
 from ..auth import CurrentUser, current_user, current_user_allow_deactivated, optional_user
-from ..common import Contact, forbidden, like_pattern, not_found, search_text, set_clause, text
+from ..common import (Contact, Page, PageParams, forbidden, like_pattern, make_page, not_found, page_params,
+                      search_text, set_clause, text)
 from ..config import get_settings
 from ..db import get_conn
 from ..permissions import log_moderation
@@ -57,7 +59,7 @@ def _check_phone(phone: str) -> str:
 
 
 class ProfileUpdate(BaseModel):
-    name: text(100) | None = None
+    name: text(100, single_line=True) | None = None
     phone: None = Field(None, description="Only null (removes it). A new number is set by verifying it: "
                                           "POST /me/phone/code, then POST /me/phone/verify")
     department_id: UUID | None = None
@@ -167,6 +169,33 @@ async def search_users(q: str = Query(..., min_length=2, max_length=100), limit:
             ORDER BY (name ILIKE $2 || '%' ESCAPE '\') DESC, (email::text ILIKE $2 || '%' ESCAPE '\') DESC, name
             LIMIT $3""", user.id, like_pattern(q), limit, get_settings().auth_mode == "dev")
     return [UserMatch(**dict(r)) for r in rows]
+
+
+class AccountListItem(AccountStatus):
+    programme: str | None
+    graduation_year: int | None
+    created_at: datetime
+
+
+@router.get("/users", response_model=Page[AccountListItem],
+            summary="Every account, for the admin panel's User Accounts tab (admin)")
+async def list_users(q: str | None = Query(None, max_length=100, description="Part of a name or email"),
+                     status: Literal["active", "deactivated"] | None = None,
+                     page: PageParams = Depends(page_params), user: CurrentUser = Depends(current_user),
+                     conn: asyncpg.Connection = Depends(get_conn)):
+    """The admin first, then by name. Includes deactivated accounts, unlike GET /users/search."""
+    if not user.is_admin:
+        raise forbidden("Only the admin can list accounts.")
+    q = search_text(q)
+    rows = await conn.fetch(
+        f"""SELECT {_STATUS_COLUMNS}, programme, graduation_year, created_at FROM users
+            WHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%' ESCAPE '\\'
+                                    OR email::text ILIKE '%' || $1 || '%' ESCAPE '\\')
+              AND ($2::text IS NULL OR is_active = ($2 = 'active'))
+            ORDER BY base_role = 'admin' DESC, lower(name), email
+            LIMIT $3 OFFSET $4""",
+        like_pattern(q) if q else None, status, page.limit + 1, page.offset)
+    return make_page(rows, page, lambda r: AccountListItem(**dict(r)))
 
 
 @router.get("/users/lookup", response_model=AccountStatus, summary="Find an account by email (admin)")

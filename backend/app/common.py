@@ -4,7 +4,7 @@ from typing import Annotated, Generic, TypeVar
 from uuid import UUID
 
 from fastapi import HTTPException, Query
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 
 T = TypeVar("T")
 
@@ -13,9 +13,19 @@ MAX_INT_ID = 2_147_483_647
 CategoryId = Annotated[int, Field(ge=1, le=MAX_INT_ID)]
 
 
-def text(max_length: int, min_length: int = 1):
-    """A string with surrounding whitespace removed; by default it must not be blank."""
-    return Annotated[str, StringConstraints(strip_whitespace=True, min_length=min_length, max_length=max_length)]
+def _one_line(value: str) -> str:
+    if "\n" in value or "\r" in value:
+        raise ValueError("must be a single line")
+    return value
+
+
+def text(max_length: int, min_length: int = 1, single_line: bool = False):
+    """A string with surrounding whitespace removed; by default it must not be blank.
+
+    single_line: for titles and names, which are shown on one line, reject embedded line breaks.
+    """
+    stripped = Annotated[str, StringConstraints(strip_whitespace=True, min_length=min_length, max_length=max_length)]
+    return Annotated[stripped, AfterValidator(_one_line)] if single_line else stripped
 
 
 def search_text(q: str | None) -> str | None:

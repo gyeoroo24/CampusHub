@@ -37,7 +37,9 @@ abstract class IAdminRepository {
     String? severity,
   });
   Future<Map<String, dynamic>> getSystemHealth();
-  Future<List<User>> listRegisteredUsers();
+  /// Accounts for the admin's User Accounts tab (admin only): the admin first, then by name.
+  /// [query] narrows to names or emails containing it; at most [limit] are returned.
+  Future<List<User>> listRegisteredUsers({String query = '', int limit = 50});
 
   /// Finds an account by email (admin only); throws if nobody with that email has signed in yet.
   Future<AccountStatus> lookupUser(String email);
@@ -486,9 +488,12 @@ class MockAdminRepository implements IAdminRepository {
   }
 
   @override
-  Future<List<User>> listRegisteredUsers() async {
+  Future<List<User>> listRegisteredUsers({String query = '', int limit = 50}) async {
     await Future<void>.delayed(const Duration(milliseconds: 80));
-    return List.unmodifiable(_mockUsers);
+    final q = query.trim().toLowerCase();
+    return List.unmodifiable(_mockUsers
+        .where((u) => q.isEmpty || u.name.toLowerCase().contains(q) || u.email.toLowerCase().contains(q))
+        .take(limit));
   }
 }
 
@@ -634,8 +639,12 @@ class ApiAdminRepository implements IAdminRepository {
   }
 
   @override
-  Future<List<User>> listRegisteredUsers() async {
-    // In live backend, moderators endpoint returns users who have roles, or fallback
-    return [];
+  Future<List<User>> listRegisteredUsers({String query = '', int limit = 50}) async {
+    final response = await apiClient.get(ApiEndpoints.users, queryParameters: {
+      if (query.trim().isNotEmpty) 'q': query.trim(),
+      'limit': limit,
+    });
+    final items = (response.data as Map<String, dynamic>)['items'] as List<dynamic>? ?? const [];
+    return items.map((u) => User.fromJson(u as Map<String, dynamic>)).toList();
   }
 }

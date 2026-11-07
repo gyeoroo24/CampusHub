@@ -139,7 +139,8 @@ resource "aws_s3_bucket_cors_configuration" "media" {
   cors_rule {
     allowed_headers = ["*"]
     allowed_methods = ["PUT", "POST", "GET", "HEAD"]
-    allowed_origins = ["*"]
+    # Only the web app: any other site gets no CORS headers, so it can't read or upload through it.
+    allowed_origins = length(var.media_cors_origins) > 0 ? var.media_cors_origins : ["https://localhost"]
     expose_headers  = ["ETag"]
     max_age_seconds = 3600
   }

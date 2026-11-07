@@ -176,6 +176,8 @@ async def reject_appeal(strike_id: UUID, user: CurrentUser = Depends(current_use
 async def lift_suspension_endpoint(seller_id: UUID, user: CurrentUser = Depends(current_user),
                                    conn: asyncpg.Connection = Depends(get_conn)):
     await _require_buy_sell_moderator(conn, user)
+    if not await conn.fetchval("SELECT EXISTS (SELECT 1 FROM users WHERE id = $1)", seller_id):
+        raise not_found("User")
     async with conn.transaction():
         await lift_suspension(conn, seller_id)
         await log_moderation(conn, user.id, "lift_listing_suspension", "user", seller_id)

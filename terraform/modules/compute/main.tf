@@ -169,6 +169,9 @@ resource "aws_lambda_function" "services" {
       # redirect, which browsers refuse for cross-origin PUTs (the upload then fails with a network error).
       CAMPUSHUB_S3_ENDPOINT_URL = "https://s3.${var.aws_region}.amazonaws.com"
 
+      # Origins allowed to call the API cross-origin (app/main.py); the web app itself is same-origin.
+      CAMPUSHUB_CORS_ALLOW_ORIGINS = jsonencode(var.cors_allow_origins)
+
       # No matcher Lambda is deployed (zip-only deployment; the matcher needs the ML dependencies
       # this build intentionally leaves out — see requirements-lambda-zip.txt). match_mode="auto"
       # (the app's default) then resolves to "off": Lost & Found falls back to its same-category

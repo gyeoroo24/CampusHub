@@ -38,6 +38,10 @@ from .listings import PhotoKeys
 ReportStatus = Literal["open", "closed"]
 
 
+# The app's date picker starts here too (report_item_dialog.dart); anything earlier is a typo like year 0026.
+EARLIEST_OCCURRED_AT = datetime(2020, 1, 1, tzinfo=timezone.utc)
+
+
 def _not_in_future(value: datetime | None) -> datetime | None:
     if value is None:
         return value
@@ -45,6 +49,8 @@ def _not_in_future(value: datetime | None) -> datetime | None:
         raise ValueError("include a timezone, e.g. 2026-10-20T14:30:00+05:30")
     if value > datetime.now(timezone.utc) + timedelta(minutes=5):
         raise ValueError("can't be in the future")
+    if value < EARLIEST_OCCURRED_AT:
+        raise ValueError("can't be before 2020")
     return value
 
 
@@ -52,7 +58,7 @@ PastTime = Annotated[datetime, AfterValidator(_not_in_future)]
 
 
 class ReportCreate(BaseModel):
-    title: text(120) | None = Field(None, description="Short name of the item, e.g. 'Black JBL earbuds' (rev 25)")
+    title: text(120, single_line=True) | None = Field(None, description="Short name of the item, e.g. 'Black JBL earbuds' (rev 25)")
     description: text(2000)
     category_id: CategoryId = Field(description="What the item is, e.g. the id of 'ID card'")
     occurred_at: PastTime = Field(description="When the item was lost (lost reports) or found (found reports)")
@@ -61,7 +67,7 @@ class ReportCreate(BaseModel):
 
 
 class ReportUpdate(BaseModel):
-    title: text(120) | None = None
+    title: text(120, single_line=True) | None = None
     description: text(2000) | None = None
     category_id: CategoryId | None = None
     occurred_at: PastTime | None = None
@@ -427,6 +433,9 @@ def build_router(kind: Kind) -> APIRouter:
         async with conn.transaction():
             await conn.execute(f"UPDATE {kind.table} SET deleted_at = now(), deleted_by = $2 WHERE id = $1",
                                report_id, user.id)
+            # The row stays for the reports' audit trail; its photos don't need to.
+            photo_keys = [r["s3_key"] for r in await conn.fetch(
+                f"DELETE FROM {kind.photos} WHERE {kind.photo_fk} = $1 RETURNING s3_key", report_id)]
             await close_reports(conn, f"{kind.name}_report", [report_id], user.id, reason)
             if not is_owner:
                 await log_moderation(conn, user.id, f"remove_{kind.name}_report", f"{kind.name}_report",
@@ -438,6 +447,7 @@ def build_router(kind: Kind) -> APIRouter:
                            "target_type": f"{kind.name}_report", "target_id": str(report_id)}
                 await create_notifications(conn, [reporter], "moderation_action", payload)
                 background.add_task(deliver_push, [reporter], "moderation_action", payload)
+        background.add_task(delete_objects, photo_keys)
         return Response(status_code=204)
 
     return router

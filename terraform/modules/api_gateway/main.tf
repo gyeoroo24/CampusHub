@@ -10,12 +10,18 @@ resource "aws_apigatewayv2_api" "http_api" {
   protocol_type = "HTTP"
   description   = "CampusHub HTTP API Gateway, proxying to the FastAPI backend's own routing"
 
-  cors_configuration {
-    allow_origins     = ["*"]
-    allow_methods     = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-    allow_headers     = ["*"]
-    max_age           = 300
-    allow_credentials = false
+  # The web app calls the API through CloudFront on its own origin, so it needs no CORS at all; only
+  # the listed origins may call it cross-origin. With none listed, preflights reach the app, whose
+  # own CORS settings (CAMPUSHUB_CORS_ALLOW_ORIGINS, the same list) answer them.
+  dynamic "cors_configuration" {
+    for_each = length(var.cors_allow_origins) > 0 ? [1] : []
+    content {
+      allow_origins     = var.cors_allow_origins
+      allow_methods     = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+      allow_headers     = ["*"]
+      max_age           = 300
+      allow_credentials = false
+    }
   }
 
   tags = {

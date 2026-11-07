@@ -45,7 +45,7 @@ PhotoKeys = Annotated[list[str], Field(max_length=MAX_PHOTOS), AfterValidator(_u
 
 
 class ListingCreate(BaseModel):
-    title: text(120)
+    title: text(120, single_line=True)
     description: text(5000, min_length=0) | None = None
     price: Decimal = Field(ge=0, max_digits=10, decimal_places=2, description="Rupees")
     category_id: CategoryId
@@ -56,7 +56,7 @@ class ListingCreate(BaseModel):
 
 
 class ListingUpdate(BaseModel):
-    title: text(120) | None = None
+    title: text(120, single_line=True) | None = None
     description: text(5000, min_length=0) | None = None
     price: Decimal | None = Field(None, ge=0, max_digits=10, decimal_places=2)
     category_id: CategoryId | None = None
@@ -383,6 +383,8 @@ async def delete_listing(background: BackgroundTasks, listing_id: UUID,
             photo_keys = [r["s3_key"] for r in await conn.fetch(
                 "SELECT s3_key FROM listing_photos WHERE listing_id = $1", listing_id)]
             await conn.execute("DELETE FROM listings WHERE id = $1", listing_id)
+            # bookmarks.target_id has no foreign key (it can be a listing or an event), so clear it here.
+            await conn.execute("DELETE FROM bookmarks WHERE target_type = 'listing' AND target_id = $1", listing_id)
             background.add_task(delete_objects, photo_keys)
             if not is_owner:
                 payload = {"message": f'A moderator removed your listing "{row["title"]}".'

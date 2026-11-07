@@ -18,9 +18,16 @@ final moderatorGrantsProvider = FutureProvider<List<ModeratorGrant>>((ref) async
   return repo.listModerators(includeRevoked: false);
 });
 
+/// What the admin typed in the User Accounts tab's search box.
+final registeredUsersQueryProvider = StateProvider<String>((ref) => '');
+
+/// How many accounts the User Accounts tab shows at once; search to find anyone further down.
+const registeredUsersPageSize = 50;
+
 final registeredUsersProvider = FutureProvider<List<User>>((ref) async {
   final repo = ref.watch(adminRepositoryProvider);
-  return repo.listRegisteredUsers();
+  final query = ref.watch(registeredUsersQueryProvider);
+  return repo.listRegisteredUsers(query: query, limit: registeredUsersPageSize);
 });
 
 class ContentReportsFilter {

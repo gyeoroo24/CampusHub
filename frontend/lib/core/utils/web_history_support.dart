@@ -18,7 +18,10 @@ abstract class WebHistoryManager {
 class ModalHistoryWrapper extends StatefulWidget {
   final Widget child;
 
-  const ModalHistoryWrapper({super.key, required this.child});
+  /// False: just show [child], e.g. for a dialog that is itself a router page with its own address.
+  final bool enabled;
+
+  const ModalHistoryWrapper({super.key, required this.child, this.enabled = true});
 
   @override
   State<ModalHistoryWrapper> createState() => _ModalHistoryWrapperState();
@@ -28,6 +31,7 @@ class _ModalHistoryWrapperState extends State<ModalHistoryWrapper> {
   @override
   void initState() {
     super.initState();
+    if (!widget.enabled) return;
     WebHistoryManager.instance.pushModalState(() {
       if (mounted) {
         Navigator.of(context, rootNavigator: true).maybePop();
@@ -37,7 +41,7 @@ class _ModalHistoryWrapperState extends State<ModalHistoryWrapper> {
 
   @override
   void dispose() {
-    WebHistoryManager.instance.popModalState();
+    if (widget.enabled) WebHistoryManager.instance.popModalState();
     super.dispose();
   }
 

@@ -7,6 +7,22 @@ resource "aws_cognito_user_pool" "pool" {
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
 
+  # Anyone can turn on an authenticator app (TOTP) for their account; admins and moderators should.
+  # (Cognito can't require MFA for some groups only: "ON" would force it on every student.)
+  mfa_configuration = "OPTIONAL"
+  software_token_mfa_configuration {
+    enabled = true
+  }
+
+  # Threat protection: blocks risky sign-ins (credential stuffing, leaked passwords) and logs them.
+  user_pool_tier = var.threat_protection ? "PLUS" : null
+  dynamic "user_pool_add_ons" {
+    for_each = var.threat_protection ? [1] : []
+    content {
+      advanced_security_mode = "ENFORCED"
+    }
+  }
+
   verification_message_template {
     default_email_option = "CONFIRM_WITH_CODE"
     email_subject        = "CampusHub - Verify your IISc email address"
@@ -61,8 +77,9 @@ resource "aws_cognito_user_pool_client" "client" {
     "http://localhost:8080/"
   ], var.additional_callback_urls)
 
+  # No ALLOW_USER_PASSWORD_AUTH: the app signs in through the Hosted UI only, and that flow let anyone
+  # try passwords against the Cognito API directly, outside CloudFront and the WAF.
   explicit_auth_flows = [
-    "ALLOW_USER_PASSWORD_AUTH",
     "ALLOW_USER_SRP_AUTH",
     "ALLOW_REFRESH_TOKEN_AUTH"
   ]

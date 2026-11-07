@@ -51,7 +51,7 @@ def _type_from_tags(tags: list[str], fallback: str = "other") -> str:
 
 # ---------------------------------------------------------------- models
 class DepartmentIn(BaseModel):
-    name: text(120)
+    name: text(120, single_line=True)
 
 
 class Department(BaseModel):
@@ -64,12 +64,12 @@ class Department(BaseModel):
 
 class CourseCreate(BaseModel):
     code: text(20) = Field(examples=["DS 252"])
-    name: text(200)
+    name: text(200, single_line=True)
 
 
 class CourseUpdate(BaseModel):
     code: text(20) | None = None
-    name: text(200) | None = None
+    name: text(200, single_line=True) | None = None
 
 
 class Course(BaseModel):
@@ -87,7 +87,7 @@ class Course(BaseModel):
 
 
 class MaterialCreate(BaseModel):
-    title: text(200)
+    title: text(200, single_line=True)
     tags: list[MaterialTag] = Field(default_factory=list, max_length=5, description="What it is: pyq, quiz, notes ...")
     description: text(2000, min_length=0) | None = None
     material_type: MaterialType | None = Field(None, description="Older single type; filled in from tags if left out")
@@ -96,7 +96,7 @@ class MaterialCreate(BaseModel):
 
 
 class MaterialUpdate(BaseModel):
-    title: text(200) | None = None
+    title: text(200, single_line=True) | None = None
     tags: list[MaterialTag] | None = Field(None, max_length=5)
     description: text(2000, min_length=0) | None = None
     material_type: MaterialType | None = None

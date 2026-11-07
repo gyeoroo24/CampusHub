@@ -17,6 +17,9 @@ trusted by its name or the type the browser claimed:
     - a title or description that reads like leaked papers or exam help for sale, or gibberish
     - more than 10 uploads by one person in an hour (spam)
 The size limit (100 MB) is enforced when the upload is signed (app/storage.py).
+
+Every other kind of upload (listing and Lost & Found photos, event posters, mess menus, JDs) gets the
+signature part of this check, check_signature, when it's attached (app/storage.py).
 """
 import io
 import re
@@ -111,35 +114,19 @@ def _check_zip_entries(zf: zipfile.ZipFile, result: CheckResult, office: bool) -
                 raise Rejected(f"{info.filename.rsplit('/', 1)[-1]} inside the archive is a program, which can't be shared.")
 
 
-def check_material(data: bytes, content_type: str, file_name: str = "") -> CheckResult:
-    """Raises Rejected, or returns the reasons (if any) to hold the file for a moderator."""
-    result = CheckResult()
+def check_signature(data: bytes, content_type: str) -> None:
+    """The part of the check every upload gets (photos, posters, menus, JDs as well as course materials):
+    the first bytes must match the claimed type, and must not be a program. `data` can be just the start
+    of the file. Raises Rejected."""
     head = data[:16]
-    if _ext(file_name) in DANGEROUS_EXTENSIONS:
-        raise Rejected(f".{_ext(file_name)} files are programs or macro documents and can't be shared.")
     if head.startswith(_EXECUTABLE_MAGIC):
         raise Rejected("This file is a program, not a document, so it can't be shared.")
     if content_type == "application/pdf":
         if not head.startswith(b"%PDF"):
             raise Rejected("This isn't really a PDF (its contents don't match). Upload the original file.")
-        sample = data[:5 * MB] + data[-MB:]
-        if re.search(rb"/(JavaScript|JS)\b", sample) or b"/Launch" in sample:
-            result.flags.append("PDF with embedded JavaScript or launch actions")
-        if b"/EmbeddedFile" in sample:
-            result.flags.append("PDF with attached files")
-        if b"/Encrypt" in sample:
-            result.flags.append("password-protected PDF (its contents can't be checked)")
     elif content_type in OFFICE_TYPES or content_type == "application/zip":
         if not head.startswith(b"PK\x03\x04"):
             raise Rejected("This file's contents don't match its type. Upload the original file.")
-        try:
-            with zipfile.ZipFile(io.BytesIO(data)) as zf:
-                office = content_type in OFFICE_TYPES
-                if office and not any(n.startswith(OFFICE_TYPES[content_type]) for n in zf.namelist()):
-                    raise Rejected("This file's contents don't match its type. Upload the original file.")
-                _check_zip_entries(zf, result, office)
-        except zipfile.BadZipFile as exc:
-            raise Rejected("The file is damaged or isn't a real archive.") from exc
     elif content_type in IMAGE_MAGIC:
         if not head.startswith(IMAGE_MAGIC[content_type]):
             raise Rejected("This image's contents don't match its type. Upload the original file.")
@@ -154,6 +141,31 @@ def check_material(data: bytes, content_type: str, file_name: str = "") -> Check
             raise Rejected("This isn't a text file (it has binary data). Upload the original file.")
     else:
         raise Rejected(f"Files of type {content_type} can't be shared here.")
+
+
+def check_material(data: bytes, content_type: str, file_name: str = "") -> CheckResult:
+    """Raises Rejected, or returns the reasons (if any) to hold the file for a moderator."""
+    result = CheckResult()
+    if _ext(file_name) in DANGEROUS_EXTENSIONS:
+        raise Rejected(f".{_ext(file_name)} files are programs or macro documents and can't be shared.")
+    check_signature(data, content_type)
+    if content_type == "application/pdf":
+        sample = data[:5 * MB] + data[-MB:]
+        if re.search(rb"/(JavaScript|JS)\b", sample) or b"/Launch" in sample:
+            result.flags.append("PDF with embedded JavaScript or launch actions")
+        if b"/EmbeddedFile" in sample:
+            result.flags.append("PDF with attached files")
+        if b"/Encrypt" in sample:
+            result.flags.append("password-protected PDF (its contents can't be checked)")
+    elif content_type in OFFICE_TYPES or content_type == "application/zip":
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                office = content_type in OFFICE_TYPES
+                if office and not any(n.startswith(OFFICE_TYPES[content_type]) for n in zf.namelist()):
+                    raise Rejected("This file's contents don't match its type. Upload the original file.")
+                _check_zip_entries(zf, result, office)
+        except zipfile.BadZipFile as exc:
+            raise Rejected("The file is damaged or isn't a real archive.") from exc
     return result
 
 

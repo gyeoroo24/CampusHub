@@ -33,7 +33,7 @@ MAX_OPEN_POSTS = 10
 
 
 class WantedCreate(BaseModel):
-    title: text(120) = Field(examples=["Need a cycle for campus"])
+    title: text(120, single_line=True) = Field(examples=["Need a cycle for campus"])
     description: text(2000, min_length=0) | None = None
     category_id: CategoryId
     max_price: Decimal | None = Field(None, ge=0, max_digits=10, decimal_places=2,
@@ -41,7 +41,7 @@ class WantedCreate(BaseModel):
 
 
 class WantedUpdate(BaseModel):
-    title: text(120) | None = None
+    title: text(120, single_line=True) | None = None
     description: text(2000, min_length=0) | None = None
     category_id: CategoryId | None = None
     max_price: Decimal | None = Field(None, ge=0, max_digits=10, decimal_places=2)

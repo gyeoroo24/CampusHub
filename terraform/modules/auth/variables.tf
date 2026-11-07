@@ -22,3 +22,8 @@ variable "additional_callback_urls" {
   default     = []
 }
 
+variable "threat_protection" {
+  description = "Turn on Cognito threat protection in ENFORCED mode (moves the pool to the billed Plus plan)"
+  type        = bool
+  default     = false
+}

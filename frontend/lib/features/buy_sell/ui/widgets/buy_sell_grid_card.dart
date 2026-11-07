@@ -10,8 +10,8 @@ import '../../../../core/widgets/seller_trust_badge.dart';
 import '../../../auth/providers/auth_providers.dart';
 import '../../domain/buy_sell_item.dart';
 import '../../../messages/ui/messages_screen.dart';
-import 'buy_sell_detail_dialog.dart';
 import 'price_watch.dart';
+import '../listing_links.dart';
 
 class BuySellGridCard extends StatefulWidget {
   final ListingItem item;
@@ -83,15 +83,7 @@ class _BuySellGridCardState extends State<BuySellGridCard> {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () {
-            showDialog(
-              context: context,
-              builder: (ctx) => BuySellDetailDialog(
-                item: item,
-                onStatusChange: widget.onStatusChange,
-              ),
-            );
-          },
+          onTap: () => showListingDetail(context, item),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

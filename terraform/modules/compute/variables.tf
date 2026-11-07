@@ -130,3 +130,9 @@ variable "redis_auth_secret_arn" {
   type        = string
   default     = ""
 }
+
+variable "cors_allow_origins" {
+  description = "Origins allowed to call the API cross-origin (CAMPUSHUB_CORS_ALLOW_ORIGINS)"
+  type        = list(string)
+  default     = []
+}

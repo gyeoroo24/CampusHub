@@ -8,7 +8,8 @@ Upload flow (keeps big files off Lambda):
   3. Client PUTs the file straight to S3 with exactly those headers.
   4. Client creates/updates the post with the returned s3_key. The API checks the key is
      inside the caller's own folder and that the object really exists with an allowed
-     size and type before saving it, then retags it state=attached. A file that fails the
+     size and type, and that its first bytes really are that type (an HTML page labelled
+     image/jpeg is refused), before saving it, then retags it state=attached. A file that fails the
      check is deleted. Files never attached keep state=pending, and an S3 lifecycle rule on
      that tag (see README) deletes them after a day.
 
@@ -35,6 +36,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from fastapi import HTTPException
 
 from .config import get_settings
+from .material_check import Rejected, check_signature
 
 log = logging.getLogger("campushub.storage")
 
@@ -163,9 +165,26 @@ async def _verify_object(key: str, kind: UploadKind) -> None:
         problem = f"File {key} is larger than {kind.max_bytes // MB} MB."
     elif head.get("ContentType") not in kind.content_types:
         problem = f"File {key} has a file type that isn't allowed here."
+    else:
+        # The declared type is only what the uploader claimed: the first bytes must match it too.
+        try:
+            check_signature(await _read_start(key), head["ContentType"])
+        except Rejected as exc:
+            problem = f"File {key}: {exc}"
     if problem:
         await delete_objects([key])
         raise HTTPException(422, problem)
+
+
+SIGNATURE_BYTES = 64 * 1024
+
+
+async def _read_start(key: str) -> bytes:
+    """The first SIGNATURE_BYTES of a stored file, enough to tell what it really is."""
+    s = get_settings()
+    obj = await asyncio.to_thread(s3_client().get_object, Bucket=s.s3_bucket, Key=key,
+                                  Range=f"bytes=0-{SIGNATURE_BYTES - 1}")
+    return await asyncio.to_thread(obj["Body"].read)
 
 
 async def verify_own_uploads(keys: list[str], kind: str, user_id: UUID, course_id: UUID | None = None) -> None:

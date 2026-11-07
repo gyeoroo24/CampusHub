@@ -4,9 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../router/app_router.dart';
 import '../../features/academics/providers/academics_providers.dart';
+import '../../features/auth/providers/auth_providers.dart';
 import '../../features/buy_sell/domain/buy_sell_item.dart';
 import '../../features/buy_sell/providers/buy_sell_providers.dart';
-import '../../features/buy_sell/ui/widgets/buy_sell_detail_dialog.dart';
+import '../../features/buy_sell/ui/listing_links.dart';
 import '../../features/lost_found/domain/lost_found_item.dart';
 import '../../features/lost_found/providers/lost_found_providers.dart';
 import '../../features/lost_found/ui/widgets/lost_found_detail_dialog.dart';
@@ -17,8 +18,12 @@ import '../../features/placement/domain/placement_models.dart';
 import '../../features/placement/providers/placement_providers.dart';
 
 /// Companies whose name or industry matches (Placement Hub), searched on the server.
-final _companySearchProvider = FutureProvider.autoDispose.family<List<Company>, String>((ref, q) =>
-    ref.watch(placementRepositoryProvider).fetchCompanies(query: q, limit: 6));
+/// Placement Hub is for signed-in users only (the API answers guests with 401), so guests don't search it.
+final _companySearchProvider = FutureProvider.autoDispose.family<List<Company>, String>((ref, q) {
+  final user = ref.watch(currentUserProvider);
+  if (user == null || user.isGuest) return const <Company>[];
+  return ref.watch(placementRepositoryProvider).fetchCompanies(query: q, limit: 6);
+});
 
 /// Events (now, upcoming and past) whose title, description or place matches, searched on the server.
 final _eventSearchProvider = FutureProvider.autoDispose.family<List<CampusEvent>, String>((ref, q) =>
@@ -122,6 +127,8 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
                     orElse: () => const <CourseWithDepartment>[],
                   );
                   final companiesAsync = ref.watch(_companySearchProvider(query));
+                  final currentUser = ref.watch(currentUserProvider);
+                  final isGuest = currentUser == null || currentUser.isGuest;
                   final eventsAsync = ref.watch(_eventSearchProvider(query));
                   final messMatches = ref.watch(messListProvider).maybeWhen(
                     data: (list) => list.messes.where((m) => m.name.toLowerCase().contains(query)).toList(),
@@ -153,7 +160,9 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
                     ],
                     3: [
                       _buildSectionHeader(header(3, 'PLACEMENT HUB')),
-                      ...companiesAsync.when(
+                      if (isGuest)
+                        ..._none('Sign in to search Placement Hub companies')
+                      else ...companiesAsync.when(
                         loading: _loading,
                         error: (_, __) => _none('Couldn\'t search companies'),
                         data: (companies) => companies.isEmpty
@@ -297,16 +306,7 @@ class _SuperSearchBarState extends ConsumerState<SuperSearchBar> {
           _removeOverlay();
           // Switch to Buy & Sell tab without adding to browser history
           ref.read(tabIndexProvider.notifier).state = 0;
-          showDialog(
-            context: context,
-            builder: (ctx) => BuySellDetailDialog(
-              item: item,
-              onStatusChange: (status) async {
-                await ref.read(buySellRepositoryProvider).updateStatus(item.id, status);
-                ref.invalidate(buySellListingsProvider);
-              },
-            ),
-          );
+          showListingDetail(context, item);
         },
       );
     }).toList();

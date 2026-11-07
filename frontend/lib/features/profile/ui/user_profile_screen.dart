@@ -689,6 +689,34 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                   children: [
                     const SizedBox(height: 4),
                     Text('${item.category.name} • ${item.location} • ${DateTimeFormatter.timeAgo(item.createdAt)}', style: TextStyle(fontSize: 11, color: theme.hintColor)),
+                    if (item.heldForReview) ...[
+                      const SizedBox(height: 6),
+                      // Stays until a moderator decides, so a missed notification doesn't leave the
+                      // seller thinking buyers can see it.
+                      Tooltip(
+                        message: 'Flagged automatically as a possible prohibited item. Buyers can\'t see it '
+                            'until a moderator reviews it.',
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.orange.shade300),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.hourglass_top_rounded, size: 12, color: Colors.orange.shade800),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text('Pending review · hidden from buyers',
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.orange.shade900)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 6),
                     Row(
                       children: [

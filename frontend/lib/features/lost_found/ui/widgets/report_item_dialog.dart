@@ -110,10 +110,9 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
       final cats = await ref.read(lostFoundRepositoryProvider).fetchCategories();
       if (mounted) {
         setState(() {
+          // No category picked for the user: the first one alphabetically is rarely right, and a wrong
+          // default is easy to miss. The picker's validator asks for one instead.
           _availableCategories = cats;
-          if (cats.isNotEmpty) {
-            _selectedCategory = cats.first;
-          }
           _isLoadingCategories = false;
         });
       }
@@ -128,7 +127,6 @@ class _ReportItemDialogState extends ConsumerState<ReportItemDialog> {
             CategoryRef(id: 5, name: 'Documents'),
             CategoryRef(id: 6, name: 'Other'),
           ];
-          _selectedCategory = _availableCategories.first;
           _isLoadingCategories = false;
         });
       }

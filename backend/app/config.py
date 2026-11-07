@@ -118,7 +118,11 @@ class Settings(BaseSettings):
 
     # --- HTTP ---
     api_prefix: str = "/api/v1"
-    cors_allow_origins: list[str] = Field(default_factory=lambda: ["*"])
+    # Websites on other origins allowed to call the API from a browser. None by default: the deployed web
+    # app is served from the same origin as the API (CloudFront), so it needs none. Outside Lambda, a
+    # local web dev server (http://localhost:<port>) is also allowed unless cors_allow_localhost=false.
+    cors_allow_origins: list[str] = Field(default_factory=list)
+    cors_allow_localhost: bool | None = None
     # Swagger and ReDoc. Default: on locally and on EC2, off inside Lambda.
     docs_enabled: bool | None = None
 

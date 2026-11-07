@@ -5,7 +5,7 @@ import app.matching.trigger as trigger
 from app.config import get_settings
 from app.screening import is_gibberish, prohibited_reason
 from app.categories_suggest import suggestion_available
-from .conftest import ADMIN, API, ASHA, MEERA, RAVI, category, grant, make_admin, sign_in, upload
+from .conftest import ADMIN, API, ASHA, MEERA, RAVI, category, grant, image_bytes, make_admin, sign_in, upload
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ def test_lost_and_found_gibberish_is_flagged(client, auto_flag):
 def test_obscene_photo_is_flagged_after_the_response(client, s3, auto_flag, monkeypatch):
     class FakeNsfw:
         def probability(self, data):
-            return 0.97 if data == b"obscene" else 0.01
+            return 0.97 if image_bytes(data) == b"obscene" else 0.01
 
     monkeypatch.setattr(trigger, "match_mode", lambda: "inline")
     monkeypatch.setattr(trigger, "get_nsfw_classifier", lambda: FakeNsfw())

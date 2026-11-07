@@ -40,6 +40,12 @@ module "elasticache" {
   num_cache_clusters      = var.redis_num_cache_clusters
 }
 
+# The web app's own origins (e.g. https://<cloudfront-domain>), taken from the Cognito callback URLs
+# already listed for it. Browsers may call the API and the media bucket cross-origin only from these.
+locals {
+  web_origins = distinct([for url in var.additional_callback_urls : trimsuffix(url, "/")])
+}
+
 # 3. STORAGE TIER (Frontend S3 Bucket, Media/Docs S3 Bucket, CORS, Encryption)
 module "storage" {
   source = "./modules/storage"
@@ -47,6 +53,12 @@ module "storage" {
   environment       = var.environment
   project_name      = var.project_name
   enable_cloudfront = var.enable_cloudfront
+  # Presigned uploads and image downloads come from the web app. (Using the distribution's domain
+  # here is not a cycle: the CDN depends on the frontend bucket, this only on the CORS rule.)
+  media_cors_origins = distinct(concat(
+    local.web_origins,
+    var.enable_cloudfront ? ["https://${module.cdn[0].cloudfront_domain_name}"] : [],
+  ))
 }
 
 # 4. AUTHENTICATION TIER (Cognito User Pool, App Client, 4-Role Groups)
@@ -57,6 +69,7 @@ module "auth" {
   project_name             = var.project_name
   cognito_domain_prefix    = var.cognito_domain_prefix
   additional_callback_urls = var.additional_callback_urls
+  threat_protection        = var.cognito_threat_protection
 }
 
 # 5. BACKEND APP TIER (5 Serverless FastAPI Lambda Microservices in VPC)
@@ -84,6 +97,7 @@ module "compute" {
   redis_host                   = var.enable_elasticache ? module.elasticache[0].primary_endpoint_address : ""
   redis_port                   = var.enable_elasticache ? module.elasticache[0].port : 6379
   redis_auth_secret_arn        = var.enable_elasticache ? module.elasticache[0].auth_token_secret_arn : ""
+  cors_allow_origins           = local.web_origins
 }
 
 # 6. API GATEWAY TIER (HTTP API v2, Cognito JWT Authorizer, Routes, Throttling)
@@ -99,6 +113,7 @@ module "api_gateway" {
   lambda_function_names       = module.compute.lambda_function_names
   throttling_rate_limit       = var.throttling_rate_limit
   throttling_burst_limit      = var.throttling_burst_limit
+  cors_allow_origins          = local.web_origins
 }
 
 # 7. OPTIONAL EDGE SECURITY TIER (AWS WAFv2 - Toggleable to preserve Free Tier)

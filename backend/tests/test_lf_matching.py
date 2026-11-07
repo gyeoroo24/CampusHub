@@ -11,7 +11,7 @@ import pytest
 
 import app.matching.trigger as trigger
 import app.routers.lost_found as lost_found
-from .conftest import ADMIN, API, ASHA, KIRAN, MEERA, RAVI, category, make_admin, sql, upload
+from .conftest import ADMIN, API, ASHA, KIRAN, MEERA, RAVI, category, image_bytes, make_admin, sql, upload
 
 WORDS = ["earbuds", "wallet", "bottle", "black", "brown"]
 EXTRA = 40   # descriptions with none of WORDS get their own direction, so they don't match each other
@@ -42,6 +42,7 @@ class FakeEmbedder:
         return _vec(description)
 
     def image(self, data):
+        data = image_bytes(data)
         self.calls.append(("image", data))
         if data == b"not an image":
             return None

@@ -50,7 +50,7 @@ def _check_url(value: str | None) -> str | None:
 
 # ---------------------------------------------------------------- models
 class CompanyCreate(BaseModel):
-    name: text(120) = Field(examples=["Walmart Global Tech"])
+    name: text(120, single_line=True) = Field(examples=["Walmart Global Tech"])
     description: text(5000, min_length=0) | None = None
     website: text(300, min_length=0) | None = Field(None, examples=["https://careers.walmart.com"])
     industry: text(80, min_length=0) | None = Field(None, examples=["Retail technology"])
@@ -59,7 +59,7 @@ class CompanyCreate(BaseModel):
 
 
 class CompanyUpdate(BaseModel):
-    name: text(120) | None = None
+    name: text(120, single_line=True) | None = None
     description: text(5000, min_length=0) | None = None
     website: text(300, min_length=0) | None = None
     industry: text(80, min_length=0) | None = None
@@ -71,7 +71,7 @@ JobType = Literal["full_time", "internship", "ppo", "other"]
 
 
 class JobDescriptionIn(BaseModel):
-    role_title: text(200) = Field(examples=["Software Engineer"])
+    role_title: text(200, single_line=True) = Field(examples=["Software Engineer"])
     description: text(20_000, min_length=0) | None = Field(None, description="The JD as text")
     compensation: text(200, min_length=0) | None = Field(
         None, examples=["₹32 LPA"], description="As announced; the amount is read from it (ctc_min / ctc_max)")
@@ -84,7 +84,7 @@ class JobDescriptionIn(BaseModel):
 
 
 class JobDescriptionUpdate(BaseModel):
-    role_title: text(200) | None = None
+    role_title: text(200, single_line=True) | None = None
     description: text(20_000, min_length=0) | None = None
     compensation: text(200, min_length=0) | None = None
     placement_year: int | None = Field(None, ge=2000, le=2100)
@@ -109,14 +109,14 @@ class PptUpdate(BaseModel):
 
 
 class InterviewCreate(BaseModel):
-    role_title: text(200) = Field(examples=["SDE"])
+    role_title: text(200, single_line=True) = Field(examples=["SDE"])
     placement_year: int | None = Field(None, ge=2000, le=2100, description="The placement season, e.g. 2026")
     content: text(20_000) = Field(description="Rounds, questions, tips")
     is_anonymous: bool = Field(False, description="Hide your name from everyone else")
 
 
 class InterviewUpdate(BaseModel):
-    role_title: text(200) | None = None
+    role_title: text(200, single_line=True) | None = None
     placement_year: int | None = Field(None, ge=2000, le=2100)
     content: text(20_000) | None = None
     is_anonymous: bool | None = None

@@ -123,8 +123,23 @@ def grant(client, by, email, module, scope_type="module", department_id=None, co
         "department_id": department_id, "course_id": course_id})
 
 
+# The API checks a file's first bytes match its type, so fake test images start with a real signature.
+IMAGE_HEADERS = {"image/jpeg": b"\xff\xd8\xff\xe0", "image/png": b"\x89PNG\r\n\x1a\n"}
+
+
+def image_bytes(content: bytes) -> bytes:
+    """The test's fake image content without the signature upload() put in front of it."""
+    for header in IMAGE_HEADERS.values():
+        if content.startswith(header):
+            return content[len(header):]
+    return content
+
+
 def upload(client, s3, headers, kind, content=b"fake image bytes", content_type="image/jpeg", course_id=None) -> str:
     """Get an upload ticket, then put the file in (mocked) S3 the way the app would."""
+    header = IMAGE_HEADERS.get(content_type, b"")
+    if not content.startswith(header):
+        content = header + content
     checksum = base64.b64encode(hashlib.sha256(content).digest()).decode()
     r = client.post(f"{API}/uploads", headers=headers, json={
         "kind": kind, "content_type": content_type, "size_bytes": len(content),

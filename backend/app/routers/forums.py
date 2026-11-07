@@ -39,12 +39,12 @@ class Forum(BaseModel):
 
 
 class ThreadCreate(BaseModel):
-    title: text(200)
+    title: text(200, single_line=True)
     content: text(10_000) = Field(description="The opening post")
 
 
 class ThreadUpdate(BaseModel):
-    title: text(200)
+    title: text(200, single_line=True)
 
 
 class CommentIn(BaseModel):

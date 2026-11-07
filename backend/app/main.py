@@ -89,7 +89,9 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if docs else None,
         openapi_url="/openapi.json" if docs else None,
     )
+    allow_localhost = settings.cors_allow_localhost if settings.cors_allow_localhost is not None else not in_lambda()
     app.add_middleware(CORSMiddleware, allow_origins=settings.cors_allow_origins,
+                       allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?" if allow_localhost else None,
                        allow_methods=["*"], allow_headers=["*"])
     install_error_handlers(app)
     # Every route checks the caller's token, even ones guests can use, so a bad or expired token

@@ -127,20 +127,32 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
                     );
                   }),
                   const SizedBox(height: 10),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SegmentedButton<EventsView>(
+                  // On a phone the full labels with icons are wider than the screen, and a mouse can't
+                  // drag a horizontal scroll on the web, so "Saved" was unreachable: drop the icons and
+                  // shorten the first label instead, so all three always fit.
+                  LayoutBuilder(builder: (context, constraints) {
+                    final narrow = constraints.maxWidth < 440;
+                    return SegmentedButton<EventsView>(
                       showSelectedIcon: false,
                       style: const ButtonStyle(visualDensity: VisualDensity.compact),
-                      segments: const [
-                        ButtonSegment(value: EventsView.now, label: Text('Now & upcoming'), icon: Icon(Icons.upcoming_outlined)),
-                        ButtonSegment(value: EventsView.past, label: Text('Past'), icon: Icon(Icons.history_rounded)),
-                        ButtonSegment(value: EventsView.saved, label: Text('Saved'), icon: Icon(Icons.bookmark_outline_rounded)),
+                      segments: [
+                        ButtonSegment(
+                            value: EventsView.now,
+                            label: Text(narrow ? 'Upcoming' : 'Now & upcoming'),
+                            icon: narrow ? null : const Icon(Icons.upcoming_outlined)),
+                        ButtonSegment(
+                            value: EventsView.past,
+                            label: const Text('Past'),
+                            icon: narrow ? null : const Icon(Icons.history_rounded)),
+                        ButtonSegment(
+                            value: EventsView.saved,
+                            label: const Text('Saved'),
+                            icon: narrow ? null : const Icon(Icons.bookmark_outline_rounded)),
                       ],
                       selected: {filter.view},
                       onSelectionChanged: (s) => setFilter(filter.copyWith(view: s.first)),
-                    ),
-                  ),
+                    );
+                  }),
                 ],
               ),
             ),

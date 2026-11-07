@@ -22,10 +22,16 @@ class BuySellDetailDialog extends ConsumerWidget {
   final ListingItem item;
   final ValueChanged<ListingStatus>? onStatusChange;
 
+  /// Give the dialog its own browser-history entry, so browser back closes it. Off when the dialog is
+  /// a router page (`/buy/<id>`, listing_links.dart): the router already owns that history entry, and a
+  /// second one made closing the dialog step back onto the listing's address and reopen it.
+  final bool ownHistoryEntry;
+
   const BuySellDetailDialog({
     super.key,
     required this.item,
     this.onStatusChange,
+    this.ownHistoryEntry = true,
   });
 
   @override
@@ -55,6 +61,7 @@ class BuySellDetailDialog extends ConsumerWidget {
     }
 
     return ModalHistoryWrapper(
+      enabled: ownHistoryEntry,
       child: Dialog(
         backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
         surfaceTintColor: Colors.transparent,

@@ -437,7 +437,8 @@ Every setting is an environment variable with the prefix `CAMPUSHUB_` (`app/conf
 | `CAMPUSHUB_REDIS_HOST`, `CAMPUSHUB_REDIS_PORT`, `CAMPUSHUB_REDIS_TLS` | unset, 6379, false | Redis cache. Unset host = no cache |
 | `CAMPUSHUB_REDIS_AUTH_SECRET_ARN` or `CAMPUSHUB_REDIS_AUTH_TOKEN` | unset | Redis AUTH token: the secret's ARN (Lambda) or the value itself |
 | `CAMPUSHUB_REDIS_DEFAULT_TTL_SECONDS` | 20 | Cache lifetime for list endpoints |
-| `CAMPUSHUB_CORS_ALLOW_ORIGINS` | `["*"]` | Allowed browser origins |
+| `CAMPUSHUB_CORS_ALLOW_ORIGINS` | `[]` | Other websites allowed to call the API from a browser, e.g. `["https://app.example.org"]`. The deployed web app is same-origin (CloudFront) and needs none |
+| `CAMPUSHUB_CORS_ALLOW_LOCALHOST` | on, except in Lambda | Also allow `http://localhost:<port>`, for a local web dev server |
 | `CAMPUSHUB_MATCH_MODE` | `auto` | Lost & Found matching: `auto`, `lambda`, `inline` or `off` |
 | `CAMPUSHUB_SENTIMENT_BACKEND` | `auto` | Course-feedback sentiment: local model if present, otherwise a word list |
 | `CAMPUSHUB_AUTO_FLAG` | true | Automatic flagging of new posts |

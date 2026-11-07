@@ -15,3 +15,9 @@ variable "enable_cloudfront" {
   type        = bool
   default     = false
 }
+
+variable "media_cors_origins" {
+  description = "Origins allowed to upload to / read from the media bucket from a browser (the web app's)"
+  type        = list(string)
+  default     = []
+}

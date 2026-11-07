@@ -53,7 +53,7 @@ def _aware(value: datetime | None, name: str) -> None:
 
 # ---------------------------------------------------------------- models
 class EventCreate(BaseModel):
-    title: text(150) = Field(examples=["Bird walk around the campus"])
+    title: text(150, single_line=True) = Field(examples=["Bird walk around the campus"])
     description: text(5000, min_length=0) | None = None
     location: text(200, min_length=0) | None = Field(None, examples=["Main gate"])
     start_time: datetime
@@ -75,7 +75,7 @@ class EventCreate(BaseModel):
 
 
 class EventUpdate(BaseModel):
-    title: text(150) | None = None
+    title: text(150, single_line=True) | None = None
     description: text(5000, min_length=0) | None = None
     location: text(200, min_length=0) | None = None
     start_time: datetime | None = None
@@ -114,7 +114,7 @@ class EventUpdateOut(BaseModel):
 
 
 class TagIn(BaseModel):
-    name: text(40) = Field(examples=["Photography"])
+    name: text(40, single_line=True) = Field(examples=["Photography"])
 
 
 class EventTag(BaseModel):
