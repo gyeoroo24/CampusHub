@@ -1,5 +1,5 @@
 -- ============================================================================
--- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 25
+-- CampusHub — PostgreSQL schema (AWS RDS, PostgreSQL 15+) — Revision 26
 -- DS252 Introduction to Cloud Computing — Team "Order of Phoenix"
 --
 -- Permission modules (FR-2, NFR-6): buy_sell, lost_found, academic_help,

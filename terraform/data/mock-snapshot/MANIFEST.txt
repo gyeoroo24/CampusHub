@@ -21,6 +21,6 @@ and clearly marked with "Mock"/"Fictional"/"mock.*@iisc.ac.in" style names,
 emails and content so it can never be confused with real data.
 
 The users table intentionally contains zero admin accounts. See the root
-README.md section "5.7 Load the database" and "7.3 Administrator and
+readme.md section "5.7 Load the database" and "7.3 Administrator and
 moderator tasks" for how to create your own first admin after importing
 this snapshot.

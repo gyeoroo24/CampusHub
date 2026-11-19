@@ -14,15 +14,15 @@ compared (PRD section 7):
 - **Serverless** (this branch, deployed at the URL above): CloudFront → API Gateway → AWS Lambda.
 - **EC2 baseline**: CloudFront → Application Load Balancer → EC2 Auto Scaling group. This architecture
   was only built to produce the comparison in [section 3](#3-serverless-vs-ec2-baseline); its branch,
-  `[STALE]-baseline-infra`, was created for the purpose of comparison and is no longer active.
+  `STALE]-baseline-infra`, was created for the purpose of comparison and is no longer active.
 
 Both use PostgreSQL on RDS, ElastiCache Redis, S3 and Cognito.
 
 | Document | For |
 |---|---|
-| **README.md** (this file) | Installing, deploying and using CampusHub |
+| **readme.md** (this file) | Installing, deploying and using CampusHub |
 | [PRD.md](PRD.md) | The original project requirements (the plan) |
-| [DEV.md](DEV.md) | Developers: what each part of the codebase does and how to change it |
+| [dev.md](dev.md) | Developers: what each part of the codebase does and how to change it |
 
 ## Table of contents
 
@@ -35,11 +35,10 @@ Both use PostgreSQL on RDS, ElastiCache Redis, S3 and Cognito.
 7. [Using CampusHub](#7-using-campushub)
 8. [Tests](#8-tests)
 9. [Performance and metrics](#9-performance-and-metrics)
-10. [Cost](#10-cost)
-11. [Tear down](#11-tear-down)
-12. [Documentation index](#12-documentation-index)
-13. [Troubleshooting](#13-troubleshooting)
-14. [Team](#14-team)
+10. [Tear down](#10-tear-down)
+11. [Documentation index](#11-documentation-index)
+12. [Troubleshooting](#12-troubleshooting)
+13. [Team](#13-team)
 
 ## 1. Branches
 
@@ -47,12 +46,12 @@ The `main` branch is the serverless architecture that is actually deployed and m
 
 | Branch | Deploys | Compute | Terraform `environment` | State key |
 |---|---|---|---|---|
-| **`main`** | Serverless | 5 AWS Lambda functions (Python 3.11, zip package) behind API Gateway HTTP API | `dev` | `campushub/dev/terraform.tfstate` |
+| **`main`** | Serverless | 5 API Lambda functions (Python 3.11, zip package) behind API Gateway HTTP API, plus the push-sender and data-tools functions | `dev` | `campushub/dev/terraform.tfstate` |
 
 An EC2-based baseline architecture (Auto Scaling group + Application Load Balancer, `baseline`
 environment, `campushub/baseline/terraform.tfstate`) was also built, purely to produce the serverless
 vs. EC2 comparison in [section 3](#3-serverless-vs-ec2-baseline). That work lived on the
-`[STALE]-baseline-infra` branch --- it was never meant to be a second
+`STALE]-baseline-infra` branch --- it was never meant to be a second
 long-lived deployment, only a point of comparison, and the comparison's results are kept here instead
 of on that branch.
 
@@ -65,30 +64,35 @@ ways:
 
 1. **CloudFront edge cache.** 11 list/browse paths (`listings`, `lost-reports`, `found-reports`, `wanted`,
    `events`, `event-tags`, `departments`, `courses`, `messes`, `companies`, `placement/stats`) are cached
-   for 20 s (60 s max). The cache key includes the `Authorization` header and the query string, so two
-   users never share a response. Writes are never cached.
+   for 20 s (60 s max). The cache key includes the `Authorization` header and the query string. In
+   practice only guests' responses are edge-cached: the API marks every signed-in GET
+   `Cache-Control: private, no-store` (`backend/app/main.py`), so signed-in users always reach the
+   origin, and `companies` (sign-in only) is never cached. Writes are never cached.
 2. **ElastiCache Redis** (`backend/app/cache.py`). On a CloudFront miss, the Lambda checks Redis before
    querying Postgres, for 7 of those paths (`listings`, `lost-reports`, `found-reports`, `events`,
    `departments`, `courses`, `messes`). If Redis is down, the app serves the request uncached; it never fails because of
    Redis.
-3. **RDS PostgreSQL**, the system of record. RDS Proxy is a poposed (best-practice) in addition to RDS for connection pooling but due to constraints in Free-Tier account, that couldn't be tested. For now, only RDS Single Instance (Multi-AZ for HA) is enabled.
+3. **RDS PostgreSQL**, the system of record. RDS Proxy is a proposed (best-practice) addition to RDS for
+   connection pooling, but it could not be tested within the Free Tier account, so it is off
+   (`enable_rds_proxy = false`). The database is a single RDS instance; `multi_az_db` (default `true`)
+   adds a standby replica in a second Availability Zone for high availability.
 
  - **Secrets :** Lambda environment variables hold only Secrets Manager ARNs. The database password and the
 Redis AUTH token are read from Secrets Manager when a container starts.
 
 ## 3. Serverless vs EC2 baseline
 
-| | Serverless (this branch) | EC2 baseline (`baseline-infra-restore`) |
+| | Serverless (this branch) | EC2 baseline (`STALE]-baseline-infra`) |
 |---|---|---|
 | API entry point | API Gateway HTTP API | Application Load Balancer (port 80, `X-Origin-Verify` header from CloudFront) |
-| Compute | 5 Lambda functions, 512 MB (community-events 1024 MB), 29 s timeout | Auto Scaling group: min 3, desired 3, max 5; scales on 60 % CPU or 200 requests per instance |
+| Compute | 5 API Lambda functions, 512 MB (community-events 1024 MB), 29 s timeout | Auto Scaling group: min 3, desired 3, max 5; scales on 60 % CPU or 200 requests per instance |
 | Packaging | `build_lambda_zip.sh` builds a zip at `terraform apply` | `backend.zip` uploaded to S3; user data installs it and runs uvicorn under systemd |
 | Scaling | Per request, automatic | New instance in a few minutes when CPU passes the target |
 | DB connections | 2 per Lambda container (RDS Proxy optional) | Pool of 16 per uvicorn worker, 2 workers per instance |
 | Idle cost | Lambda/API Gateway: near zero | Instance and ALB billed every hour |
 | Schema on a new database | Load it yourself (restore or `migrate` action) | User data creates it at first boot |
 | Frontend token refresh | Refreshes the Cognito ID token on a 401 and retries | Not included; users are signed out when the token expires (about 1 hour) |
-| Measured performance at 101 users ([section 8](#9-performance-and-metrics)) | p50 53 ms, p99 140 ms, 0 % errors | p50 110 ms, p99 160 ms, 0 % errors |
+| Measured performance at 101 users ([section 9](#9-performance-and-metrics)) | p50 53 ms, p99 140 ms, 0 % errors | p50 110 ms, p99 160 ms, 0 % errors |
 | Measured performance at 501 users | 84 % errors (database connections exhausted by 399 concurrent Lambdas) | 7 % errors, p99 47 s (requests queue) |
 
 **Baseline Architecture**
@@ -101,9 +105,9 @@ Redis AUTH token are read from Secrets Manager when a container starts.
 backend/      FastAPI application, tests, SQL schema and migrations        -> backend/README.md
 frontend/     Flutter web app                                              -> frontend/README.md
 terraform/    All AWS infrastructure, helper scripts, smoke tests         -> terraform/README.md
-docs/         PRD, API reference, schema diagrams, deployment logs, session notes
+docs/         API reference, schema diagrams, deployment logs, accuracy reports
 PRD.md        The original project requirements, in Markdown
-DEV.md        Developer guide: what each part of the codebase does
+dev.md        Developer guide: what each part of the codebase does
 locust_load_testing/   (on main) Locust load-test suite and benchmark results
 Cloud_Computing_Project-PRD.pdf        Product requirements
 Proposal-Architecture-Lambda.jpg   The serverless design this branch implements
@@ -114,7 +118,7 @@ Baseline.jpg              The EC2 baseline design
 
 These are the steps used for the deployment as of 7 November 2026, in `ap-south-1`. Module and variable
 detail is in [terraform/README.md](terraform/README.md). If a step fails, see
-[Troubleshooting](#13-troubleshooting).
+[Troubleshooting](#12-troubleshooting).
 
 ### 5.1 Prerequisites
 
@@ -188,6 +192,14 @@ additional_callback_urls = ["https://<cloudfront_domain_name>/"]
 terraform apply
 ```
 
+**Web Push keys (once per environment).** `enable_web_push` is on by default, but browser push
+notifications stay off until the VAPID key pair exists in SSM Parameter Store. Create it once, from
+`terraform/` (needs `python3` with `cryptography`; the backend venv from 6.3 has it):
+
+```bash
+./scripts/create_vapid_keys.sh        # environment "dev"; safe to run again, existing keys are kept
+```
+
 ### 5.7 Load the database
 
 A new RDS database is empty. Load it in one of two ways.
@@ -223,10 +235,11 @@ with no pre-seeded admin, for the same reason.
 
 Either way, then apply every migration in `backend/db/migrations/` newer than the snapshot, in order. The
 snapshot of 3 November 2026 (and the mock snapshot generated from its schema) is at revision 24, so it
-needs `025_company_created_by.sql` and `026_unblock_requests_bookmarks.sql`:
+needs `025_company_created_by.sql` and `026_unblock_requests_bookmarks.sql`, then the one-off data
+cleanup `027_audit_cleanup.sql` (no schema change; it removes leftover bookmark and photo rows):
 
 ```bash
-for m in 025_company_created_by 026_unblock_requests_bookmarks; do
+for m in 025_company_created_by 026_unblock_requests_bookmarks 027_audit_cleanup; do
   python3 -c 'import json,sys; print(json.dumps({"action":"migrate","sql":open(sys.argv[1]).read()}))' \
     ../backend/db/migrations/$m.sql > /tmp/migrate.json
   aws lambda invoke --function-name "$(terraform output -raw data_tools_function_name)" \
@@ -284,11 +297,13 @@ instead of Cognito.
 
 | Tool | Version |
 |---|---|
-| Docker Desktop | Any recent version |
-| Python | 3.12 or 3.13 (asyncpg 0.30.0 has no 3.14 wheels) |
+| Docker Desktop | Any recent version. **It must be running** before step 6.2 (otherwise `docker compose` fails with "failed to connect to the docker API") |
+| Python | **3.12 or 3.13 only.** Python 3.14 does not work: `pip install` fails building `pydantic-core`, and asyncpg 0.30.0 has no 3.14 wheels. Check with `python3.12 --version`. If it is missing, install it, for example `brew install python@3.12` on macOS, or let `uv` create the venv in step 6.3 |
 | Flutter | Stable channel, with Chrome for `flutter run -d chrome` |
 
 ### 6.2 Start the database and file storage
+
+Start Docker Desktop first and wait until it says it is running. Then:
 
 ```bash
 cd backend
@@ -314,6 +329,19 @@ cp .env.local.example .env          # dev sign-in, local MinIO
 uvicorn app.main:app --reload --env-file .env
 ```
 
+If `python3.12: command not found`, install Python 3.12 (see 6.1) or create the venv with `uv`, then
+continue with the same `pip install` line:
+
+```bash
+uv venv --seed --python 3.12 .venv && source .venv/bin/activate
+```
+
+**On Windows** (PowerShell), replace the first line with `py -3.12 -m venv .venv` and
+`.venv\Scripts\activate`; the other lines are the same. On Windows, `requirements.txt` also installs
+`tzdata`, the time zone data Python needs there. If uvicorn stops with
+`ZoneInfoNotFoundError: 'No time zone found with key Asia/Kolkata'`, the venv was set up before that:
+run the `pip install -r requirements-dev.txt` line again.
+
 Open http://localhost:8000/docs for the interactive API, and http://localhost:8000/api/v1/health for a
 quick check. `--env-file` is required: it also passes the MinIO keys to boto3.
 
@@ -323,7 +351,22 @@ quick check. `--env-file` is required: it also passes the MinIO keys to boto3.
 python scripts/seed_dummy_data.py            # 50 students, courses, listings, events, chats, ...
 ```
 
-To make yourself the admin (sign in once first; the database allows exactly one admin):
+The database allows exactly one admin. **On an empty database the seed script makes one**:
+`ananya.rao@iisc.ac.in` (if an admin already exists, the seed keeps that admin). You can sign in as that user straight away. If you ran the seed and want a
+different account to be the admin, sign in as that account once, then hand the role over in one step
+(a plain `UPDATE ... SET base_role = 'admin'` fails with `uq_users_single_admin` while the seeded admin
+exists):
+
+```bash
+docker compose exec -T db psql -U campushub <<'EOF'
+BEGIN;
+UPDATE users SET base_role = 'signed_in' WHERE base_role = 'admin';
+UPDATE users SET base_role = 'admin' WHERE email = 'you@iisc.ac.in';
+COMMIT;
+EOF
+```
+
+Without the seed data, there is no admin yet. After you have signed in once, the plain command works:
 
 ```bash
 docker compose exec db psql -U campushub -c "UPDATE users SET base_role = 'admin' WHERE email = 'you@iisc.ac.in';"
@@ -371,17 +414,18 @@ local database): [backend/README.md](backend/README.md#run-it-locally) and
 
 ## 7. Using CampusHub
 
-Open the site (the CloudFront URL on AWS, or `flutter run` locally). Anyone can browse; signing in with an
-`@iisc.ac.in` email unlocks posting.
+Open the site (the CloudFront URL on AWS, or `flutter run` locally). It opens on the Buy & Sell page.
+Anyone can browse every module except Placement Hub, which is confidential: guests see only its season
+totals. Signing in with an `@iisc.ac.in` email unlocks posting and the rest of Placement Hub.
 
 ### 7.1 Roles
 
 | Role | Can do |
 |---|---|
-| **Guest** (not signed in) | Read every public feed: listings, Lost & Found, courses, placement pages, events, mess menus |
-| **Signed-in user** | Everything a guest can, plus create, edit and delete their own posts, feedback, forum threads and profile; message other users; bookmark, follow and save searches |
+| **Guest** (not signed in) | Read the public feeds: listings, Lost & Found, courses, events, mess menus. From Placement Hub, only the season totals (`GET /api/v1/placement/stats`) |
+| **Signed-in user** | Everything a guest can, plus all of Placement Hub (companies, schedules, hiring statistics, interview experiences, seniors, company forums); create, edit and delete their own posts, feedback, forum threads and profile; message other users; bookmark, follow and save searches |
 | **Moderator** | Scoped by the admin to a module (Buy & Sell, Lost & Found, Placement Hub, Events) or, for Academic Help, a department or a single course. Removes posts in their scope and handles reports; department moderators manage courses, materials and course moderators |
-| **Administrator** | Exactly one account. Everything, plus granting and revoking moderators, deactivating accounts, editing campus services and handing the admin role to someone else |
+| **Administrator** | Exactly one account. Every moderator power in every module (removing posts, handling reports), plus granting and revoking moderators, editing campus services and handing the admin role to someone else. Only a listing's seller can edit it |
 
 ### 7.2 What each module does
 
@@ -391,7 +435,7 @@ Open the site (the CloudFront URL on AWS, or `flutter run` locally). Anyone can 
 | Wanted | Post what you are looking for; you get an alert when a matching listing is posted |
 | Lost & Found | File a lost or found report; see likely matches and get notified of them |
 | Academic Help | Browse departments and courses; read and post course feedback; share materials; follow a course; read its survival guide; discuss in course forums |
-| Placement Hub | Company pages with job descriptions, pre-placement talks, hiring statistics, interview experiences, seniors to contact and a company forum |
+| Placement Hub | Signed-in users only (guests see season totals). Company pages with job descriptions, pre-placement talks, hiring statistics, interview experiences, seniors to contact and a company forum |
 | Events | Timeline of Past / Present / Upcoming events, filtered by tag; bookmark events and follow tags for updates |
 | Mess | Daily menus per mess; follow a mess for meal alerts |
 | Messages | One chat per person; offers that reserve a listing |
@@ -400,7 +444,9 @@ Open the site (the CloudFront URL on AWS, or `flutter run` locally). Anyone can 
 
 ### 7.3 Administrator and moderator tasks
 
-**Make the first admin.** The database allows exactly one admin. After the person has signed in once:
+**Make the first admin.** The database allows exactly one admin. After the person has signed in once
+(locally, if you loaded the demo data, an admin already exists; see [6.4](#64-optional-demo-data-admin-redis)
+for how to hand the role over):
 
 ```bash
 # Locally
@@ -420,7 +466,7 @@ After that, the admin hands the role over from the app (or `POST /api/v1/users/{
 | Review reported content | Moderators of that module, admin | Reports queue |
 | Handle seller strikes, appeals and unblock requests | Buy & Sell moderators, admin | Admin panel → unblock requests |
 | Import placement sheets, company lists and schedules | Placement Hub moderators | Placement Hub import; column formats in [docs/api-reference.md § Placement Hub](docs/api-reference.md#placement-hub) |
-| Edit landing-page campus services | Admin | `PATCH /api/v1/campus-services/{id}` |
+| Edit campus services (the Campus services dialog in the top bar) | Admin | `PATCH /api/v1/campus-services/{id}` |
 
 ### 7.4 Using the API directly
 
@@ -433,7 +479,7 @@ After that, the admin hands the role over from the app (or `POST /api/v1/users/{
 ## 8. Tests
 
 ```bash
-cd backend && pytest                 # needs the docker compose database
+cd backend && source .venv/bin/activate && pytest    # run from backend/ with the venv from 6.3 active; needs the docker compose database (6.2)
 cd frontend && flutter test
 ```
 
@@ -445,14 +491,14 @@ PRD Experiment 1 (concurrency and scalability) was run on 6 November 2026 agains
 Locust suite in [`locust_load_testing/`](https://github.com/gyeoroo24/CampusHub/tree/main/locust_load_testing)
 (on `main`). The full report, with per-endpoint tables, is
 [`locust_load_testing/output/BENCHMARK_SUMMARY.md`](https://github.com/gyeoroo24/CampusHub/blob/main/locust_load_testing/output/BENCHMARK_SUMMARY.md).
-The root-cause figures in 8.4 come from CloudWatch for the serverless stack.
+The root-cause figures in [PRD.md section 8](PRD.md#8-evaluation-serverless-vs-ec2) come from CloudWatch for the serverless stack.
 
 ### 9.1 Test setup
 
 | Item | Serverless (Lambda) | EC2 baseline |
 |---|---|---|
 | Target | API Gateway URL of the `dev` stack | ALB of the `baseline` stack |
-| Compute | 5 Lambda functions, account limit 400 concurrent executions | 3 x `t4g.micro` in the Auto Scaling group at desired capacity and max capacity is 5 x `t4g.micro` |
+| Compute | 5 API Lambda functions, account limit 400 concurrent executions | 3 x `t4g.micro` in the Auto Scaling group at desired capacity and max capacity is 5 x `t4g.micro` |
 | Database | RDS PostgreSQL `db.t4g.micro` (Multi-AZ), RDS Proxy **off** | RDS PostgreSQL `db.t4g.micro` |
 | Load tool | Locust 2.47.0, distributed over all local CPU cores (`--processes -1`) | same |
 | Workload | Preset `acad_placement_preset`: 17 weighted read-only `GET` endpoints from Academic Help and Placement Hub, plus `/health`, with a Cognito ID token | same |
@@ -524,8 +570,10 @@ terraform destroy
 ```
 
 Both S3 buckets use `force_destroy`, so their contents are deleted too. The state bucket from
-`bootstrap/` is not removed by this; destroy it from `terraform/bootstrap` when you no longer need the
-state using 
+`bootstrap/` is not removed by this. It is protected on purpose (`prevent_destroy = true` and
+`force_destroy = false` in `terraform/bootstrap/main.tf`), so a plain `terraform destroy` there refuses
+to delete it. When you no longer need the state: remove the `prevent_destroy` line, empty the bucket
+(it is versioned, so delete every object version), then run
 
 ```bash
 cd terraform/bootstrap
@@ -537,7 +585,7 @@ terraform destroy
 | Document | Contents |
 |---|---|
 | [PRD.md](PRD.md) | The original project requirements (Markdown copy of the PRD PDF) |
-| [DEV.md](DEV.md) | Developer guide: code map, request flow, conventions, common tasks |
+| [dev.md](dev.md) | Developer guide: code map, request flow, conventions, common tasks |
 | [backend/README.md](backend/README.md) | Running, testing and configuring the API; every endpoint |
 | [frontend/README.md](frontend/README.md) | Flutter app structure, build flags, deploy |
 | [terraform/README.md](terraform/README.md) | Modules, variables, outputs, troubleshooting |
@@ -547,7 +595,6 @@ terraform destroy
 | [docs/restoring the data snapshot.md](docs/restoring%20the%20data%20snapshot.md) | Export and restore data between deployments |
 | [docs/deployment errors resolution.md](docs/deployment%20errors%20resolution.md) | Errors hit while deploying the Lambda stack, with fixes |
 | [docs/category-suggest-accuracy.md](docs/category-suggest-accuracy.md), [docs/auto-flag-accuracy.md](docs/auto-flag-accuracy.md) | ML feature evaluations |
-| `docs/session-notes-*.md` | What each work session added and fixed |
 | [Cloud_Computing_Project-PRD.pdf](Cloud_Computing_Project-PRD.pdf) | Product requirements |
 
 ## 12. Troubleshooting
@@ -564,7 +611,7 @@ terraform destroy
 | 5.7 / 5.9 | API returns 500; Lambda logs show `relation "listings" does not exist` | The new RDS database is empty | Load the schema or restore a snapshot (step 5.7) |
 | 5.9 sign-in | Cognito Hosted UI shows `redirect_mismatch` | The CloudFront URL is not an allowed callback | Step 5.6: add it to `additional_callback_urls` and apply |
 | 7 tests | `terraform/tests/smoke_test.py` scores 0/10 (all 404) against a working stack | The script calls old paths (`/api/buy-sell/health`, `/api/<module>/items`) instead of `/api/v1/...`; `test_permission_matrix.py` too | Use the `curl` checks in step 5.9 |
-| After deploy | Calls to Amazon Comprehend or to another Lambda time out | The private subnets have no endpoint for those services | Only if `CAMPUSHUB_SENTIMENT_BACKEND=comprehend` or `CAMPUSHUB_MATCH_MODE=lambda`; add the interface endpoints or a NAT Gateway first |
+| After deploy | Calls to Amazon Comprehend time out; so do calls to another Lambda when `enable_web_push = false` | The private subnets have no NAT Gateway and no Comprehend endpoint. The Lambda interface endpoint exists only with `enable_web_push = true` (the default) | Only if `CAMPUSHUB_SENTIMENT_BACKEND=comprehend` or `CAMPUSHUB_MATCH_MODE=lambda`; add the interface endpoint or a NAT Gateway first |
 | 6.5 local | Reloading `/events` on `python3 -m http.server` returns 404 | `http.server` has no fallback to `index.html` | Open the site from `/`, or use `flutter run` |
 
 Logs: `aws logs tail /aws/lambda/campushub-dev-<function> --since 15m`. More rows, including the first

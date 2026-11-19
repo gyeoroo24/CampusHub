@@ -101,7 +101,8 @@ resource "aws_s3_bucket_versioning" "media" {
   }
 }
 
-# Server-side encryption with KMS/AES256 (NFR-7)
+# Server-side encryption with S3-managed keys (SSE-S3, AES-256). A customer-managed KMS key (v1 NFR-7)
+# falls outside the AWS Free Tier this project runs on; it is the proposed design if funded.
 resource "aws_s3_bucket_server_side_encryption_configuration" "media" {
   bucket = aws_s3_bucket.media.id
 

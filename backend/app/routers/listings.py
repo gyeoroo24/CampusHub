@@ -16,7 +16,7 @@ from .. import cache
 from ..alerts import listing_alerts, push_alerts
 from ..auth import CurrentUser, current_user, optional_user
 from ..common import (MAX_INT_ID, CategoryId, CategoryRef, Contact, Page, PageParams, Photo, UserRef, forbidden,
-                      make_page, not_found, page_params, search_text, set_clause, text)
+                      keyword_tsquery, make_page, not_found, page_params, search_text, set_clause, text)
 from ..db import get_conn
 from ..permissions import close_reports, is_module_moderator, log_moderation
 from ..notify import create_notifications, deliver_push
@@ -32,6 +32,8 @@ ListingSort = Literal["newest", "price_asc", "price_desc"]
 _ORDER = {"newest": "l.created_at DESC, l.id DESC",
           "price_asc": "l.price ASC, l.created_at DESC, l.id DESC",
           "price_desc": "l.price DESC, l.created_at DESC, l.id DESC"}
+# The keyword filter for q ($5); the last word also matches as a prefix while it's being typed.
+_KEYWORDS = keyword_tsquery("$5::text")
 MAX_PHOTOS = 10
 DESCRIPTION_PREVIEW = 300
 
@@ -184,7 +186,8 @@ async def _insert_photos(conn: asyncpg.Connection, listing_id: UUID, keys: list[
 
 @router.get("", response_model=Page[ListingSummary], summary="Browse and search listings (guests allowed)")
 async def list_listings(
-    q: str | None = Query(None, max_length=200, description="Keyword search over title and description"),
+    q: str | None = Query(None, max_length=200, description="Keyword search over title and description; "
+                          "the last word also matches as a prefix (\"phon\" finds \"phone\")"),
     category_id: int | None = Query(None, ge=1, le=MAX_INT_ID),
     min_price: Decimal | None = Query(None, ge=0),
     max_price: Decimal | None = Query(None, ge=0),
@@ -205,8 +208,7 @@ async def list_listings(
               AND ($2::numeric IS NULL OR l.price >= $2)
               AND ($3::numeric IS NULL OR l.price <= $3)
               AND ($4::text[] IS NULL OR l.status::text = ANY($4::text[]))
-              AND ($5::text IS NULL OR numnode(websearch_to_tsquery('english', $5)) = 0
-                   OR l.search_vector @@ websearch_to_tsquery('english', $5))
+              AND ($5::text IS NULL OR numnode({_KEYWORDS}) = 0 OR l.search_vector @@ {_KEYWORDS})
               AND ($6::uuid IS NULL OR l.seller_id = $6)
             ORDER BY {_ORDER[sort]}
             LIMIT $7 OFFSET $8""",

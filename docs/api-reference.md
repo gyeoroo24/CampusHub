@@ -4,10 +4,10 @@ Last updated 7 Nov 2026. For the exact JSON of every request and response, run t
 
 ## Overview
 
-The CampusHub backend exposes 202 endpoints under `/api/v1` (plus 2 local-only sign-in endpoints that 404 outside dev mode; see Sign-in and roles). This page lists each one, who may call it, and the fields it takes and returns, so screens can be designed around real data.
+The CampusHub backend exposes 217 endpoints under `/api/v1` (plus 2 local-only sign-in endpoints that 404 outside dev mode; see Sign-in and roles). This page lists each one, who may call it, and the fields it takes and returns, so screens can be designed around real data.
 
 - **Base URL (local):** `http://localhost:8000/api/v1`.
-- **Base URL (cloud):** `https://<cloudfront-domain>/api/v1` — same paths, the host changes. See [README.md](../README.md#5-deploy-to-aws) for how a deployment's domain is found.
+- **Base URL (cloud):** `https://<cloudfront-domain>/api/v1` — same paths, the host changes. See [readme.md](../readme.md#5-deploy-to-aws) for how a deployment's domain is found.
 - **Try it live:** `http://localhost:8000/docs` (Swagger) shows the exact JSON for every request and response, and lets you send real calls.
 - **Modules:** sign-in and profiles, Buy & Sell, Wanted posts, seller trust and moderation, Lost & Found, saved searches and alerts, Academic Help (with the course survival guide), forums, Placement Hub, Community Events, Mess menus, reports and moderation, messages, notifications and campus services.
 
@@ -15,11 +15,11 @@ The **Who** column in every table below uses these roles:
 
 | Who | Meaning |
 | --- | --- |
-| guest | Not signed in. Can read every public feed. |
+| guest | Not signed in. Can read every public feed, except the Placement Hub routes marked `user` (see that section). |
 | user | Any signed-in IISc user |
 | owner | The user who created the item: seller, reporter or author |
 | moderator | A user with an active moderator role for that module, department or course |
-| admin | Full access everywhere |
+| admin | Every moderator power in every module, plus managing moderators and campus services. Doesn't edit other people's posts unless a row lists `admin` (listings are edited only by their seller) |
 
 ## Sign-in and roles
 
@@ -27,19 +27,19 @@ Guests send nothing. Signed-in users send their token on every call, and the API
 
 | Situation | What the app sends |
 | --- | --- |
-| Guest | No auth header. Every GET feed works. |
+| Guest | No auth header. Every GET feed works, except the Placement Hub routes marked `user` (see that section). |
 | Signed in (cloud) | `Authorization: Bearer <Cognito ID token>` (the ID token, not the access token) |
-| Local testing | `X-Dev-User: name@iisc.ac.in`, and optionally `X-Dev-Name: Asha` (works only on the machine running the API) |
+| Local testing | `X-Dev-User: name@iisc.ac.in`, and optionally `X-Dev-Name: Asha` (works only on the machine running the API, or from the same private network with the team's `X-Dev-Key` header) |
 
-- **Local-only email codes:** `POST /auth/otp/request` and `POST /auth/otp/verify` back the local dev sign-in dialog (an emailed 6-digit code, no Cognito needed). Both 404 outside dev mode (`CAMPUSHUB_AUTH_MODE=cognito`, the default and the only mode allowed on Lambda), so they're not part of the deployed API surface.
+- **Local-only email codes:** `POST /auth/otp/request` and `POST /auth/otp/verify` back the local dev sign-in dialog (an emailed 6-digit code, no Cognito needed; 400 for a non-IISc email or an expired code, 429 for a quick resend or too many wrong tries). Both 404 outside dev mode (`CAMPUSHUB_AUTH_MODE=cognito`, the default and the only mode allowed on Lambda), so they're not part of the deployed API surface.
 - **No sign-up endpoint.** The user's account is created on their first signed-in call.
 - **Email must be verified first.** First-time sign-up: the user enters their IISc email and a password, Cognito emails them a code, they type it in, then sign in. Until then the API answers **403** asking them to enter the code.
 - **IISc emails only.** Addresses ending in `iisc.ac.in` (including subdomains such as `alum.iisc.ac.in`) are accepted. Others get **403** with a readable message to show the user.
 - **Expired or invalid token:** **401** on every endpoint, including pages guests can read. Send the user back to sign-in. **503** means sign-in is briefly unavailable; retry.
 - **Role-based screens:** call `GET /me` after sign-in. `is_admin` and `moderator_grants` say which moderator tools to show. Thread detail also returns `viewer_can_moderate`.
 - **Roles can change at any time.** A revoked moderator gets **403** on their next call, so handle 403 even on buttons you chose to show.
-- **Contact details** (`seller_contact`, `reporter_contact`, `contact`) are `null` for guests, and for posts by deactivated accounts. Design a "Sign in to see contact" state.
-- **Deactivated accounts** get **403** on every call. Show "This account has been deactivated".
+- **Contact details** (`seller_contact`, `reporter_contact`, `author_contact`, `contact`) are `null` for guests, and for posts by deactivated accounts. Design a "Sign in to see contact" state.
+- **Deactivated accounts** get **403** on every call except `POST /me/reactivate`. Show "This account has been deactivated", with a button that calls `POST /me/reactivate` to restore it.
 
 Moderator roles come in these shapes:
 
@@ -49,16 +49,18 @@ Moderator roles come in these shapes:
 | `lost_found` | All lost and found reports |
 | `academic_help` | One department (all its courses) or one course |
 | `placement_hub` | All of Placement Hub: companies, JDs, PPTs, sheet imports, and removing interview experiences and company forum posts |
+| `events` | All Community Events, event tags and updates, mess menus, and removing event forum posts |
 
 ## Conventions
 
-Every request and response body is JSON, and every list endpoint pages the same way.
+Every request and response body is JSON, and the main feeds page the same way.
 
-- **IDs** are UUID strings, except category IDs, which are integers.
+- **IDs** are UUID strings, except category and mess IDs, which are integers.
 - **Times** are ISO 8601 with a timezone, e.g. `2026-10-23T12:18:55Z`. Show them in IST.
 - **Prices** come back as strings in rupees, e.g. `"1500.00"`. Format them as ₹1,500.
 - **Removed content** stays in lists where order matters: a removed comment has `removed: true` and `content: null`. Show "This comment was removed".
-- **Pages:** list endpoints take `limit` (default 20, max 50) and `offset`, and return `{items, limit, offset, has_more}`. Use `has_more` for "Load more" or infinite scroll; there's no total count.
+- **Pages:** paged feeds (listings, reports, Wanted posts, notifications, watched and bookmarked listings, the admin's account list and others) take `limit` (default 20, max 50) and `offset`, and return `{items, limit, offset, has_more}`. Use `has_more` for "Load more" or infinite scroll; there's no total count.
+- **Short lists** come back as a plain JSON array, not a page: for example categories, saved searches, seller strikes, unblock requests, blocked sellers, campus services, chat blocks, Wanted matches, `/users/search` and `/chat/conversations` (the last two take their own `limit`).
 
 Errors return a status code and a `detail` you can show to the user:
 
@@ -71,6 +73,7 @@ Errors return a status code and a `detail` you can show to the user:
 | 404 | Item doesn't exist or was removed | Empty or "not found" state |
 | 409 | Duplicate (e.g. reporting the same item twice) | Inline message |
 | 422 | A field is invalid (including text that is only spaces); `detail` names it | Inline field error |
+| 429 | Too many requests (e.g. sending messages too fast); wait and retry | Inline "try again shortly" message |
 
 For 422 from form validation, `detail` is a list of `{loc, msg}`. `loc` ends with the field name, so the error can sit under that field.
 
@@ -82,7 +85,7 @@ Photos and course files go straight from the app to storage, not through the API
 
 Only step 3 moves the file itself, so that's the step to show progress on.
 
-1. **Ask for an upload ticket:** `POST /uploads` with `kind`, `content_type`, `size_bytes` and `checksum_sha256` (the base64 SHA-256 of the file). Course materials also need `course_id`. The reply has `upload_url`, `headers`, `s3_key` and `expires_in` (900 seconds).
+1. **Ask for an upload ticket:** `POST /uploads` with `kind`, `content_type`, `size_bytes` and `checksum_sha256` (the base64 SHA-256 of the file). Course materials also need `course_id`. The reply has `upload_url`, `method` (`PUT`), `headers`, `s3_key` and `expires_in` (900 seconds).
 2. **Upload the file:** `PUT` the raw file to `upload_url` with exactly those `headers` (Content-Type, the checksum and `x-amz-tagging`). The file must be exactly `size_bytes` long. Storage rejects a different file type, size or a corrupted file. Show the progress bar on this step.
 3. **Attach it:** send the `s3_key` when creating or editing the post: `photo_keys` for listings and lost/found reports, `s3_key` for course materials. The API refuses a key that wasn't uploaded, belongs to someone else, or is already used by another material. Files never attached are deleted after a day.
 
@@ -100,17 +103,19 @@ Only step 3 moves the file itself, so that's the step to show progress on.
 
 ## Users, profiles and moderators
 
-Ten endpoints cover the signed-in user's profile, other people's public profiles, admin account controls, moderator roles and upload tickets.
+Sixteen endpoints cover the signed-in user's profile, other people's public profiles, admin account controls, moderator roles and upload tickets.
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
 | GET | `/health` | guest | Health check; returns `{"status": "ok"}` |
 | GET | `/me` | user | My profile, `is_admin` and my active `moderator_grants` |
 | PATCH | `/me` | user | Edit my `name`, `department_id`, `programme`, `graduation_year`. `phone` only accepts `null` (removes it) |
-| POST | `/me/phone/code` | user | `{"phone": "+919876543210"}` (E.164): sends a 6-digit code to that number. No SMS provider yet, so the code is logged; while sign-in codes are hard-coded for testing, it is `123456` |
-| POST | `/me/phone/verify` | user | `{"phone", "code"}`: saves the number on my profile and returns it. 401 for a wrong code |
-| GET | `/me/posts` | user | My course feedback and materials, and the companies, events and mess menus I added (moderators/admin; empty lists for others). Newest first, at most 200 each, removed items left out |
-| GET | `/users/{user_id}` | guest | Someone's public profile; `contact` only for signed-in viewers |
+| POST | `/me/phone/code` | user | `{"phone": "+919876543210"}` (E.164): makes a random 6-digit code for that number. No SMS provider yet, so the code is only written to the server log. 429 if asked again within 30 seconds |
+| POST | `/me/phone/verify` | user | `{"phone", "code"}`: saves the number on my profile and returns my profile. 401 for a wrong code, 400 if the code expired or was never requested, 429 after 5 wrong tries |
+| POST | `/me/deactivate` | user | Deactivate my own account (204). It's a suspension, not a deletion: my posts and messages stay, marked as from a deactivated account, and my moderator roles end. 422 for the admin (hand the role over first) |
+| POST | `/me/reactivate` | user (including a deactivated one) | Reactivate my account after signing in again; returns my profile. Moderator roles aren't restored |
+| GET | `/me/posts` | user | My course feedback and materials, and the companies, events and mess menus I added (moderators/admin; empty lists for others). At most 200 each, removed items left out. Feedback, materials and companies are newest first; events by start time and mess menus by start date, latest first |
+| GET | `/users/{user_id}` | guest | Someone's public profile; `contact` only for signed-in viewers. 404 for a deactivated account |
 | GET | `/users?q=&status=&limit=&offset=` | admin | Every account, a page at a time (the admin first, then by name), for the admin panel's User Accounts tab: `id`, `email`, `name`, `is_active`, `is_admin`, `programme`, `graduation_year`, `created_at`. `q` matches part of a name or email; `status` is `active` or `deactivated` |
 | GET | `/users/lookup?email=` | admin | Find an account by email; returns `id`, `email`, `name`, `is_active`, `is_admin`. 404 if nobody with that email has signed in yet. Use it before handing over the admin role |
 | POST | `/users/{user_id}/make-admin` | admin | Hand the admin role to this user. There is only ever one admin, so the caller becomes a normal signed-in user. 403 for anyone else; 422 for yourself or a deactivated account |
@@ -123,7 +128,7 @@ Ten endpoints cover the signed-in user's profile, other people's public profiles
 
 | Object | Fields |
 | --- | --- |
-| My profile | `id`, `email`, `name`, `phone` (optional), `department_id`, `programme`, `graduation_year`, `is_admin`, `moderator_grants` (each: `module`, `scope_type`, `department_id`, `course_id`, `granted_at`), `created_at` |
+| My profile | `id`, `email`, `name`, `phone` (optional), `department_id`, `programme`, `graduation_year`, `is_admin`, `moderator_grants` (each: `id`, `module`, `scope_type`, `department_id`, `course_id`, `granted_at`), `created_at`, `updated_at` |
 | Public profile | `id`, `name`, `department_id`, `programme`, `graduation_year`, `contact` (`email`, `phone`; signed-in viewers only) |
 | Moderator role | `id`, `user_email`, `user_name`, `module`, `scope_type`, `department_id`, `course_id`, `granted_at`, `revoked_at` |
 
@@ -132,37 +137,44 @@ Ten endpoints cover the signed-in user's profile, other people's public profiles
 
 ## Buy & Sell
 
-Guests can browse and search listings. Sellers create, edit and mark their own listings, admins can edit any listing, and moderators can remove any listing.
+Guests can browse and search listings. Only the seller edits or marks a listing; Buy & Sell moderators and the admin can only remove it.
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
 | GET | `/buy-sell/categories` | guest | All categories (`id`, `name`), A–Z |
 | POST | `/buy-sell/categories` | user | Add a category by `name` (the "Others" option). If the name already exists, ignoring case and spaces, the existing one comes back |
 | GET | `/buy-sell/categories/suggest?title=` | guest | `{"category": {id, name}}`: the existing category that clearly fits the title, or `null` when none does (or the model isn't installed). Never invents a category. About 6 ms; call it after typing pauses |
+| DELETE | `/buy-sell/categories/{id}` | Buy & Sell moderator, admin | Delete a category (204). If anything uses it, send `move_to=<category id>` to move those items first, or `delete_posts=true` to delete its listings and Wanted posts (their owners are told) and its saved searches. With neither, 409 says how many items use it |
 | PUT, DELETE | `/listings/{id}/watch` | user | Watch / stop watching someone else's listing: a `listing_watch` notification when its price changes or it is marked `negotiable` |
 | GET | `/me/watched-listings` | user | Listings I'm watching, newest watch first |
-| GET | `/listings` | guest | Browse. Filters: `q` (title and description), `category_id`, `min_price`, `max_price`, `status` (repeatable), `seller_id`. `sort`: `newest` (default), `price_asc`, `price_desc` |
-| POST | `/listings` | user | Create: `title`, `price`, `category_id`, `description`, `location`, `photo_keys` (up to 10) |
+| PUT, DELETE | `/listings/{id}/bookmark` | user | Bookmark / remove a bookmark (204). Bookmarking twice is fine; 404 if the listing is gone or hidden |
+| GET | `/me/bookmarked-listings` | user | Listings I bookmarked, newest first (a page of listing cards). Removed or hidden ones drop out |
+| GET | `/me/bookmarked-listing-ids` | user | Ids of every listing I bookmarked (a plain array), to mark them in a feed |
+| POST | `/me/bookmarked-listings` | user | `{"listing_ids": [...]}` (up to 200): bookmark several at once, e.g. a guest's on-device bookmarks after sign-in (204). Gone or hidden listings are skipped |
+| POST | `/listings/lookup` | guest | `{"listing_ids": [...]}` (up to 200): those listings as cards, in the same order. Gone or hidden ones are left out. Shows a guest's on-device bookmarks |
+| GET | `/listings` | guest | Browse. Filters: `q` (words in the title and description; the last word also matches as the start of a word, so `phon` finds "phone" and `phone c` finds "phone charger" while the user types), `category_id`, `min_price`, `max_price`, `status` (repeatable), `seller_id`. `sort`: `newest` (default), `price_asc`, `price_desc` |
+| POST | `/listings` | user | Create: `title`, `price`, `category_id`, `description`, `location`, `negotiable` (default `false`), `photo_keys` (up to 10) |
 | GET | `/listings/{id}` | guest | One listing with all photos; `seller_contact` for signed-in users |
-| PATCH | `/listings/{id}` | owner | Edit `title`, `description`, `price`, `category_id`, `location` |
-| PATCH | `/listings/{id}/status` | owner | Set `status`: `available`, `reserved` or `sold` |
+| PATCH | `/listings/{id}` | owner | Edit `title`, `description`, `price`, `category_id`, `location`, `negotiable` |
+| PATCH | `/listings/{id}/status` | owner | Set `status`: `available`, `reserved` (at least one buyer has committed, but the deal isn't final) or `sold` (final) |
 | PUT | `/listings/{id}/photos` | owner | Replace the photo list: `photo_keys` in the new order |
-| DELETE | `/listings/{id}` | owner, Buy & Sell moderator, admin | Remove for good: the listing, its photos, watches and reports are deleted from the database and storage (rev 23), so it also leaves the moderation queue and history. Moderators can add `?reason=`. One exception: a moderator removing a listing that has an open report hides it with a strike instead (the seller can appeal); the seller can still delete it afterwards. Strikes and chats about a deleted listing keep its title (`listing_id` becomes null on the strike) |
+| DELETE | `/listings/{id}` | owner, Buy & Sell moderator, admin | Remove for good: the listing, its photos, watches and reports are deleted from the database and storage (rev 23), so it also leaves the moderation queue and history. Moderators can add `?reason=` (up to 500 characters). One exception: a moderator removing a listing that has an open report hides it with a strike instead (the seller can appeal); `severity` (`severe` or `non_severe`, the default) sets the strike's tier. The seller can still delete it afterwards. Strikes and chats about a deleted listing keep its title (`listing_id` becomes null on the strike) |
 
 **Fields to design with:**
 
 | Object | Fields |
 | --- | --- |
-| Listing card (in lists) | `id`, `title`, `price`, `status`, `location`, `category` (`id`, `name`), `seller` (`id`, `name`), `cover_photo_url`, `created_at` |
-| Listing detail | Everything on the card, plus `description`, `photos` (each: `url`, `sort_order`), `seller_contact` (`email`, `phone`; `null` for guests), `updated_at` |
+| Listing card (in lists) | `id`, `title`, `price`, `status`, `location`, `category` (`id`, `name`), `seller` (`id`, `name`), `seller_deactivated`, `seller_trust_tag` (`negative`, `blocked` or `null`), `hidden` and `held_for_review` (only ever `true` for the seller and moderators), `negotiable`, `description` (first 300 characters), `cover_photo_url`, `created_at` |
+| Listing detail | Everything on the card, plus the full `description`, `photos` (each: `s3_key`, `url`, `sort_order`), `seller_contact` (`email`, `phone`; `null` for guests), `watching` (I'm watching its price), `updated_at` |
 
 - **Limits:** title 1–120 characters, description up to 5,000, location up to 200, price ≥ 0, category name 1–50.
+- **Statuses:** `reserved` means at least one buyer has committed but the deal isn't final. Several buyers' offers on the same listing can each be accepted while it's reserved. Only `sold` is final: a sold listing takes no new offers and can't have one accepted.
 - **Sold items:** browse returns every status unless you filter. To hide sold items, send `status=available&status=reserved`.
 - **My listings:** browse with `seller_id` set to my own `id` from `GET /me`.
 
 ## Seller trust and moderation
 
-A seller's trust score is built entirely from moderator-confirmed strikes, never from an automated judgment. A strike is created only when a Buy & Sell moderator resolves a report with `remove_content: true` (`POST /reports/{id}/resolve`) — nothing here creates one directly. Strikes drive two things shown on a seller's listings: a `negative` or `blocked` tag (`seller_trust_tags`), and whether posting is currently suspended.
+A seller's trust score is built entirely from moderator-confirmed strikes, never from an automated judgment. A strike is created only when a Buy & Sell moderator resolves a report with `remove_content: true` (`POST /reports/{id}/resolve`), or removes a reported listing with `DELETE /listings/{id}` — nothing here creates one directly. Strikes drive two things shown on a seller's listings: a `negative` or `blocked` tag (`seller_trust_tag`), and whether posting is currently suspended.
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
@@ -192,8 +204,8 @@ A seller's trust score is built entirely from moderator-confirmed strikes, never
 
 - **Default thresholds:** 1 severe strike, or 3 non-severe strikes, blocks posting (`listing_suspended_at` set) and shows the "Blocked Seller" tag; 2 non-severe strikes alone show "Negative Seller". Configurable (`CAMPUSHUB_SELLER_STRIKE_*` settings).
 - **Overturning** a strike is not the same as unblocking: it removes one strike from the count and may lift a suspension as a side effect, but a seller with other strikes can still be blocked.
-- **Unblocking** (directly, or by approving a request) resets every strike that still counts, not just one.
-- **Notifications:** filing an appeal tells the Buy & Sell moderators and the admin; an overturn, a rejected appeal, a lifted suspension, or an unblock decision each tell the seller.
+- **Unblocking** (directly, or by approving a request) resets every strike that still counts, not just one. Listings those strikes hid stay hidden.
+- **Notifications:** filing an appeal or an unblock request tells the Buy & Sell moderators and the admin; an overturn, a rejected appeal, a lifted suspension, or an unblock decision each tell the seller.
 
 ## Lost & Found
 
@@ -204,10 +216,11 @@ Lost reports and found reports have identical endpoints. Swap `/lost-reports` fo
 | GET | `/lost-found/categories` | guest | All categories, A–Z. A category names the item: ID card, Water bottle, Earbuds |
 | POST | `/lost-found/categories` | user | Add a category by `name`, or get the existing one with that name |
 | GET | `/lost-found/categories/suggest?title=` | guest | The existing category that clearly fits a title, or `{"category": null}`. Never invents one; see Buy & Sell |
-| GET | `/lost-reports` | guest | Browse. Filters: `q` (description), `category_id`, `status` (repeatable), `reporter_id`, `from_date` and `to_date` (when the item was lost or found; send a time zone). `sort`: `newest` (default) or `oldest`, by when the report was filed |
+| DELETE | `/lost-found/categories/{id}` | Lost & Found moderator, admin | Delete a category (204). If anything uses it, send `move_to=<category id>` to move those items first, or `delete_posts=true` to remove its lost and found reports (their owners are told) and delete its saved searches. With neither, 409 says how many items use it |
+| GET | `/lost-reports` | guest | Browse. Filters: `q` (title and description), `category_id`, `status` (repeatable), `reporter_id`, `from_date` and `to_date` (when the item was lost or found; send a time zone). `sort`: `newest` (default) or `oldest`, by when the report was filed |
 | POST | `/lost-reports` | user | File a report: `title` (optional, up to 120 characters; rev 25), `description`, `category_id`, `occurred_at`, `location`, `photo_keys` (up to 10). The reply includes `possible_matches` |
 | GET | `/lost-reports/{id}` | guest | One report with photos; `reporter_contact` for signed-in users |
-| PATCH | `/lost-reports/{id}` | owner | Edit `description`, `category_id`, `occurred_at`, `location` |
+| PATCH | `/lost-reports/{id}` | owner | Edit `title`, `description`, `category_id`, `occurred_at`, `location` |
 | PATCH | `/lost-reports/{id}/status` | owner | Set `status`: `open` or `closed` |
 | PUT | `/lost-reports/{id}/photos` | owner | Replace the photo list |
 | DELETE | `/lost-reports/{id}` | owner, Lost & Found moderator, admin | Remove. Moderators can add `?reason=` |
@@ -217,7 +230,7 @@ Lost reports and found reports have identical endpoints. Swap `/lost-reports` fo
 
 | Object | Fields |
 | --- | --- |
-| Report card (in lists) | `id`, `kind` (`lost` or `found`), `description`, `category`, `occurred_at`, `location`, `status`, `reporter` (`id`, `name`), `cover_photo_url`, `created_at` |
+| Report card (in lists) | `id`, `kind` (`lost` or `found`), `title` (`null` on older reports), `description`, `category`, `occurred_at`, `location`, `status`, `reporter` (`id`, `name`), `reporter_deactivated`, `cover_photo_url`, `created_at` |
 | Report detail | Everything on the card, plus `photos`, `reporter_contact` (`null` for guests), `updated_at` |
 | Create reply only | `possible_matches`: up to 10 open reports of the other kind, same category, by other people, with compatible times (kept for older clients; use `/matches` instead) |
 | Matches reply | `status`: `ready`, `pending` (still being matched: ask again in ~2 s) or `unavailable` (no matcher on this server: same-category reports, unranked). `matches`: list of `report` (a card), `score` (0–1), `strength` (`strong` or `possible`; `null` when unavailable), `reasons` (e.g. "Similar description", "Similar photo", "Photo fits the description", "Same category") |
@@ -239,18 +252,18 @@ A buyer says what they need ("Need a cycle, budget ₹3,000") instead of waiting
 | GET | `/wanted/{id}` | guest | One post; `author_contact` for signed-in users |
 | GET | `/wanted/{id}/matches` | guest | Up to 10 available listings that match the post, best first (listing cards) |
 | PATCH | `/wanted/{id}` | owner | Edit `title`, `description`, `category_id`, `max_price` |
-| PATCH | `/wanted/{id}/status` | owner | Set `status`: `open`, `fulfilled` (got it) or `closed` (no longer needed) |
+| PATCH | `/wanted/{id}/status` | owner | Set `status`: `open`, `fulfilled` (got it) or `closed` (no longer needed). |
 | DELETE | `/wanted/{id}` | owner, Buy & Sell moderator, admin | Remove for good, with its reports (rev 23). Moderators can add `?reason=`. Resolving a report with `remove_content` also deletes the post |
 
 **Fields to design with:**
 
 | Object | Fields |
 | --- | --- |
-| Wanted card (in lists) | `id`, `title`, `category` (`id`, `name`), `max_price` (`null` = open to offers), `status`, `author` (`id`, `name`), `created_at` |
+| Wanted card (in lists) | `id`, `title`, `category` (`id`, `name`), `max_price` (`null` = open to offers), `status`, `author` (`id`, `name`), `author_deactivated`, `created_at` |
 | Wanted detail | Everything on the card, plus `description`, `author_contact` (`null` for guests), `updated_at` |
 | Create reply only | `possible_matches`: listing cards that already match |
 
-- **Matching:** a listing matches when it's available, in the same category, at or under `max_price`, and shares at least one word with the post's title ("Need a Hero cycle" matches "Hero Sprint 26T"). Each new or edited listing that matches sends the author a `wanted_post_match` notification, once per listing.
+- **Matching:** a listing matches when it's available, by someone else, in the same category, at or under `max_price` (or up to 20% over it if the listing is marked `negotiable`), and shares at least one word with the post's title ("Need a Hero cycle" matches "Hero Sprint 26T"). Each new or edited listing that matches sends the author a `wanted_post_match` notification, once per listing.
 - **Sellers** can browse `GET /wanted?category_id=` to see demand before listing.
 - **Limits:** title 1–120 characters, description up to 2,000, up to 10 open posts per person (an 11th returns 409).
 
@@ -261,8 +274,8 @@ A buyer says what they need ("Need a cycle, budget ₹3,000") instead of waiting
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
 | GET | `/me/saved-searches` | user | My saved searches, oldest first, each with `new_count` |
-| POST | `/me/saved-searches` | user | Save one: `module`, `name`, and the filters (`q`, `category_id`, `min_price`, `max_price`), plus `alerts_enabled` (default `true`) |
-| PATCH | `/me/saved-searches/{id}` | owner | Change `name`, filters or `alerts_enabled`. Send `null` to clear a filter |
+| POST | `/me/saved-searches` | user | Save one: `module`, `name`, and the filters (`q`, `category_id`, `min_price`, `max_price`), plus `alerts_enabled` (default `true`). At least one of `q`, `category_id` or a price is required (422 otherwise) |
+| PATCH | `/me/saved-searches/{id}` | owner | Change `name`, filters or `alerts_enabled`. Send `null` to clear a filter, as long as one filter is left (422 otherwise) |
 | POST | `/me/saved-searches/{id}/seen` | owner | The user opened the results: resets `new_count` to 0 |
 | DELETE | `/me/saved-searches/{id}` | owner | Delete it; its alerts stop |
 
@@ -273,7 +286,8 @@ A buyer says what they need ("Need a cycle, budget ₹3,000") instead of waiting
 | Saved search | `id`, `module` (`buy_sell` or `lost_found`), `name`, `q`, `category_id`, `category_name`, `min_price`, `max_price`, `alerts_enabled`, `new_count`, `last_seen_at`, `created_at`, `updated_at` |
 
 - **`buy_sell` searches watch new listings; `lost_found` searches watch new found reports.** Lost & Found searches have no price filter (422 if sent).
-- **Showing the results:** call `GET /listings` (or `GET /found-reports`) with the same `q`, `category_id`, `min_price` and `max_price`. They mean exactly the same thing there. Then call `/seen`.
+- **Showing the results:** call `GET /listings` (or `GET /found-reports`) with the same `q`, `category_id`, `min_price` and `max_price`, then call `/seen`. For Buy & Sell they mean exactly the same thing there. For Lost & Found, alerts and `new_count` match `q` in the description only, while `GET /found-reports` also searches the title, so the results can include a few more reports.
+- **`new_count`** counts matching items posted since `last_seen_at` by other people: available listings or open found reports.
 - **Alerts:** a new matching item (or one edited or made available again so it now matches) sends a `saved_search_match` notification, once per item, never for your own posts. Turn alerts off with `alerts_enabled: false`; `new_count` still updates.
 - **Limits:** name 1–80 characters, `q` up to 200, up to 20 saved searches per person (a 21st returns 409).
 
@@ -281,10 +295,12 @@ A buyer says what they need ("Need a cycle, budget ₹3,000") instead of waiting
 
 Company pages for placement prep (FR-15, FR-16, FR-17): what the company does, its JDs, pre-placement talks (PPTs), how many students it selected each year, seniors' interview experiences, and a forum.
 
+Placement data is confidential, so company pages, roles, the schedule, hiring numbers and seniors are for signed-in users only: those endpoints return 401 to guests. Guests get the season totals on `/placement/stats`.
+
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
-| GET | `/companies` | guest | Browse companies. Filters: `q` (name or industry), `industry`. `sort`: `name` (default), `most_hired` (latest season's hires), `upcoming_ppt` (soonest date of any kind first), `highest_pay` |
-| GET | `/companies/{id}` | guest | The company page: details, `job_descriptions`, `ppts`, headline numbers, `viewer_can_manage` |
+| GET | `/companies` | user | Browse companies. Filters: `q` (name or industry), `industry`. `sort`: `name` (default), `most_hired` (latest season's hires), `upcoming_ppt` (soonest date of any kind first), `highest_pay`. Guests get 401 |
+| GET | `/companies/{id}` | user | The company page: details, `job_descriptions`, `ppts`, headline numbers, `viewer_can_manage`. Guests get 401 |
 | POST | `/companies` | placement moderator, admin | Add one: `name`, `industry`, `website` (must start with `https://` or `http://`), `description`. A name that differs only in case or spacing is a duplicate (409) |
 | PATCH | `/companies/{id}` | placement moderator, admin | Edit any of those fields |
 | DELETE | `/companies/{id}` | placement moderator, admin | For a company that withdrew: deletes it **with** its roles and JD files, every date on its schedule (upcoming ones too), hiring records, seniors, interview experiences and forum, and closes open reports about them. Optional `?reason=` |
@@ -292,19 +308,21 @@ Company pages for placement prep (FR-15, FR-16, FR-17): what the company does, i
 | POST | `/placement/roles/import` | placement moderator, admin | `{"csv", "placement_year"}`: add or update roles with their compensation. Columns by name: Company and Position / Job title (required), Batch or Year ("2023 - 24" is the 2024 season; `placement_year` for files without one), Overall CTC, Base, Job type, Description, Skills. Contact and comment columns are never imported |
 | PATCH | `/jds/{id}` | placement moderator, admin | Edit; `file_s3_key: null` removes the file |
 | DELETE | `/jds/{id}` | placement moderator, admin | Delete a JD |
-| GET | `/placement/ppts` | guest | The placement schedule across companies. `when`: `upcoming` (default, soonest first), `past`, `all`; `kind` (repeatable): `ppt`, `oa`, `interview`, `other` |
+| GET | `/placement/ppts` | user | The placement schedule across companies. `when`: `upcoming` (default, soonest first), `past`, `all`; `kind` (repeatable): `ppt`, `oa`, `interview`, `other`. Guests get 401 |
 | POST | `/companies/{id}/ppts` | placement moderator, admin | Add a date: `kind` (`ppt` pre-placement talk (default), `oa` online test, `interview`, `other`), `details`, `venue`, `scheduled_at` (leave out until announced). At least one of the last three is needed |
 | PATCH / DELETE | `/ppts/{id}` | placement moderator, admin | Edit or delete a date |
-| GET | `/companies/{id}/hiring-stats` | guest | Students selected per year and role, newest year first |
-| GET | `/placement/stats` | guest | Seasons at a glance: hires and companies per year (`years`, default 5), the top recruiters of the latest season (or `year`) with their compensation range, and `pay_year` / `top_paying`: companies by full-time compensation in the latest season that has it |
-| GET | `/interviews` | guest | Interview experiences, newest first. Filters: `company_id`, `q`, `role`, `placement_year`, `mine=true` (signed in) |
+| GET | `/companies/{id}/hiring-stats` | user | Students selected per year and role, newest year first. Guests get 401 |
+| GET | `/placement/stats` | guest (totals only), user | Seasons at a glance: hires and companies per year (`years`, default 5). Signed-in users also get `top_companies`, the top recruiters (`top`, default 10) of the latest season (or `year`) with their compensation range, and `pay_year` / `top_paying`: companies by full-time compensation in the latest season that has it. Guests get only `seasons`: `top_companies` and `top_paying` are empty and `pay_year` is `null` |
+| GET | `/interviews` | guest | Interview experiences, newest first. Filters: `company_id`, `q`, `role`, `placement_year`, `mine=true` (only mine; signed in, 401 for guests) |
 | POST | `/companies/{id}/interviews` | user | Share one: `role_title`, `content`, `placement_year`, `is_anonymous` |
 | GET | `/interviews/{id}` | guest | One interview experience |
 | PATCH | `/interviews/{id}` | owner, admin | Edit. Only the author can change `is_anonymous` |
 | DELETE | `/interviews/{id}` | owner, placement moderator, admin | Remove. Moderators can add `?reason=`; open reports on it close |
 | GET | `/companies/{id}/forum` | guest | The company's forum (created on first visit). Threads and replies use the Forums endpoints below |
 | POST | `/placement/imports` | placement moderator, admin | Import a placement sheet (FR-17): `placement_year` and `sheet` (see below) |
-| GET | `/placement/imports` | placement moderator, admin | Past imports, newest first, with their counts |
+| GET | `/placement/imports` | placement moderator, admin | Past imports, newest first: `id`, `placement_year`, the row counts, `moderator` (`id`, `name`), `imported_at` |
+| GET | `/placement/companies/similar` | placement moderator, admin | Companies that are probably the same one under different names, in groups: `suggested_name` and `companies` (`id`, `name`, `records`). Optional `company_id` (repeatable) keeps only groups with those companies |
+| POST | `/placement/companies/merge` | placement moderator, admin | `{"company_ids": [...], "name"}` (2 to 50 companies): merges them into one called `name`. Their records, roles, dates, interview experiences, seniors and forum threads move to the kept company, and the others are deleted. A role or senior the kept company already has is dropped, not duplicated. 409 if another company already has that name. Returns the company page |
 | POST | `/placement/companies/import` | placement moderator, admin | `{"csv": "..."}`: add or update companies. Columns `Name` (required), `Industry`, `Website`, `About`. An existing company (same name) gets the cells you filled in |
 | POST | `/placement/schedule/import` | placement moderator, admin | `{"csv": "...", "file_name": "slot 2 interview schedule.csv"}`: add dates. Columns `Company` (required), `Type` (PPT, OA, Interview, Other), `Date`, `Time` (or one date-and-time column; India time unless a timezone is given), `Venue`, `Details`. Placement office sheets work too: `Test Date`, `Test Timings` ("02 00 PM - 03 00 PM" starts at 2 pm), `Test Venue`, `Mode`, `Status` and `Remarks` (added to the details); a "Test …" sheet (or "Venue of Interview", or `file_name` containing interview / test / PPT) sets the type of every row; headers with a line break or a note ("Date [MM/DD/YYYY]") work, and month-first dates are read month-first; "No test" in Timings or "CANCELLED" in Date go into the details; "16/10 & 17/10" adds two dates; and "Accenture [Mock Assessment]" is company Accenture with "Mock Assessment" in the details. New companies are created; the same company, type and time again updates the entry |
 | GET | `/companies/{id}/seniors` | user | Seniors to contact: students from the placement sheets of the company's last two seasons, plus seniors moderators added. Guests get 401 |
@@ -320,21 +338,21 @@ Company pages for placement prep (FR-15, FR-16, FR-17): what the company does, i
 | Company page | Everything on the card, plus `website`, `job_descriptions`, `ppts`, `viewer_can_manage`, `created_at`, `updated_at` |
 | Role (JD) | `id`, `company_id`, `role_title`, `placement_year`, `job_type`, `compensation` (as announced), `ctc_min` / `ctc_max` (rupees a year read from it; `null` when it has no amount), `base`, `base_annual`, `skills`, `description`, `file_s3_key`, `file_url` (short-lived link, `null` without a file) |
 | Schedule date (PPT) | `id`, `company_id`, `company_name`, `kind`, `details`, `venue`, `scheduled_at`, `time_tbd` (only the day is known: show "Time TBA"), `when` (`upcoming`, `past`, `unscheduled`) |
-| CSV import result | `rows_total`, `rows_created`, `rows_updated`, `rows_rejected`, `companies_created`, `rejected_rows`: [`line`, `reason`], and for schedules `kinds` (rows per type) and `past_rows`. Column formats are described on each import endpoint above |
+| CSV import result | `rows_total`, `rows_created`, `rows_updated`, `rows_rejected`, `companies_created`, `rejected_rows`: [`line`, `reason`], `similar_companies` (groups as in `/placement/companies/similar`, for review), and for schedules `kinds` (rows per type) and `past_rows`. Column formats are described on each import endpoint above |
 | Senior | `id`, `source` (`placement_sheet` or `added`), `name`, `email`, `phone` (if they gave one), `user_id` (their CampusHub account, `null` if none: offer chat only when set), `role_title`, `placement_year`, `offer_type`, `slot`, `note`, `hidden` (only moderators see hidden ones) |
 | Hiring stats | `company_id`, `company_name`, `total_selected`, `years`: [`year`, `students_selected`, `roles`: [`role_title`, `students_selected`]] |
-| Interview experience | `id`, `company_id`, `company_name`, `role_title`, `placement_year`, `content`, `is_anonymous`, `is_mine`, `author` (`null` for guests, and for anonymous posts except to their author) |
-| Import result | `id`, `placement_year`, `rows_total`, `rows_created`, `rows_updated`, `rows_rejected`, `companies_created`, `rejected_rows`: [`line`, `reason`], `imported_at` |
+| Interview experience | `id`, `company_id`, `company_name`, `role_title`, `placement_year`, `content`, `is_anonymous`, `is_mine`, `author` (`null` for anonymous posts, except to their author), `created_at`, `updated_at` |
+| Import result | `id`, `placement_year`, `rows_total`, `rows_created`, `rows_updated`, `rows_rejected`, `companies_created`, `rejected_rows`: [`line`, `reason`], `imported_at`, `similar_companies` |
 
 - **Empty states (FR-15):** a company with no JD or PPT returns empty lists, and one with no hiring data has `latest_year: null` and `years: []`. Show "No job description posted yet", never an error.
-- **Hiring statistics are totals only.** Guests never see students. Signed-in users see the last two seasons' students as seniors to contact (`/companies/{id}/seniors`), unless a moderator hid them.
+- **Hiring statistics are totals only.** Guests get no company pages or hiring numbers, only season totals. Signed-in users see hiring totals, and the last two seasons' students as seniors to contact (`/companies/{id}/seniors`), unless a moderator hid them.
 - **Files from the placement office** often start with a title row ("CONGRATULATIONS!!") above the header. The header can be any of the first 10 non-blank lines, and line numbers in `rejected_rows` count from the top of the file.
 - **Sheet import:** the moderator pastes the sheet as text: cells copied from a spreadsheet (tab-separated) or a CSV export. The header (any of the first 10 lines) has `Company`, `Student email`, `Role`, and optionally `Slot`, in any order (a few common spellings like `Email` or `Designation` work). Any email address is accepted (personal ones count towards the hiring numbers; only IISc addresses are listed as seniors to contact). Each row is created, updated (the same student's email in the same season), or rejected with its line number and reason; good rows import even when others are rejected. Companies are matched by name ignoring case and spacing, and new ones are created. The pasted text is stored in S3 as the import's source. Up to 5,000 rows; a sheet with no usable header returns 422 and imports nothing.
 - **Reporting:** interview experiences and company forum posts can be reported (`interview_experience`, `thread`, `comment`); they go to the Placement Hub moderators' queue.
 
 ## Community Events
 
-A campus events timeline (FR-18, FR-19, FR-20): sports, culture, talks, food and more. Anyone signed in can post an event, optionally with a poster image; its organizer, an Events moderator or an admin edits or cancels it. Every event has a discussion forum (see Forums).
+A campus events timeline (FR-18, FR-19, FR-20): sports, culture, talks, food and more. Events moderators and admins post events (rev 21: students can't), optionally with a poster image; the organizer, an Events moderator or an admin edits or cancels one and posts updates on it. Every event has a discussion forum (see Forums).
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
@@ -345,22 +363,27 @@ A campus events timeline (FR-18, FR-19, FR-20): sports, culture, talks, food and
 | GET | `/events/{id}` | guest | One event |
 | POST | `/events` | events moderator, admin | Post one (rev 21: students can't add events): `title`, `start_time`, `end_time` (with a timezone), `tag_ids` (1–5), `location`, `description`, optional `poster_s3_key` (upload kind `event_poster`: JPEG, PNG, WebP or HEIC, up to 10 MB) |
 | PATCH | `/events/{id}` | organizer, events moderator, admin | Edit any field, including `tag_ids`; `poster_s3_key: null` removes the poster |
-| DELETE | `/events/{id}` | organizer, events moderator, admin | Cancel (remove) it |
+| DELETE | `/events/{id}` | organizer, events moderator, admin | Cancel (remove) it. Optional `?reason=` |
+| GET | `/events/{id}/updates` | guest | Updates posted on the event, newest first (up to 100). Each has `can_delete` for the viewer |
+| POST | `/events/{id}/updates` | organizer, events moderator, admin | Post an update: `message` (1–1,000 characters), and optionally `start_time` / `end_time` (moves the event; a new start alone keeps its length) and `location` (changes the venue). Everyone who bookmarked it gets `bookmarked_event_update` |
+| DELETE | `/event-updates/{id}` | organizer, events moderator, admin | Remove an update |
 | GET | `/me/followed-tags` | user | Tags I follow |
 | PUT / DELETE | `/me/followed-tags/{tag_id}` | user | Follow / unfollow a tag (204). Following twice is fine |
-| GET | `/me/bookmarks` | user | My bookmarks (`target_type` `listing` or `event`, optional filter), newest first; removed items drop out |
-| PUT / DELETE | `/me/bookmarks/{target_type}/{id}` | user | Bookmark / un-bookmark a listing or event. Bookmarking twice is fine |
+| GET | `/me/bookmarks` | user | My bookmarks (`target_type`, `target_id`, `created_at`; optional `target_type` filter), newest first, up to 1,000; removed items drop out |
+| PUT / DELETE | `/me/bookmarks/{target_type}/{id}` | user | Bookmark an event (PUT returns the bookmark; 404 if the event is gone) / remove it (204). Bookmarking twice is fine. `target_type` is `event` |
 | POST | `/me/bookmarks/import` | user | `{"items": [{"target_type", "target_id"}, ...]}` (up to 500): save a guest's on-device bookmarks after sign-in. Returns `added`, `already_saved`, `skipped` (no longer exists) |
 
 **Fields to design with:**
 
 | Object | Fields |
 | --- | --- |
-| Event | `id`, `title`, `description`, `location`, `start_time`, `end_time`, `when` (`upcoming`, `present`, `past`), `tags` (`id`, `name`), `poster_url` (short-lived link, `null` without a poster), `organizer` (`id`, `name`), `bookmark_count`, `is_bookmarked`, `can_edit`, `created_at`, `updated_at` |
+| Event | `id`, `title`, `description`, `location`, `start_time`, `end_time`, `when` (`upcoming`, `present`, `past`), `tags` (`id`, `name`), `poster_url` (short-lived link, `null` without a poster), `organizer` (`id`, `name`), `bookmark_count`, `is_bookmarked`, `can_edit`, `mess_id` (set on a mess's event card; see Mess menus), `created_at`, `updated_at` |
+| Event update | `id`, `event_id`, `kind` (`info`, `time`, `venue`, `time_venue`: what it changed), `message`, `author` (`id`, `name`), `created_at`, `can_delete` |
 | Tag | `id`, `name`, `upcoming_count`, `following` |
 
 - **Past / Present / Upcoming (FR-19)** is worked out from the clock on every request: `present` when start ≤ now ≤ end. The default order is happening now, then soonest upcoming, then most recent past.
 - **Guests' bookmarks** stay on the device (PRD §3.1). The app keeps them locally and calls `/me/bookmarks/import` once the person signs in.
+- **Listing bookmarks live in Buy & Sell.** The app bookmarks listings with `/listings/{id}/bookmark` and reads them with `/me/bookmarked-listings`; `/me/bookmarks` is for events.
 - **Alerts (FR-20, FR-22):** a new event alerts everyone following one of its tags (`followed_tag_event`); adding a followed tag to an existing event does too. Changing an event's time, place, title or details, or cancelling it, alerts everyone who bookmarked it (`bookmarked_event_update`, with `cancelled: true` for a cancellation). Nobody is alerted about their own changes, or about events that are already over.
 - **Limits:** title 1–150 characters, an event lasts at most 30 days and starts at most about a year ahead, up to 5 tags.
 
@@ -370,13 +393,13 @@ Each mess posts its menu for a month or so: what breakfast, lunch, snacks and di
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
-| GET | `/messes` | guest | Every mess with `today` (today's meals in order) and `can_manage` |
+| GET | `/messes` | guest | `{messes, can_manage}`: every mess, A–Z, each with `today` (today's meals in order), and whether you can add messes and menus |
 | POST | `/messes` | events moderator, admin | Add a mess: `name`, `meal_times` (`breakfast`, `lunch`, `snacks`, `dinner` as `"HH:MM"`, India time; defaults 07:30, 12:30, 16:45, 19:30) |
 | PATCH / DELETE | `/messes/{id}` | events moderator, admin | Rename or change meal times; delete with its menus and followers |
 | PUT | `/messes/{id}/follow` | user | `{"meals": ["lunch", "dinner"]}`: the meals to be alerted about; `[]` unfollows |
 | GET | `/messes/{id}/menus` | guest | Current and upcoming menus, then the last few past ones (`past`, default 3) |
 | POST | `/messes/{id}/menus` | events moderator, admin | Post a menu: `valid_from`, `valid_to` (at most about 3 months), `file_s3_key` (upload kind `mess_menu`: the PDF or photo) and/or `items` (`weekday` 1 = Monday … 7, `meal`, `items`), `notes`. The file alone is enough; typed-in meals put the dishes into the alerts. A new menu replaces the mess's menu from its first day: a menu that started earlier is cut off the day before, and menus starting within the new dates are removed. (Editing a menu's dates into another menu is still refused, 409) |
-| POST | `/mess-menus/extract` | events moderator, admin | `{"file_s3_key"}` of an uploaded menu (kind `mess_menu`): reads the meals out of it (OCR) to prefill the form. Returns `mess_name`, `month`, `items`, `notes`, `warnings`. Saves nothing; takes a few seconds |
+| POST | `/mess-menus/extract` | events moderator, admin | `{"file_s3_key"}` of an uploaded menu (kind `mess_menu`): reads the meals out of it (OCR) to prefill the form. Returns `mess_name`, `month`, `starts` (the date the menu says it starts, if any), `items`, `notes`, `warnings`. Saves nothing; takes a few seconds |
 | POST | `/mess-menus` | events moderator, admin | Post a menu by `mess_name` (same body as above): an unknown name adds the mess (optional `meal_times`) |
 | GET / PATCH / DELETE | `/mess-menus/{id}` | guest / events moderator, admin | One menu; edit (`items` replaces every cell, `file_s3_key: null` removes the file); remove |
 
@@ -404,7 +427,8 @@ The screens go department → course → materials and feedback. Each course and
 | PATCH | `/courses/{id}` | admin, department moderator | Edit `code`, `name` |
 | DELETE | `/courses/{id}` | admin, department moderator | Delete it and everything under it |
 | GET | `/courses/{id}/materials` | guest | The course's shared repository, newest first. Filters: `tag`, `q` (title/description), `material_type`. Held files show only to their uploader and the course's moderators |
-| POST | `/courses/{id}/materials` | user (rev 22: anyone signed in) | Share a file: `s3_key` (upload kind `course_material` with this `course_id`), `title`, `tags` (up to 5 of `pyq`, `quiz`, `assignment`, `notes`, `slides`, `lab`, `solutions`, `cheat_sheet`, `textbook`, `project`, `other`), `description`, `file_name`. The file is opened and checked: programs, apps (APK), scripts, macro documents, ZIP bombs and files whose contents don't match their type are refused (422, the file is deleted); password-protected or nested archives, PDFs with scripts, "leaked paper"/selling wording and upload floods are **held** (`held: true`) and flagged to the course's moderators. Followers are told when it's visible |
+| POST | `/courses/{id}/materials` | user (rev 22: anyone signed in) | Share a file: `s3_key` (upload kind `course_material` with this `course_id`), `title`, `tags` (up to 5 of `pyq`, `quiz`, `assignment`, `notes`, `slides`, `lab`, `solutions`, `cheat_sheet`, `textbook`, `project`, `other`), `description`, `file_name`, optional `material_type` (filled in from the tags when left out). The file is opened and checked: programs, apps (APK), scripts, macro documents, ZIP bombs and files whose contents don't match their type are refused (422, the file is deleted); password-protected or nested archives, PDFs with scripts, "leaked paper"/selling wording and upload floods are **held** (`held: true`) and flagged to the course's moderators. Followers are told when it's visible |
+| GET | `/materials/{id}` | guest | One material (e.g. for the reports queue) |
 | PATCH | `/materials/{id}` | uploader, course/department moderator, admin | Edit `title`, `tags`, `description` |
 | DELETE | `/materials/{id}` | uploader, course/department moderator, admin | Remove. Optional `?reason=` |
 | PUT / DELETE | `/courses/{id}/follow` | user | Follow / stop following a course: new materials, feedback and forum posts there notify you (`course_update`). Returns the course with `following` and `follower_count` |
@@ -412,6 +436,7 @@ The screens go department → course → materials and feedback. Each course and
 | GET | `/courses/{id}/feedback` | guest | Feedback, newest first. Author names are shown only to signed-in viewers, and never for anonymous feedback |
 | GET | `/courses/{id}/feedback/mine` | user | My review of this course; 404 if I haven't written one |
 | POST | `/courses/{id}/feedback` | user | Post a review: `content`, `is_anonymous` (default false). One review per person per course: a second one returns 409 "You've already reviewed this course. Edit your feedback instead." |
+| GET | `/feedback/{id}` | guest | One review (e.g. for the reports queue) |
 | PATCH | `/feedback/{id}` | owner, department moderator, admin | Edit `content`; only the author may change `is_anonymous` |
 | DELETE | `/feedback/{id}` | owner, course moderator (that course), department moderator, admin | Remove. Optional `?reason=` |
 
@@ -419,14 +444,14 @@ The screens go department → course → materials and feedback. Each course and
 
 | Object | Fields |
 | --- | --- |
-| Department | `id`, `name`, `course_count`, `created_at` |
-| Course | `id`, `department_id`, `code`, `name`, `material_count`, `feedback_count`, `has_content`, `created_at` |
-| Material | `id`, `course_id`, `title`, `material_type`, `download_url`, `uploaded_by` (`id`, `name`), `created_at` |
-| Feedback | `id`, `course_id`, `author` (`id`, `name`; `null` for guests and for anonymous feedback, except to its author), `is_anonymous`, `is_mine` (the viewer wrote it: show Edit and Delete), `content`, `created_at`, `updated_at` |
+| Department | `id`, `name`, `course_count`, `created_at`, `updated_at` |
+| Course | `id`, `department_id`, `code`, `name`, `material_count`, `feedback_count`, `has_content`, `following` (always `false` for guests), `follower_count`, `created_at`, `updated_at` |
+| Material | `id`, `course_id`, `title`, `tags`, `material_type`, `description`, `file_name`, `size_bytes`, `content_type`, `held` (waiting for a moderator; only the uploader and moderators see it), `can_edit` (the viewer uploaded it or moderates the course), `download_url`, `uploaded_by` (`id`, `name`), `created_at`, `updated_at` |
+| Feedback | `id`, `course_id`, `author` (`id`, `name`; `null` for guests and for anonymous feedback, except to its author), `is_anonymous`, `is_mine` (the viewer wrote it: show Edit and Delete), `can_remove` (the viewer wrote it or moderates the course: show Delete), `content`, `created_at`, `updated_at` |
 
 - **Empty courses:** `has_content: false` means show "No data yet".
-- **Material types:** `notes`, `slides`, `past_assignment`, `exam_material`, `other` (the default). These suit filter chips.
-- **Who sees upload and edit buttons:** check `moderator_grants` from `GET /me` for this course or its department.
+- **Tags and types:** `tags` are the main way to label and filter materials. The older single `material_type` (`notes`, `slides`, `past_assignment`, `exam_material`, `other`) is still filled in from the tags for clients that read it.
+- **Who sees which buttons:** show Upload to anyone signed in. Use `can_edit` on a material for Edit and Delete, and `is_mine` / `can_remove` on feedback.
 - **Limits:** department name 1–120 characters, course code 1–20, course name 1–200, material title 1–200, feedback 1–5,000.
 
 ### Course survival guide
@@ -446,7 +471,7 @@ A one-page summary of a course's feedback, semester by semester, with sentiment 
 
 - **Semesters** come from when the feedback was written, in IST: August–December is the "Aug" semester, January–July the "Jan" one. A line chart of `semesters[].sentiment.score` by `term` shows sentiment over time; mark the `in_progress` one as partial.
 - **Trend** needs at least 3 finished semesters with 3 or more reviews each; otherwise it's `not_enough_data`.
-- **Sentiment** is scored per sentence with a word list built into the backend (`method: "lexicon"`), so it's free and instant. It can later be replaced by Amazon Comprehend or the Ask CampusHub model without changing these fields.
+- **Sentiment** is scored per sentence by the backend that `CAMPUSHUB_SENTIMENT_BACKEND` picks: a small model inside the API (`local`), Amazon Comprehend (`comprehend`) or a built-in word list (`lexicon`). The default, `auto`, uses the model when its files are there and the word list otherwise, and any failure falls back to the word list. The fields are the same whichever is used.
 
 ## Forums
 
@@ -457,8 +482,8 @@ Forums go forum → thread → comments, Reddit style. Each course, department, 
 | GET | `/courses/{id}/forum` | guest | The course's forum, with `thread_count` |
 | GET | `/departments/{id}/forum` | guest | The department's forum |
 | GET | `/companies/{id}/forum` | guest | The company's forum (Placement Hub moderators remove posts there) |
-| GET | `/events/{id}/forum` | guest | The event's forum (Events moderators remove posts there); 404 once the event is cancelled |
-| GET | `/forums/{id}/threads` | guest | Threads. `sort`: `new` (default) or `top`; `q` searches titles and opening posts |
+| GET | `/events/{id}/forum` | guest | The event's forum (Events moderators remove posts there) |
+| GET | `/forums/{id}/threads` | guest | Threads. `sort`: `new` (default) or `top`; `q` searches titles and the start of opening posts |
 | POST | `/forums/{id}/threads` | user | Start a thread: `title` plus `content` (the opening post) |
 | GET | `/threads/{id}` | guest | The thread with every comment in order, and `viewer_can_moderate` |
 | PATCH | `/threads/{id}` | owner, admin | Rename: `title` |
@@ -468,25 +493,26 @@ Forums go forum → thread → comments, Reddit style. Each course, department, 
 | PUT | `/comments/{id}/vote` | user | Same, for a reply |
 | PATCH | `/comments/{id}` | owner, admin | Edit `content` |
 | DELETE | `/comments/{id}` | owner, forum moderator, admin | Remove. Optional `?reason=` |
+| GET | `/comments/{id}` | guest | One comment with its thread's `thread_id` and `thread_title` (e.g. for the reports queue) |
 
 **Fields to design with:**
 
 | Object | Fields |
 | --- | --- |
-| Thread (in lists) | `id`, `forum_id`, `title`, `author` (`id`, `name`), `preview` (start of the opening post), `score`, `viewer_vote`, `comment_count`, `reply_count`, `last_comment_at`, `created_at` |
+| Forum | `id`, `scope_type` (`course`, `department`, `company`, `event`), `course_id`, `department_id`, `company_id`, `event_id` (the one that matches is set), `thread_count` |
+| Thread (in lists) | `id`, `forum_id`, `title`, `author` (`id`, `name`), `preview` (start of the opening post), `score`, `viewer_vote`, `comment_count`, `reply_count`, `last_comment_at`, `created_at`, `updated_at` |
 | Thread detail | Everything in the list item, plus `comments` and `viewer_can_moderate` |
 | Comment | `id`, `seq`, `parent_id`, `author`, `content`, `removed`, `score`, `viewer_vote`, `created_at`, `updated_at` |
 
 - **Opening post:** the first comment in `comments`. Edit it like any comment.
 - **Removed comments** stay in place with `removed: true` and `content: null`, so replies keep their context.
-- **Forum moderators:** for a course forum, that course's moderator or its department's moderator; for a department forum, that department's moderators; admins everywhere. Use `viewer_can_moderate` to show remove buttons.
+- **Forum moderators:** for a course forum, that course's moderator or its department's moderator; for a department forum, that department's moderators; for a company forum, Placement Hub moderators; for an event forum, Events moderators; admins everywhere. Use `viewer_can_moderate` to show remove buttons.
 - **Replies notify** the thread's author and everyone who has commented, except the person replying (`forum_reply`).
 - **Limits:** title 1–200 characters, post or comment 1–10,000.
 
 ## Reports and moderation
 
-- **Automatic flags:** reports in the queue can have `source: "system"` and `reporter: null`. The system files these itself for possible prohibited items, gibberish, spam and obscene photos. A prohibited-item flag also holds the listing: it shows `held_for_review: true` to its seller and moderators, and everyone else can't see it until a moderator resolves the report.
-- **Listings:** listings also carry `negotiable`, and in the detail view `watching` (whether the viewer watches its price).
+- **Automatic flags:** reports in the queue can have `source: "system"` and `reporter: null`. The system files these itself for possible prohibited items, gibberish, spam and obscene photos in listings and Lost & Found reports, and for course-material uploads it holds (see Academic Help). A prohibited-item flag also holds the listing: it shows `held_for_review: true` to its seller and moderators, and everyone else can't see it until a moderator resolves the report. A held material is hidden the same way; keeping it (resolving without `remove_content`) makes it visible and tells the course's followers.
 
 Any signed-in user can flag content. Moderators work through a queue limited to their own scope.
 
@@ -494,19 +520,19 @@ Any signed-in user can flag content. Moderators work through a queue limited to 
 | --- | --- | --- | --- |
 | POST | `/reports` | user | Flag an item: `target_type`, `target_id`, `reason` |
 | GET | `/me/reports` | user | Reports I've filed, newest first |
-| GET | `/reports` | moderator, admin | The queue for my scope, oldest first. Filters: `status` (`open` by default; `actioned`, `dismissed`, or `all`), `module` |
-| POST | `/reports/{id}/resolve` | moderator in scope, admin | `action`: `actioned` or `dismissed`, plus an optional `note` and `remove_content` |
+| GET | `/reports` | moderator, admin | The queue for my scope, newest first. Filters: `status` (`open` by default; `actioned`, `dismissed`, or `all`), `module` (`buy_sell`, `lost_found`, `academic_help`, `placement_hub`, `events`) |
+| POST | `/reports/{id}/resolve` | moderator in scope, admin | `action`: `actioned` or `dismissed`, plus an optional `note`, `remove_content` (only with `actioned`) and, for a listing, `severity` (`non_severe` by default, or `severe`; see Seller trust) |
 
 **Fields to design with:**
 
 | Object | Fields |
 | --- | --- |
-| Report | `id`, `module`, `target_type`, `target_id`, `reason`, `status` (`open`, `actioned`, `dismissed`), `reporter` (moderators only), `created_at`, `handled_at`, `resolution_note` |
+| Report | `id`, `module`, `target_type`, `target_id`, `target_title` (short title of the item, in the queue), `reason`, `source` (`user` or `system`), `status` (`open`, `actioned`, `dismissed`), `reporter` (moderators only; `null` for system flags), `created_at`, `handled_at`, `resolution_note` |
 | Resolve reply | `reports_resolved` (how many reports closed), `content_removed` |
 
-- **What can be flagged** (`target_type`): `listing`, `wanted_post`, `lost_report`, `found_report`, `course_material`, `course_feedback`, `thread`, `comment`. Put a "Report" action on each of these. Wanted posts go to the Buy & Sell queue.
+- **What can be flagged** (`target_type`): `listing`, `wanted_post`, `lost_report`, `found_report`, `course_material`, `course_feedback`, `thread`, `comment`, `interview_experience`. Put a "Report" action on each of these. Wanted posts go to the Buy & Sell queue; threads and comments go to the queue of their forum's module.
 - **One open report per user per item.** A second one returns 409, so show "You've already reported this".
-- **The queue has no preview.** Show the item by fetching it with `target_type` and `target_id`, e.g. `GET /listings/{target_id}`.
+- **The queue shows only a short `target_title`.** Show the item by fetching it with `target_type` and `target_id`, e.g. `GET /listings/{target_id}`, `GET /materials/{target_id}`, `GET /feedback/{target_id}` or `GET /comments/{target_id}`.
 - **Resolving one report closes every open report on that item.** With `remove_content: true` it also removes the item in the same step. If another moderator resolved it first, you get 409. Removing an item with its DELETE endpoint also closes its reports.
 - **Limits:** reason 1–1,000 characters, resolution note up to 1,000.
 - **Seller strikes (rev 22 notices):** an appeal tells the Buy & Sell moderators and the admin (`moderation_action`, `kind: strike_appeal`); overturning, rejecting an appeal and lifting a suspension each tell the seller.
@@ -520,14 +546,14 @@ One chat per pair of people, like WhatsApp (since rev 10). What part of a chat i
 | GET | `/me/chat-key` | user | My messaging key: `public_key`, `key_backup`, `backup_kdf`, `backup_salt`, `backup_iterations`. With `backup_kdf` `none` (what the app uses), `key_backup` is the plain 32-byte private key and salt/iterations are `null`; older keys may still have a `pbkdf2-sha256` passphrase backup. 404 until set up. Only ever returned to its owner |
 | PUT | `/me/chat-key` | user | Set up messaging (201). The same `public_key` with a new backup only replaces the backup (200), which is how the app moves an old passphrase backup to `none`; a different one replaces the key (201) and messages sent to the old key can't be read any more |
 | GET | `/users/{id}/chat-key` | user | Someone's current public key (`id`, `user_id`, `public_key`, `created_at`, `is_current`) |
-| GET | `/chat/conversations` | user | My conversations, one per person, most recent first (`limit` up to 100, `offset`). The person who opened a chat sees it at once; the other from the first message |
+| GET | `/chat/conversations` | user | My conversations, one per person, most recent first, as a plain array (`limit` default 50, up to 100; `offset`). The person who opened a chat sees it at once; the other from the first message |
 | GET | `/chat/unread` | user | `{"unread_messages": n, "conversations": n}` for the app-bar badge |
-| POST | `/chat/conversations` | user | Exactly one of `listing_id`, `lost_report_id`, `found_report_id` (adds that topic to my chat with its owner) or `user_id` (general chat). Returns `{conversation, topic_id}`: 201 if the chat or topic is new, 200 if both existed. 422 for your own post or yourself, 404 if removed, 403 if either of you blocked the other |
+| POST | `/chat/conversations` | user | Exactly one of `listing_id`, `lost_report_id`, `found_report_id` (adds that topic to my chat with its owner) or `user_id` (general chat). Returns `{conversation, topic_id}`: 201 if the chat or topic is new, 200 if both existed. 422 for your own post, yourself or a deactivated account, 404 if removed, 403 if either of you blocked the other |
 | GET | `/chat/conversations/{id}` | participant | One conversation |
-| GET | `/chat/conversations/{id}/messages` | participant | The latest page; `before=<seq>` for older history; `after=<changed_seq>` for every change since (new messages, answered offers, unsent messages). Returns `conversation`, `items`, `keys` (every key the items use) and `has_more` |
+| GET | `/chat/conversations/{id}/messages` | participant | The latest page; `before=<seq>` for older history; `after=<changed_seq>` for every change since (new messages, answered offers, unsent messages). `limit` default 50, up to 100; `after` and `before` together give 422. Returns `conversation`, `items`, `keys` (every key the items use) and `has_more` |
 | POST | `/chat/conversations/{id}/messages` | participant | Send: `id` (a UUID the app makes), `kind` (`text` or `offer`), `topic_id` (optional; required for an offer, and must be one of this chat's listing topics), `sender_key_id`, `recipient_key_id`, `nonce`, `ciphertext` (base64). 409 if a key changed (reload and re-encrypt); resending the same message returns it (200); 429 after 30 messages a minute |
-| POST | `/chat/conversations/{id}/read` | participant | `{"seq": n}`: I've read up to `n` (read receipts and unread counts) |
-| POST | `/chat/messages/{id}/offer` | participant | `{"action": "accept" \| "decline" \| "withdraw"}`. Only the other person accepts or declines; only the maker withdraws. Accepting reserves the offer's listing. One open offer per listing: a new one supersedes it |
+| POST | `/chat/conversations/{id}/read` | participant | `{"seq": n}`: I've read up to `n` (read receipts and unread counts). Returns `{"my_last_read_seq": n}` |
+| POST | `/chat/messages/{id}/offer` | participant | `{"action": "accept" \| "decline" \| "withdraw"}`. Only the other person accepts or declines; only the maker withdraws. Accepting marks an available listing `reserved`; offers from other buyers, in their own chats, can still be accepted while it's reserved. Only `sold` is final: accepting on a sold or deleted listing returns 409. Any action on an offer that's no longer pending returns 409. Within one chat, a newer offer from either person replaces the pending one (`superseded`) |
 | DELETE | `/chat/messages/{id}` | sender | Delete for everyone (unsend): the ciphertext is erased for both people (a pending offer becomes withdrawn) |
 | POST | `/chat/messages/{id}/hide` | participant | Delete for me: I stop seeing this message (anyone's); the other person still does |
 | DELETE | `/chat/conversations/{id}` | participant | Delete the chat for me: it leaves my list and its messages so far stay hidden from me. Nothing is erased for the other person; when they write again the chat comes back for me with only the new messages |
@@ -538,18 +564,18 @@ One chat per pair of people, like WhatsApp (since rev 10). What part of a chat i
 | Object | Fields |
 | --- | --- |
 | Conversation | `id`, `peer` (`id`, `name`, `is_active`, `key`), `topics` (oldest first), `my_key_id`, `last_seq`, `my_last_read_seq`, `peer_last_read_seq`, `unread_count`, `last_message`, `last_message_at`, `created_at`, `blocked_by_me`, `can_send`, `cant_send_reason` |
-| Topic | `id`, `kind` (`listing`, `lost_report`, `found_report`), `ref_id`, `owner_id` (seller or reporter), `title` (listing title, or `Lost: <category>` / `Found: <category>`), `description` (reports), `price` (listings), `status`, `cover_photo_url`, `is_removed`, `started_by`, `created_at` |
+| Topic | `id`, `kind` (`listing`, `lost_report`, `found_report`), `ref_id`, `owner_id` (seller or reporter), `title` (listing title, or `Lost: <report title>` / `Found: <report title>`, using the category when the report has no title), `description` (reports), `price` (listings), `status`, `cover_photo_url`, `is_removed`, `started_by`, `created_at` |
 | Message | `id`, `conversation_id`, `crypto_context_id`, `topic_id`, `seq`, `changed_seq`, `sender_id`, `kind`, `sender_key_id`, `recipient_key_id`, `nonce`, `ciphertext` (both `null` once unsent), `offer_status` (`pending`, `accepted`, `declined`, `withdrawn`, `superseded`; offers only), `offer_answered_at`, `sent_at`, `deleted_at` |
 
 - **Encryption (protocol `campushub-chat-v1`):** each user has an X25519 key pair. Both people derive an AES-256-GCM key with HKDF-SHA256 from their X25519 shared secret, bound to the message's `crypto_context_id` and both public keys. `crypto_context_id` is the conversation id, except for messages from before rev 10, which keep the id of the per-listing chat they were written in (migration `010_chat_per_person.sql` merged those chats per person). Each message has a random 12-byte nonce, and its associated data binds it to that context, message id, sender and kind, so the server can't move it, relabel the sender, or turn text into an offer. Offer amounts are inside the ciphertext too.
 - **Keys for people who haven't opened Messages:** opening a chat (or loading one) gives either person a key if they have none, made on the server with `backup_kdf` `none`, so anyone can be messaged right away.
 - **Multiple devices:** the app makes a key on first use and uploads the private key with `backup_kdf` `none`; any other browser the user signs in on downloads it. Nothing to remember, but the server (or anyone with database access) can decrypt messages. Accounts that set a passphrase before it was removed enter it once more on a device that never unlocked it; the app then re-uploads the same key as `none`.
-- **Notifications:** `chat_message`, payload `conversation_id` and a `message` saying who wrote about which listing, never the text. One per unread stretch, plus one per offer or offer answer.
+- **Notifications:** `chat_message`, payload `conversation_id` and a `message` saying who wrote about which listing, never the text. One per unread stretch, plus one per offer, and one when your offer is accepted or declined (not when an offer is withdrawn).
 - **Also visible to the server:** who talks to whom, about which listing, when, and message sizes are visible to the server. There's no forward secrecy (a stolen private key opens past messages of that key); a Double Ratchet would add it.
 
 ## Notifications and devices
 
-Every notification lands in the user's in-app inbox. Push to phones is registered but not delivered yet, so design the inbox first.
+Every notification lands in the user's in-app inbox. Browsers also get Web Push; push to native Android/iOS apps isn't delivered yet, so design the inbox first.
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
@@ -571,7 +597,9 @@ A notification has `id`, `type`, `payload`, `is_read` and `created_at`. Every `p
 | `lost_found_match` | Someone files a found report matching your open lost report | `found_report_id`, `lost_report_ids` | The found report |
 | `saved_search_match` | A new item matches one of your saved searches | `saved_search_id`, and `listing_id` or `found_report_id` | The listing or found report |
 | `wanted_post_match` | A new listing matches one of your open Wanted posts | `wanted_post_id`, `listing_id` | The listing |
-| `chat_message` | A new message, offer or offer answer, or a buyer wants to chat before you've set up messaging | `conversation_id` | The conversation |
+| `chat_message` | A new message, an offer, or an answer to your offer | `conversation_id` | The conversation |
+| `listing_watch` | A listing you watch changed price or was marked negotiable | `listing_id`, `old_price`, `price`, `negotiable` | The listing |
+| `moderation_action` | A moderator acted on your post or account (removal, strike, appeal decision, unblock, role change), or, for moderators, something new to review | Often `kind` (e.g. `strike_appeal`, `report_resolved`, `role_change`) and the related item's id (`listing_id`, `strike_id`, `request_id`, or `target_type` and `target_id`) | Depends on `kind`; the item or the moderation queue |
 | `followed_tag_event` | A new event carries a tag you follow | `event_id`, `tags` | The event |
 | `bookmarked_event_update` | An event you bookmarked changed or was cancelled | `event_id`, `cancelled` | The event (nothing when cancelled) |
 | `course_update` | Something new in a course you follow: a material, feedback, a forum post or reply | `course_id`, `course_code`, and `material_id`, `feedback_id` or `thread_id` | The course (a forum item opens its thread) |
@@ -596,6 +624,7 @@ Health Centre, Wellness Centre, emergency and grievance links for the landing pa
 | Campus service | `id`, `name`, `description`, `category`, `url` (`null` if phone only), `phone` (`null` if link only), `sort_order`, `is_active`, `updated_at` |
 
 - **Show `phone` as a tap-to-call button** and `url` as a link. Every service has at least one of them.
+- **Limits:** name 1–80 characters, description up to 300, `url` up to 500 (`http` or `https`), `sort_order` 0–1000 (default 100; lower comes first).
 - **Starting list** (from iisc.ac.in, checked 24 Oct 2026): Health Centre, Emergency / Ambulance (080-2293-4444), Wellness Centre, student grievance redressal, ICASH, complaints about caste-based discrimination, anti-ragging.
 
 ## Not available yet

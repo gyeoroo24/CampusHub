@@ -651,7 +651,8 @@ async def send_message(conversation_id: UUID, body: MessageIn, response: Respons
             f"UPDATE chat_conversations SET last_message_at = now(), {_read_column(conversation, mine=True)} = $2 "
             "WHERE id = $1", conversation_id, seq)
         if body.kind == "offer":
-            # One open offer per listing: a new one (from either person) replaces it.
+            # One open offer per listing within this chat: a new one (from either person) replaces it.
+            # Other buyers' chats about the same listing keep their own offers (topic_id is per chat).
             await conn.execute(
                 """UPDATE chat_messages SET offer_status = 'superseded', offer_answered_at = now(), changed_seq = $2
                    WHERE topic_id = $1 AND offer_status = 'pending'""", body.topic_id, seq)
@@ -721,8 +722,9 @@ async def answer_offer(message_id: UUID, body: OfferAction, background: Backgrou
         if row is None:
             raise HTTPException(409, "This offer is no longer open.")
         if body.action == "accept":
-            # A deal is agreed: the listing is held for this buyer until the seller marks it sold
-            # (or makes it available again).
+            # A deal is agreed in principle: an Available listing becomes Reserved. Reserved doesn't lock
+            # it to this buyer; other buyers' offers can still be accepted (backups if one backs out).
+            # Only Sold is final: accepting on a sold listing is refused above.
             await conn.execute("UPDATE listings SET status = 'reserved' WHERE id = $1 AND status = 'available'",
                                message["listing_id"])
         if not mine:

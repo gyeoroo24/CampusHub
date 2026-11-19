@@ -4,8 +4,8 @@ The FastAPI backend for CampusHub, the IISc student community platform (DS252 In
 Computing, team Order of Phoenix). FastAPI and asyncpg on PostgreSQL, Cognito sign-in, S3 uploads and an
 optional Redis cache.
 
-On this branch it is deployed as **five AWS Lambda functions** behind API Gateway and CloudFront. The
-same code runs on EC2 on the `baseline-infra-restore` branch, for the Lambda-vs-EC2 comparison.
+On this branch it is deployed as **five API Lambda functions** behind API Gateway and CloudFront. The
+same code runs on EC2 on the `[STALE]-baseline-infra` branch (no longer active), for the Lambda-vs-EC2 comparison.
 
 **Modules:** sign-in and profiles, moderator roles, Buy & Sell and Wanted posts, Lost & Found (with
 matching), Academic Help (departments, courses, materials, feedback), forums, Placement Hub, Community
@@ -50,15 +50,23 @@ Dockerfile*           Images for local or container deployments (not used by the
 
 ## Run it locally
 
-Requires Docker and Python 3.12 or 3.13 (asyncpg 0.30.0 has no Python 3.14 wheels yet).
+Requires Docker (Docker Desktop must be running) and Python 3.12 or 3.13 only. Python 3.14 does not work:
+`pip install` fails building `pydantic-core`, and asyncpg 0.30.0 has no 3.14 wheels. If `python3.12` is
+missing, install it (for example `brew install python@3.12`) or create the venv with
+`uv venv --seed --python 3.12 .venv`.
 
 ```bash
 docker compose up -d                    # Postgres (schema loaded on first start) + MinIO
-python -m venv .venv && source .venv/bin/activate
+python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 cp .env.local.example .env              # dev sign-in, local MinIO (docker compose creates the bucket)
 uvicorn app.main:app --reload --env-file .env   # http://localhost:8000/docs
 ```
+
+On Windows (PowerShell), create and activate the venv with `py -3.12 -m venv .venv` and
+`.venv\Scripts\activate`. `requirements.txt` installs `tzdata` there (Windows has no built-in time zone
+data); if uvicorn stops with `ZoneInfoNotFoundError: 'No time zone found with key Asia/Kolkata'`, run
+`pip install -r requirements-dev.txt` again.
 
 `--env-file` also exports the MinIO keys in `.env` (`AWS_ACCESS_KEY_ID`…) to boto3. Without it,
 boto3 signs uploads with your own `~/.aws/credentials`, and MinIO rejects them.
@@ -79,6 +87,19 @@ one request), use SQL; after that, the admin hands the role over with `POST /api
 
 ```bash
 docker compose exec db psql -U campushub -c "UPDATE users SET base_role = 'admin' WHERE email = 'asha@iisc.ac.in';"
+```
+
+If you have loaded the demo data (next section), an admin already exists (`ananya.rao@iisc.ac.in`) and the
+command above fails with `uq_users_single_admin`. Sign in as the seeded admin, or hand the role over in one
+transaction:
+
+```bash
+docker compose exec -T db psql -U campushub <<'EOF'
+BEGIN;
+UPDATE users SET base_role = 'signed_in' WHERE base_role = 'admin';
+UPDATE users SET base_role = 'admin' WHERE email = 'asha@iisc.ac.in';
+COMMIT;
+EOF
 ```
 
 ### Dummy data and keeping the database
@@ -138,9 +159,9 @@ docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub 
 python -m app.matching --backfill
 ```
 
-A database created before revision 22 (1–2 Nov 2026: seller trust strikes, automatic flagging,
+A database created before revision 23 (1–3 Nov 2026: seller trust strikes, automatic flagging,
 price watch and the Negotiable badge, Placement Hub and Events, then Events moderators, Reddit-style
-forums, the placement schedule and event posters, then senior contacts and mess menus, then hiding chats and any email in placement sheets, then mess event cards, then role compensation, then the course repository) needs these, in order, then
+forums, the placement schedule and event posters, then senior contacts and mess menus, then hiding chats and any email in placement sheets, then mess event cards, then role compensation, then the course repository, then permanent Buy & Sell deletes) needs these, in order, then
 `db/reference-data.sql` once more for the default event tags:
 
 ```bash
@@ -151,6 +172,26 @@ for m in 013_seller_trust 014_reversible_listing_hide 015_auto_flags_and_price_w
   docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub < db/migrations/$m.sql
 done
 ```
+
+A database created before revision 26 (3–6 Nov 2026: event updates, who added each company and titles on
+Lost & Found reports, then unblock requests and listing bookmarks) needs these, in order:
+
+```bash
+for m in 024_event_updates 025_company_created_by 026_unblock_requests_bookmarks; do
+  docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub < db/migrations/$m.sql
+done
+```
+
+Then run the one-off data cleanup `027_audit_cleanup` (no schema change; safe to run twice). It removes
+leftover bookmark rows and the photo rows of removed Lost & Found reports. The migration's header lists a
+query that finds the matching S3 files so you can delete them too:
+
+```bash
+docker exec -i campushub-db-1 psql -v ON_ERROR_STOP=1 -U campushub -d campushub < db/migrations/027_audit_cleanup.sql
+```
+
+`campushub-db-1` is the container name Docker Compose gives the database when the project has its default
+name (`campushub`). `docker compose exec -T db psql ... < file` run from this folder does the same thing.
 
 Reading mess menus from PDFs and photos needs Tesseract (`brew install tesseract`, or
 `apt-get install tesseract-ocr`); without it moderators type or paste the meals.
@@ -165,22 +206,41 @@ checks run. Set `CAMPUSHUB_AUTO_FLAG=false` to turn it off.
 
 ### Lost & Found matching (optional locally)
 
-Reports are matched by description and photo with three small ONNX models (code in
+Reports are matched by description and photo with small ONNX models (code in
 `app/matching`). Without them the API keeps the old same-category rule, so this step is
 optional. To turn it on locally:
 
 ```bash
-uv pip install -r requirements-matching.txt          # or pip install
-python scripts/fetch_match_models.py                  # ~305 MB into backend/models (gitignored)
+python scripts/fetch_match_models.py                  # about 579 MB into backend/models (gitignored)
 ```
 
-The same download includes the 34 MB model behind category suggestion
-(`GET /buy-sell/categories/suggest`, `app/categories_suggest.py`). It runs in the API itself, and
-`--suggest-only` fetches just that one; both Dockerfiles do so.
-`python scripts/calibrate_category_suggest.py` measures it on labelled titles.
+(`requirements-matching.txt` lists the extra packages, but `requirements-dev.txt` already installs them, so
+`uv pip install -r requirements-matching.txt` changes nothing if you followed the steps above. It is needed
+only on an environment built from `requirements.txt` alone.)
+
+The script downloads five models. Sizes measured on a local test (they total 579 MB):
+
+| Folder in `backend/models` | Size | Used for |
+|---|---:|---|
+| `all-MiniLM-L6-v2` | 97 MB | Lost & Found description matching |
+| `mobileclip_s0` | 223 MB | Lost & Found photo matching |
+| `bge-small-en-v1.5` | 33 MB | Category suggestion (`GET /buy-sell/categories/suggest`) and automatic flagging |
+| `nsfw_image_detection` | 96 MB | Obscene-photo check in automatic flagging |
+| `twitter-roberta-sentiment` | 130 MB | Course feedback sentiment and the survival guide |
+
+The category model runs in the API itself, and `--suggest-only` fetches only that one plus the sentiment model (33 MB + 130 MB, 164 MB in all, measured
+on a local test); both Dockerfiles do so. `python scripts/calibrate_category_suggest.py` measures it on labelled titles.
 
 Restart the API: with `CAMPUSHUB_MATCH_MODE=auto` (the default) it finds the models and matches
-in a background task. `python scripts/calibrate_matching.py <photo dir>` prints the similarity
+in a background task. To check that the models were found:
+
+```bash
+curl -H "X-Dev-User: you@iisc.ac.in" "http://localhost:8000/api/v1/buy-sell/categories/suggest?title=Casio%20scientific%20calculator"
+# {"category":{"id":3,"name":"Electronics"}}   (an empty result means the model was not found)
+pytest tests/test_category_suggest_accuracy.py tests/test_auto_flag_accuracy.py     # skipped without the models
+```
+
+`python scripts/calibrate_matching.py <photo dir>` prints the similarity
 scores the thresholds in `app/matching/engine.py` were chosen from.
 
 ### Share it on your network
@@ -189,7 +249,9 @@ To let teammates on the same Wi-Fi use your running backend (no cloud needed):
 
 1. In `.env`, set:
    - `CAMPUSHUB_DEV_AUTH_KEY` to a long random value. Other machines must send it as the
-     `X-Dev-Key` header along with `X-Dev-User`; without it they can only browse as guests.
+     `X-Dev-Key` header along with `X-Dev-User`; without it, a request carrying `X-Dev-User` from another machine gets `403 Dev sign-in only works from the
+     machine the API runs on, or from the same network with the team's X-Dev-Key`. Requests with no header browse
+     as guests.
    - `CAMPUSHUB_S3_ENDPOINT_URL=http://<this laptop's IP>:9000`, so their upload and photo links
      work (on macOS: `ipconfig getifaddr en0`).
    - `AWS_SECRET_ACCESS_KEY` (and `AWS_ACCESS_KEY_ID`) to a new login, because MinIO's port 9000
@@ -203,7 +265,7 @@ Postgres and the MinIO console stay reachable from this machine only. If the lap
 changes, update `CAMPUSHUB_S3_ENDPOINT_URL` and restart the API. Some campus networks block
 traffic between laptops; a phone hotspot works around that.
 
-To purge notifications older than 30 days (deployed as a daily scheduled Lambda, see below):
+To purge notifications older than 30 days:
 
 ```bash
 python -m app.jobs
@@ -211,9 +273,16 @@ python -m app.jobs
 
 ## Tests
 
+Run from this `backend/` folder with the virtual environment active and the Docker database running:
+
 ```bash
+source .venv/bin/activate
 pytest
 ```
+
+Two mess-menu tests (`test_seniors_and_mess.py`: reading meals from `C mess menu.pdf` and a rotated `E mess menu.pdf`)
+need Tesseract **and** those sample PDFs, which are not in the repository (the tests look for them two folders
+above the repo). On a clean checkout they are skipped; with Tesseract and the PDFs in place they pass.
 
 The tests (more than 200) use the real Postgres from docker-compose (database `campushub_test`; set
 `CAMPUSHUB_TEST_DATABASE_URL` to use another) and a mocked S3. They cover the PRD
@@ -232,7 +301,9 @@ fixed after the 23 Oct 2026 review. Among them:
 
 ## How sign-in works
 
-- **Guests** send nothing and can read every public feed (FR-1).
+- **Guests** send nothing and can read every public feed (FR-1). Placement Hub is confidential: guests
+  get the season totals (`GET /placement/stats`), and company pages, schedules, hiring statistics and
+  seniors answer 401 without sign-in.
 - **Signed-in users** send their Cognito **ID token**: `Authorization: Bearer <id_token>`.
   The API checks its signature, expiry, issuer and audience on every route (a bad or expired
   token gets 401 even on pages guests can read), then creates the user's row on their first
@@ -252,8 +323,8 @@ fixed after the 23 Oct 2026 review. Among them:
   request, so revoking a moderator takes effect on their very next call.
 - **Sign-up restriction:** attach `lambdas/cognito_pre_signup.py` as the user pool's
   *Pre sign-up* trigger, so only `…iisc.ac.in` addresses (including subdomains such as
-  `alum.iisc.ac.in`) can create accounts. The Terraform `auth` module does **not** attach it, so
-  a deployed pool accepts any email at sign-up; the API still requires a verified email.
+  `alum.iisc.ac.in`) can create accounts. The API refuses any account whose email isn't an IISc
+  address (403), and also requires a verified email.
 
 ## Uploading photos and files
 
@@ -287,7 +358,7 @@ local runs only).
 
 | Method & path | Who | What |
 |---|---|---|
-| GET /health | guest | Health check (CloudWatch canary) |
+| GET /health | guest | Health check: runs `SELECT 1` against the database |
 | GET, PATCH /me | user | My profile, admin flag and active moderator roles; update profile (a phone number can only be removed here) |
 | POST /me/phone/code, POST /me/phone/verify | user | Add or change my phone number: a 6-digit code is sent to it, then checked |
 | GET /users/{id} | guest | Public profile; email and phone only for signed-in viewers |
@@ -306,9 +377,9 @@ local runs only).
 | GET /listings | guest | Browse. Filters: `q`, `category_id`, `min_price`, `max_price`, `status`, `seller_id`; `sort` newest / price_asc / price_desc |
 | POST /listings | user | Create, with up to 10 `photo_keys` |
 | GET /listings/{id} | guest | Detail with photos; seller contact for signed-in users |
-| PATCH /listings/{id} | seller, admin | Edit fields; admin edits are logged |
-| PATCH /listings/{id}/status | seller, admin | available / reserved / sold |
-| PUT /listings/{id}/photos | seller, admin | Replace, reorder or remove photos |
+| PATCH /listings/{id} | seller | Edit fields |
+| PATCH /listings/{id}/status | seller | available / reserved / sold |
+| PUT /listings/{id}/photos | seller | Replace, reorder or remove photos |
 | DELETE /listings/{id} | seller, Buy & Sell moderator, admin | Soft delete; moderator removals are logged |
 
 New, edited or re-opened listings alert matching saved searches and Wanted posts (`app/alerts.py`).
@@ -412,7 +483,7 @@ New, edited or re-opened listings alert matching saved searches and Wanted posts
 | POST /chat/messages/{id}/offer, DELETE /chat/messages/{id} | participant | Accept (reserves the listing), decline or withdraw an offer; unsend |
 | GET /chat/blocks, PUT, DELETE /chat/blocks/{user_id} | user | Blocked people; block or unblock |
 
-**Campus services** (landing page)
+**Campus services** (the Campus services dialog in the app's top bar)
 
 | Method & path | Who | What |
 |---|---|---|
@@ -457,14 +528,16 @@ Every setting is an environment variable with the prefix `CAMPUSHUB_` (`app/conf
 - In Lambda, the AUTH token is fetched once per container from `CAMPUSHUB_REDIS_AUTH_SECRET_ARN`.
 
 On AWS, CloudFront also caches those paths, plus `/wanted`, `/event-tags`, `/companies` and
-`/placement/stats`, for 20 seconds in front of the API (see
+`/placement/stats`, for 20 seconds in front of the API, for guests only: `app/main.py` marks every
+signed-in GET `Cache-Control: private, no-store` (see
 [terraform/README.md](../terraform/README.md#3-caching)).
 
 ## Deploying on AWS
 
-On this branch the backend runs as **five AWS Lambda functions** (Python 3.11, x86_64), all from the
-same zip. Terraform builds and deploys it; there is no Docker image or ECR step. Follow the
-[root README](../README.md#5-deploy-to-aws) for the full deployment.
+On this branch the backend runs as **five API Lambda functions** (Python 3.11, x86_64), all from the
+same zip. The same zip also runs the push-sender function (see Push notifications). Terraform also
+deploys the data-tools function (database migrations and snapshots). Terraform builds and deploys it; there is no Docker image or ECR step. Follow the
+[root readme](../readme.md#5-deploy-to-aws) for the full deployment.
 
 ### How the Lambda package is built
 
@@ -496,7 +569,7 @@ client, the media bucket and regional S3 endpoint, and, when ElastiCache is enab
 
 A new database is empty. Load `db/schema.sql` and `db/reference-data.sql`, or restore a snapshot, then
 run any newer `db/migrations/0NN_*.sql`. On AWS this goes through the data-tools Lambda, because the
-database is reachable only inside the VPC (see the [root README](../README.md#57-load-the-database)).
+database is reachable only inside the VPC (see the [root readme](../readme.md#57-load-the-database)).
 
 ### Lambda-specific behaviour
 

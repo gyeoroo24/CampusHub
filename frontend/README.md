@@ -136,11 +136,12 @@ cd terraform
 ```
 
 It reads the values above from `terraform output`, builds, runs `aws s3 sync build/web s3://<bucket>
---delete` and invalidates CloudFront.
+--delete`, marks the entry files (`index.html`, `main.dart.js`, ...) `Cache-Control: no-cache` and
+invalidates CloudFront.
 
-**From GitHub Actions:** `.github/workflows/deploy-frontend.yml` does the same on every push to `main`
-that changes `frontend/**`, or when started by hand (`workflow_dispatch`). Set these repository secrets
-first:
+**From GitHub Actions:** `.github/workflows/deploy-frontend.yml` builds the app, syncs it to S3 and
+invalidates CloudFront on every push to `main` that changes `frontend/**` or the workflow, or when
+started by hand (`workflow_dispatch`). Set these repository secrets first:
 
 | Secret | Value |
 |---|---|

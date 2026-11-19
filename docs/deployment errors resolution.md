@@ -1,7 +1,10 @@
 # Deployment errors and resolutions
 
-This log records problems hit while deploying CampusHub to AWS (branch
-`fix/cloud-deploy-zip-and-routes`), their causes, and their fixes.
+**Historical log.** These entries were written during the first Lambda deployment, on a working branch
+that has since been merged. The live branch is now `main`; for current deployment steps, follow
+[readme section 5](../readme.md#5-deploy-to-aws).
+
+This log records problems hit while deploying CampusHub to AWS, their causes, and their fixes.
 
 The "Codified?" column says whether the Terraform in this repo reproduces the fix on a fresh
 `terraform apply`. Fixes that are not in code yet are listed under Open items. Secret values (keys,
@@ -9,8 +12,12 @@ passwords) are deliberately not written here.
 
 ## How to deploy (any AWS account)
 
-1. `terraform init` and `terraform apply` in `terraform/`. Set `cognito_domain_prefix` to a
-   name unique to your account (or leave it empty for `campushub-<env>-<account id>`).
+1. Create a state bucket (`terraform/bootstrap`) and build the PostgreSQL layer
+   (`terraform/modules/data_tools/pg_layer/build.sh`), then in `terraform/` run
+   `terraform init -backend-config="bucket=<your state bucket>"` and `terraform apply` (readme 5.2 to
+   5.5; a plain `terraform init` fails with 403 because `versions.tf` names another account's bucket).
+   Set `cognito_domain_prefix` to a name unique to your account (or leave it empty for
+   `campushub-<env>-<account id>`).
 2. Optional, for mess-menu reading: `terraform/modules/compute/tesseract_layer/build.sh` (needs
    Docker, 30-60 min on an ARM Mac), then set `tesseract_layer_zip` to the zip path in
    `terraform.tfvars`.
@@ -18,7 +25,9 @@ passwords) are deliberately not written here.
    (`["https://<cloudfront-domain>/"]`) and apply again, so Cognito allows the web app's redirect.
 4. `terraform/scripts/deploy_frontend.sh` builds the web app with this account's API and Cognito
    settings and publishes it to S3 and CloudFront. Repeat it after every frontend change.
-5. Load the database schema (see item 2 and 3 below). Terraform does not do this.
+5. Load the database through the data-tools Lambda: restore a snapshot or run the schema with its
+   `migrate` action ([readme 5.7](../readme.md#57-load-the-database)). Terraform does not do this.
+   (Items 2 and 3 below used a temporary Lambda before the data-tools function existed.)
 
 ## Summary
 
@@ -27,9 +36,9 @@ passwords) are deliberately not written here.
 | 1 | Site shows `AccessDenied` | Frontend S3 bucket empty | Built web app with cloud defines, synced to bucket, invalidated CloudFront | `terraform/scripts/deploy_frontend.sh` | Yes |
 | 2 | Buy & Sell: status 500, `relation "listings" does not exist` | RDS had no tables | Ran `db/schema.sql` and `db/reference-data.sql` via a temporary VPC Lambda | Temporary Lambda (deleted) | No |
 | 3 | Cloud needed the local `campushub` data | Cloud schema was empty | Replaced cloud schema with a dump of `campushub` via a temporary VPC Lambda, one transaction | Temporary Lambda (deleted) | No |
-| 4 | Email-code dialog shown; API returns 404 "signs in through Cognito" | App used local OTP flow | Hosted UI sign-in (authorization code + PKCE) enabled by build-time defines | Frontend code + `deploy_frontend.sh` | Partly (frontend code not committed) |
-| 5 | Cognito sign-in works but app stays signed out | Repository rebuilt on startup; code exchanged twice; profile never loaded | One shared exchange per code; capture redirect URL before router; load `/me` after exchange | Code (uncommitted) | No |
-| 6 | No Create-account button; sign-out leaves Cognito session | Missing `/signup` and `/logout` calls | "Create account" opens `/signup`; sign-out calls `/logout` | Code (uncommitted) | No |
+| 4 | Email-code dialog shown; API returns 404 "signs in through Cognito" | App used local OTP flow | Hosted UI sign-in (authorization code + PKCE) enabled by build-time defines | Frontend code + `deploy_frontend.sh` | Yes (frontend code) |
+| 5 | Cognito sign-in works but app stays signed out | Repository rebuilt on startup; code exchanged twice; profile never loaded | One shared exchange per code; capture redirect URL before router; load `/me` after exchange | Code | No |
+| 6 | No Create-account button; sign-out leaves Cognito session | Missing `/signup` and `/logout` calls | "Create account" opens `/signup`; sign-out calls `/logout` | Code | No |
 | 7 | Cognito rejects the app's redirect | Callback and logout URLs listed only localhost | Added the CloudFront URL; created Hosted UI domain | `modules/auth` (`cognito_domain_prefix`, `additional_callback_urls`) | Yes |
 | 8 | Photo and mess-menu uploads: network error | Upload URL signed for global S3 host; S3 redirects (307); browsers don't follow on cross-origin PUT | `CAMPUSHUB_S3_ENDPOINT_URL` set to the regional S3 host on the API Lambdas | `modules/compute/main.tf` | Yes |
 | 9 | Uploads: 403 | Lambda role lacked `s3:PutObjectTagging` (upload tickets carry a tag) | Added `s3:PutObjectTagging` and `s3:GetObjectTagging` | `modules/compute/iam.tf` | Yes |
@@ -37,26 +46,26 @@ passwords) are deliberately not written here.
 | 11 | C mess menu: header not found | Layer v1 used Tesseract 5.3.4 and unpinned packages | Rebuilt layer: Tesseract 5.5.3, leptonica 1.87.0, numpy 2.2.6, Pillow 12.2.0, pypdfium2 5.14.0 | `modules/compute/tesseract_layer/inside.sh` | Yes |
 | 12 | Dev sign-in not possible on Lambda | `backend/app/main.py` refuses dev mode in Lambda, by design | Not changed | — | — |
 | 13 | Textract unusable | `SubscriptionRequiredException`: not enabled on the account | Not used; Tesseract layer chosen | — | — |
-| 14 | Menu reader takes ~15 s per menu | One `tesseract` process per cell, each reloading the language model | libtesseract called in-process (`ctypes`); engines kept and reused; orientation on an `osd` engine | `backend/app/mess_extract.py` | Code (uncommitted; no Terraform change) |
-| 15 | Messaging search lists people who aren't in the app; picking one gives an error | The local dev seed's accounts (`cognito_sub` `dev|...`) were restored into the cloud database. They never signed in to Cognito, so they can't receive messages | Search lists only accounts whose `cognito_sub` isn't a `dev|` row, when `auth_mode` is `cognito` | `backend/app/routers/users.py` | Code (uncommitted) |
-| 16 | Admin can't appoint department or course moderators | The admin panel's module list left out Academic Help. The API already supported department and course grants | Academic Help added to the admin's module list; the existing Covers / Department / Course pickers now appear | `frontend/lib/features/admin/ui/moderator_grants_panel.dart` | Code (uncommitted) |
-| 17 | Course and department moderators can't remove other people's course feedback | Feedback responses had no moderator flag, so the app offered Remove only on your own review | `can_remove` on each feedback item (author, or a moderator of the course); Remove button for moderators; no strike | `backend/app/routers/academic.py`, `frontend/lib/features/academics/ui/course_guide_screen.dart` | Code (uncommitted) |
-| 18 | Admin Controls has a Backend & Health tab that isn't used | Left over from development (demo connection form and canary checks) | Tab, its header button, the demo connection form and the health provider removed | `frontend/lib/features/admin/ui/admin_controls_screen.dart` | Code (uncommitted) |
-| 19 | Notification panel doesn't show new notifications until it's closed and reopened | The inbox refreshed only when opened, and the background refresh ran every 60 s without reaching an open inbox | The open inbox refreshes every 15 s, and the bell badge every 30 s | `frontend/lib/features/alerts/` | Code (uncommitted) |
-| 20 | Deleting your own listing from the reports queue leaves its report on screen | The queue reloaded only after a moderator action from its own buttons, not after the listing's dialog (where the owner deleted it) closed | The queue reloads whenever a report's listing or Lost & Found dialog closes | `frontend/lib/features/admin/ui/admin_controls_screen.dart` | Code (uncommitted) |
-| 21 | Switching module on the cloud site lags 3-4 s the first time | Each module has its own Lambda (5 in all). The first request to an idle one is a cold start: load the app, fetch the database secret, connect to RDS | EventBridge calls `GET /api/v1/health` on each Lambda every 5 minutes, which keeps one instance of each warm | `terraform/modules/compute/warmer.tf`, `variables.tf` (`warm_schedule`) | Yes (not yet applied) |
-| 22 | My Profile's last postings tab ("Academic & Placement") was an empty placeholder | Never built | Course Feedback and Course Materials tabs for everyone; Placement Companies and Events & Mess Menus tabs for moderators and the admin. New `GET /me/posts`; companies now record who added them (`companies.created_by`, migration 025) | `backend/app/routers/my_posts.py`, `backend/app/routers/placement.py`, `backend/db/migrations/025_company_created_by.sql`, `frontend/lib/features/profile/` | Code (uncommitted); migration 025 must be run on RDS |
-| 23 | Phone numbers are saved without a real SMS code | `otp.py` only logs the phone code (no SMS provider), keeps codes in process memory, and accepts 123456 | Not implemented yet: plan below | — | — |
-| 24 | Searching in the top bar filters the Buy & Sell and Lost & Found pages | The search box wrote its text into those pages' filters, and its results came from their (now filtered) lists | The search runs its own server lookups for listings, lost and found reports; it no longer touches any page's filters | `frontend/lib/core/widgets/super_search_bar.dart` | Code (uncommitted) |
-| 25 | In chat, only the newest read message shows two blue ticks; older read ones show one grey tick | Ticks were drawn from the "Seen" marker, which is on one message only | Every message of mine the other person has read shows two blue ticks; "Seen" stays under the newest one | `frontend/lib/features/messages/ui/conversation_view.dart` | Code (uncommitted) |
-| 26 | Accepting an offer in Messages doesn't show the listing as Reserved in Buy & Sell until the page is reloaded | The Buy & Sell feed is kept in memory across pages and only reloaded on a filter change | The feed reloads quietly (no spinner) after an offer is answered and whenever the Buy & Sell page opens | `frontend/lib/features/buy_sell/providers/buy_sell_providers.dart` (`refreshQuietly`), `buy_sell_feed_screen.dart`, `messages/ui/conversation_view.dart` | Code (uncommitted) |
-| 27 | Sign-in dialog's "Cancel / Browse as Guest" | Wording | A red "Cancel" button | `frontend/lib/features/auth/ui/auth_dialog.dart` | Code (uncommitted) |
-| 28 | Wanted matches ignore listings a little over budget that are negotiable | Matching compared price with the budget only | A listing marked negotiable matches up to 20% over the budget | `backend/app/alerts.py` (`NEGOTIABLE_MARGIN`) | Code (uncommitted) |
-| 29 | Category suggestion doesn't work on the cloud (Buy & Sell, and now Lost & Found) | It runs an ONNX model in the API, but the Lambda zip leaves out onnxruntime, tokenizers, numpy and the model (250 MB limit), so the API answers "no suggestion" | New ML layer (onnxruntime 1.16.3, tokenizers, numpy 1.26, bge-small model; 132 MB unzipped) on the buy-sell and lost-found Lambdas; the two `/categories/suggest` routes go to them | `terraform/modules/compute/ml_layer/build.sh`, `modules/compute/main.tf`, `modules/api_gateway/main.tf`, `variables.tf` (`ml_layer_zip`) | Yes (not yet applied) |
-| 30 | Lost & Found reports have no title, and no category suggestion | Never built | Optional `title` on reports (required in the app), searched with the description, used in chat topics, the reports queue, removal notices, matching and suggestion examples. The report form suggests a category from the title, as Buy & Sell does | `backend/app/routers/lost_found.py`, migration 025, `frontend/lib/features/lost_found/` | Code (uncommitted); migration 025 must be run on RDS |
-| 31 | Posting a new mess menu adds it after the old one instead of replacing it | "Post the next menu" started the new menu after the last one ended, and overlapping a menu that had meals was refused (409) | A new menu replaces the mess's menu from its first day: a menu that started earlier now ends the day before, and menus starting within the new dates are removed (their files deleted). The button is "Post a new menu" and starts today | `backend/app/routers/mess.py` (`_replace_older_menus`), `frontend/lib/features/mess/ui/mess_screen.dart` | Code (uncommitted) |
-| 32 | `GET /api/v1/me` with a real Cognito token returns the SPA's `index.html` (200) instead of the user, looking exactly like a routing bug | Not a routing bug: the backend correctly 403s (unverified email), and CloudFront's distribution-wide `custom_error_response` for 403 serves `index.html` instead, from the S3 origin — that is also why the response's `Server` header says `AmazonS3` even though API Gateway produced the error | No fix needed in this case: `admin-confirm-sign-up` alone doesn't set `email_verified=true` on the Cognito user, only `admin-update-user-attributes --user-attributes Name=email_verified,Value=true` does (or the real Hosted UI code flow). The README's §5 manual test steps should add that attribute call, or they'll hit this too | `terraform/README.md` §5 (needs updating) | N/A — document the gotcha |
-| 33 | Signed-in users on the cloud site get logged out roughly every hour | `ApiClient`'s 401 retry only ran inside `getCurrentUser()`; every other authenticated call (posting, chat, uploads, …) had no refresh path, so once the ~1 hour Cognito ID token expired the first such call failed outright | `ApiClient` gained an `onUnauthorized` hook called on any 401, which refreshes the ID token via the stored Cognito refresh token and retries the request once; wired to `ApiAuthRepository.refreshSession` in `authRepositoryProvider` | `frontend/lib/core/api/api_client.dart`, `frontend/lib/features/auth/providers/auth_providers.dart` | Code (uncommitted at the time of writing — see commit in this same change) |
+| 14 | Menu reader takes ~15 s per menu | One `tesseract` process per cell, each reloading the language model | libtesseract called in-process (`ctypes`); engines kept and reused; orientation on an `osd` engine | `backend/app/mess_extract.py` | Code (no Terraform change) |
+| 15 | Messaging search lists people who aren't in the app; picking one gives an error | The local dev seed's accounts (`cognito_sub` `dev|...`) were restored into the cloud database. They never signed in to Cognito, so they can't receive messages | Search lists only accounts whose `cognito_sub` isn't a `dev|` row, when `auth_mode` is `cognito` | `backend/app/routers/users.py` | Code |
+| 16 | Admin can't appoint department or course moderators | The admin panel's module list left out Academic Help. The API already supported department and course grants | Academic Help added to the admin's module list; the existing Covers / Department / Course pickers now appear | `frontend/lib/features/admin/ui/moderator_grants_panel.dart` | Code |
+| 17 | Course and department moderators can't remove other people's course feedback | Feedback responses had no moderator flag, so the app offered Remove only on your own review | `can_remove` on each feedback item (author, or a moderator of the course); Remove button for moderators; no strike | `backend/app/routers/academic.py`, `frontend/lib/features/academics/ui/course_guide_screen.dart` | Code |
+| 18 | Admin Controls has a Backend & Health tab that isn't used | Left over from development (demo connection form and canary checks) | Tab, its header button, the demo connection form and the health provider removed | `frontend/lib/features/admin/ui/admin_controls_screen.dart` | Code |
+| 19 | Notification panel doesn't show new notifications until it's closed and reopened | The inbox refreshed only when opened, and the background refresh ran every 60 s without reaching an open inbox | The open inbox refreshes every 15 s, and the bell badge every 30 s | `frontend/lib/features/alerts/` | Code |
+| 20 | Deleting your own listing from the reports queue leaves its report on screen | The queue reloaded only after a moderator action from its own buttons, not after the listing's dialog (where the owner deleted it) closed | The queue reloads whenever a report's listing or Lost & Found dialog closes | `frontend/lib/features/admin/ui/admin_controls_screen.dart` | Code |
+| 21 | Switching module on the cloud site lags 3-4 s the first time | Each module has its own Lambda (5 in all). The first request to an idle one is a cold start: load the app, fetch the database secret, connect to RDS | EventBridge calls `GET /api/v1/health` on each Lambda every 5 minutes, which keeps one instance of each warm | `terraform/modules/compute/warmer.tf`, `variables.tf` (`warm_schedule`) | Yes |
+| 22 | My Profile's last postings tab ("Academic & Placement") was an empty placeholder | Never built | Course Feedback and Course Materials tabs for everyone; Placement Companies and Events & Mess Menus tabs for moderators and the admin. New `GET /me/posts`; companies now record who added them (`companies.created_by`, migration 025) | `backend/app/routers/my_posts.py`, `backend/app/routers/placement.py`, `backend/db/migrations/025_company_created_by.sql`, `frontend/lib/features/profile/` | Code; migration 025 must be run on an older database (readme 5.7) |
+| 23 | Phone numbers are saved without a real SMS code | `otp.py` only logs the phone code (no SMS provider), and keeps codes in process memory. (The `123456` shortcut has since been removed, open item 3.) | Not implemented yet: plan below | — | — |
+| 24 | Searching in the top bar filters the Buy & Sell and Lost & Found pages | The search box wrote its text into those pages' filters, and its results came from their (now filtered) lists | The search runs its own server lookups for listings, lost and found reports; it no longer touches any page's filters | `frontend/lib/core/widgets/super_search_bar.dart` | Code |
+| 25 | In chat, only the newest read message shows two blue ticks; older read ones show one grey tick | Ticks were drawn from the "Seen" marker, which is on one message only | Every message of mine the other person has read shows two blue ticks; "Seen" stays under the newest one | `frontend/lib/features/messages/ui/conversation_view.dart` | Code |
+| 26 | Accepting an offer in Messages doesn't show the listing as Reserved in Buy & Sell until the page is reloaded | The Buy & Sell feed is kept in memory across pages and only reloaded on a filter change | The feed reloads quietly (no spinner) after an offer is answered and whenever the Buy & Sell page opens | `frontend/lib/features/buy_sell/providers/buy_sell_providers.dart` (`refreshQuietly`), `buy_sell_feed_screen.dart`, `messages/ui/conversation_view.dart` | Code |
+| 27 | Sign-in dialog's "Cancel / Browse as Guest" | Wording | A red "Cancel" button | `frontend/lib/features/auth/ui/auth_dialog.dart` | Code |
+| 28 | Wanted matches ignore listings a little over budget that are negotiable | Matching compared price with the budget only | A listing marked negotiable matches up to 20% over the budget | `backend/app/alerts.py` (`NEGOTIABLE_MARGIN`) | Code |
+| 29 | Category suggestion doesn't work on the cloud (Buy & Sell, and now Lost & Found) | It runs an ONNX model in the API, but the Lambda zip leaves out onnxruntime, tokenizers, numpy and the model (250 MB limit), so the API answers "no suggestion" | New ML layer (onnxruntime 1.16.3, tokenizers, numpy 1.26, bge-small model; 132 MB unzipped) on the buy-sell and lost-found Lambdas; the two `/categories/suggest` routes go to them | `terraform/modules/compute/ml_layer/build.sh`, `modules/compute/main.tf`, `modules/api_gateway/main.tf`, `variables.tf` (`ml_layer_zip`) | Yes |
+| 30 | Lost & Found reports have no title, and no category suggestion | Never built | Optional `title` on reports (required in the app), searched with the description, used in chat topics, the reports queue, removal notices, matching and suggestion examples. The report form suggests a category from the title, as Buy & Sell does | `backend/app/routers/lost_found.py`, migration 025, `frontend/lib/features/lost_found/` | Code; migration 025 must be run on an older database (readme 5.7) |
+| 31 | Posting a new mess menu adds it after the old one instead of replacing it | "Post the next menu" started the new menu after the last one ended, and overlapping a menu that had meals was refused (409) | A new menu replaces the mess's menu from its first day: a menu that started earlier now ends the day before, and menus starting within the new dates are removed (their files deleted). The button is "Post a new menu" and starts today | `backend/app/routers/mess.py` (`_replace_older_menus`), `frontend/lib/features/mess/ui/mess_screen.dart` | Code |
+| 32 | `GET /api/v1/me` with a real Cognito token returns the SPA's `index.html` (200) instead of the user, looking exactly like a routing bug | Not a routing bug: the backend correctly 403s (unverified email), and CloudFront's distribution-wide `custom_error_response` for 403 served `index.html` instead, from the S3 origin — that is also why the response's `Server` header said `AmazonS3` even though API Gateway produced the error | The distribution-wide `custom_error_response` has since been removed, so API errors now reach the client as they are; deep links are handled by the `spa_rewrite` function on the S3 behaviour only. When creating a test user from the CLI, note that `admin-confirm-sign-up` alone doesn't set `email_verified=true`; `admin-update-user-attributes --user-attributes Name=email_verified,Value=true` does (or the real Hosted UI code flow) | `terraform/modules/cdn/main.tf` | Yes |
+| 33 | Signed-in users on the cloud site get logged out roughly every hour | `ApiClient`'s 401 retry only ran inside `getCurrentUser()`; every other authenticated call (posting, chat, uploads, …) had no refresh path, so once the ~1 hour Cognito ID token expired the first such call failed outright | `ApiClient` gained an `onUnauthorized` hook called on any 401, which refreshes the ID token via the stored Cognito refresh token and retries the request once; wired to `ApiAuthRepository.refreshSession` in `authRepositoryProvider` | `frontend/lib/core/api/api_client.dart`, `frontend/lib/features/auth/providers/auth_providers.dart` | Code |
 | 34 | Under concurrent load (e.g. a teammate's load test), random routes across all 5 functions start 500ing with `asyncpg.exceptions.TooManyConnectionsError: remaining connection slots are reserved for roles with privileges of the "rds_reserved" role` | `db.t4g.micro` only allows 79 connections; `app/db.py`'s own comment says it keeps `db_pool_max_size` small (2 in Lambda) "and lets RDS Proxy do the pooling", but no RDS Proxy was ever provisioned, so each Lambda execution environment across all 5 functions opens a direct connection — under enough concurrency that adds up past 79. Self-resolves as idle containers get recycled, but recurs on the next burst of traffic | New `enable_rds_proxy` Terraform variable (default `false` — RDS Proxy is not Free Tier, ~$0.015/vCPU-hour × 2 vCPU minimum ≈ $0.03/hour). Flip it on only while load/perf testing; off again afterward. Toggling it only changes the Lambdas' `CAMPUSHUB_DATABASE_URL` host (`db_connect_host` output) — no code change, no rebuild. `data_tools` (migrations/snapshots) always talks to RDS directly, bypassing the proxy | `terraform/variables.tf`, `terraform/modules/database/main.tf` (`aws_db_proxy`, `aws_db_proxy_default_target_group`, `aws_db_proxy_target`), `terraform/main.tf` | Yes, toggleable |
 | 35 | Postgres's own log (connection errors like #34, slow queries) never showed up in CloudWatch | `aws_db_instance.postgres` never set `enabled_cloudwatch_logs_exports` | `enabled_cloudwatch_logs_exports = ["postgresql"]`, applied immediately (no reboot); a matching `aws_cloudwatch_log_group` keeps retention at 7 days instead of "Never expire" | `terraform/modules/database/main.tf` | Yes |
 
@@ -68,7 +77,7 @@ passwords) are deliberately not written here.
 - Fix: `flutter build web --release` with `USE_MOCK=false` and `API_BASE_URL` set to the CloudFront
   URL; `aws s3 sync build/web s3://<frontend bucket>/ --delete`; `aws cloudfront create-invalidation`
   for `/*` on the distribution.
-- Repeat on every release. Not automated.
+- Now automated: `terraform/scripts/deploy_frontend.sh` does these steps (see `frontend/README.md`).
 
 ### 2 and 3. Database
 - The RDS instance is private, so it can't be reached from a laptop. A temporary Lambda in the same
@@ -78,10 +87,10 @@ passwords) are deliberately not written here.
   and `--section=post-data`. A first attempt that included `DISABLE TRIGGER ALL` failed, because it
   needs superuser. The successful load ran all three sections in one transaction.
 - The temporary function and its role were deleted after each use.
-- The cloud database now holds the `backend_v2` schema and data. Check that the schema matches the
-  code on the deploy branch before deploying again.
+- The cloud database was later replaced by a snapshot restore through the data-tools Lambda (open
+  item 2). Before deploying again, check that its schema revision matches `main` (readme 5.7).
 
-### 4 to 6. Sign-in (code, uncommitted in `CampusHub-cloud-web`)
+### 4 to 6. Sign-in (code, now on `main`)
 - `frontend/lib/features/auth/data/cognito_hosted_ui.dart` (new): authorization code + PKCE, sign-up
   (`/signup`), logout (`/logout`), token refresh. Exchanges are shared across repository instances
   (a static map keyed by code), so a second instance does not spend the one-time verifier.
@@ -101,7 +110,8 @@ passwords) are deliberately not written here.
 - Added the CloudFront URL to the app client's callback and logout URLs.
 - Caution: `update-user-pool-client` resets any setting not passed in. Copy the full current
   configuration first, then change only the URL lists.
-- Not in Terraform: `auth` module needs the domain and the URL lists.
+- Now in Terraform: `modules/auth` creates the Hosted UI domain (`cognito_domain_prefix`) and takes the
+  extra callback and logout URLs (`additional_callback_urls`).
 
 ### 8 and 9. Photo and mess-menu upload
 - Symptom 8: `XMLHttpRequest onError` on the PUT. Cause: the URL was signed for the global host; S3
@@ -114,8 +124,9 @@ passwords) are deliberately not written here.
   role had no `s3:PutObjectTagging`.
 - Fix 9: new default version `v2` of `campushub-dev-lambda-app-permissions`, adding the two tagging
   actions to the media-bucket statement. IAM simulator confirms both are allowed.
-- Not in Terraform: `terraform/modules/compute/iam.tf` lists only four S3 actions;
-  `terraform/modules/compute/main.tf` has no regional endpoint variable.
+- Now in Terraform: `terraform/modules/compute/iam.tf` grants `s3:PutObjectTagging` and
+  `s3:GetObjectTagging`, and `terraform/modules/compute/main.tf` sets `CAMPUSHUB_S3_ENDPOINT_URL` to the
+  regional S3 host.
 
 ### 10 and 11. Mess-menu reader (Tesseract layer)
 - Symptom 10: "Reading menus from files isn't set up on this server". The reader's built-in fallback,
@@ -137,8 +148,8 @@ passwords) are deliberately not written here.
   runs Python 3.11, so the layer uses numpy 2.2.6, Pillow 12.2.0 and pypdfium2 5.14.0.
 - Verified in an Amazon Linux container with the layer mounted at `/opt`: C menu reads all 28 meals
   with no warnings. (About 93 s under emulation; not measured on Lambda.)
-- Not in Terraform: the layer, its attachment, memory and the environment variable. The build script
-  is in a session scratch folder and is not in the repo yet.
+- Now in Terraform: `modules/compute/tesseract_layer/build.sh` builds the layer, and `tesseract_layer_zip`
+  attaches it (`modules/compute/main.tf`).
 
 ### 14. Mess-menu reader speed
 - Symptom: about 15 s per menu in the cloud. The E menu needs about 67 Tesseract calls: one per cell, plus
@@ -262,7 +273,7 @@ passwords) are deliberately not written here.
 ### 23. SMS codes for phone numbers (plan, not implemented)
 Today `POST /me/phone/code` and `POST /me/phone/verify` exist, but `otp.py` writes the code to the log
 instead of texting it, keeps codes in process memory (on Lambda the verify call can land on a different
-instance and fail), and accepts `123456`. Two ways to make it real:
+instance and fail). (It used to accept `123456` too; that was removed, open item 3.) Two ways to make it real:
 
 **A. Cognito verifies the number (recommended, since sign-in already uses Cognito).**
 1. Terraform (`modules/auth`): give the user pool an `sms_configuration` (an IAM role Cognito assumes to
@@ -302,9 +313,12 @@ For the course demo, the sandbox with a few verified team numbers is enough to s
 3. ~~**Remove the 123456 shortcut**~~ — done, in both `backend/app/otp.py` (the hardcoded-OTP block)
    and the frontend's `ApiAuthRepository.sendOtp`/`verifyOtp`, which now call the real
    `/auth/otp/request`/`/auth/otp/verify` endpoints (404 outside dev mode, as designed).
-4. **Rotate the team dev key** that appears in git history, and the database password that was
-   written into frontend code earlier. Not done in this pass — needs a team decision on the new
-   values, not something to do unilaterally.
+4. ~~**Dev key and local database password in git history**~~ — closed, no access to the live
+   system. The dev key only works against a backend run locally in dev mode; the deployed stack runs
+   with `CAMPUSHUB_AUTH_MODE=cognito`, which ignores dev sign-in headers (checked: `GET /api/v1/me`
+   with `X-Dev-User` returns 401), and Terraform never gives the Lambdas a dev key. The database
+   password was for a developer's local Docker Postgres, which only accepted connections from that
+   machine; the RDS password is generated by Terraform, kept in Secrets Manager, and was never in git.
 5. **Dev sign-in on Lambda** (item 12) is refused by design. Enabling it means changing that check,
    which is a decision for the team.
 6. **Textract** (item 13) needs enabling on the account before it can be used.

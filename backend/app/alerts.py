@@ -14,6 +14,7 @@ from uuid import UUID
 import asyncpg
 from fastapi import BackgroundTasks
 
+from .common import keyword_tsquery
 from .notify import create_notifications, deliver_push
 
 Push = tuple[list[UUID], str, dict]
@@ -21,13 +22,13 @@ Push = tuple[list[UUID], str, dict]
 # Does listing l match saved search s? Same rules as GET /listings.
 # A search with no keyword, category or price (allowed before 2 Nov 2026) matches nothing: it used
 # to alert on every new post, e.g. "Drugs" for a search named "hero cycle".
-LISTING_MATCHES_SEARCH = """
+_SAVED_KEYWORDS = keyword_tsquery("s.query")
+LISTING_MATCHES_SEARCH = f"""
     (s.query IS NOT NULL OR s.bs_category_id IS NOT NULL OR s.min_price IS NOT NULL OR s.max_price IS NOT NULL)
     AND (s.bs_category_id IS NULL OR s.bs_category_id = l.category_id)
     AND (s.min_price IS NULL OR l.price >= s.min_price)
     AND (s.max_price IS NULL OR l.price <= s.max_price)
-    AND (s.query IS NULL OR numnode(websearch_to_tsquery('english', s.query)) = 0
-         OR l.search_vector @@ websearch_to_tsquery('english', s.query))
+    AND (s.query IS NULL OR numnode({_SAVED_KEYWORDS}) = 0 OR l.search_vector @@ {_SAVED_KEYWORDS})
 """
 
 # Does found report f match saved search s? Same rules as GET /found-reports (substring of the description).

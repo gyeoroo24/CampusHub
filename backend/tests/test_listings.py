@@ -36,6 +36,34 @@ def test_combined_filter_has_no_false_positives(client):
     assert [i["title"] for i in r["items"]] == ["Hero cycle"]
 
 
+def test_search_matches_the_word_being_typed(client):
+    """Search as you type: the last word also matches as a prefix; whole earlier words still match exactly."""
+    electronics = category(client, ASHA, "buy-sell", "Electronics")
+    for title in ("phone charger", "realme phone", "Bicycle lock", "iPhone case"):
+        _listing(client, ASHA, electronics, title=title, description="Works well")
+
+    def titles(q):
+        r = client.get(f"{API}/listings", params={"q": q})
+        assert r.status_code == 200, r.text
+        return sorted(i["title"] for i in r.json()["items"])
+
+    assert titles("phon") == titles("phone") == ["phone charger", "realme phone"]
+    assert titles("charg") == ["phone charger"]
+    assert titles("phone c") == ["phone charger"]           # typing more narrows, it doesn't empty the list
+    assert titles("phone ch") == titles("phone charger") == ["phone charger"]
+    assert titles("iphone ca") == ["iPhone case"]
+    assert titles("cycl") == []                               # a prefix of a word, not the middle of "Bicycle"
+    assert titles("phone or rea") == ["phone charger", "realme phone"]
+    assert titles("phone -charger") == ["realme phone"]       # negation is unchanged
+    assert titles("the") == sorted(["phone charger", "realme phone", "Bicycle lock", "iPhone case"])  # stop words only
+
+    # Saved searches count with the same rules as the feed.
+    r = client.post(f"{API}/me/saved-searches", headers=RAVI, json={"module": "buy_sell", "name": "Phones", "q": "phon"})
+    assert r.status_code == 201, r.text
+    sql("UPDATE saved_searches SET last_seen_at = now() - interval '1 hour'")
+    assert client.get(f"{API}/me/saved-searches", headers=RAVI).json()[0]["new_count"] == 2
+
+
 def test_photo_rules(client, s3):
     cycles = category(client, ASHA, "buy-sell", "Cycles")
     ravis_photo = upload(client, s3, RAVI, "listing_photo")

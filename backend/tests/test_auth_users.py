@@ -99,6 +99,51 @@ def test_valid_cognito_id_token(cognito):
     assert verify_cognito_id_token(cognito())["email"] == "asha@iisc.ac.in"
 
 
+def test_unknown_key_ids_dont_refetch_cognito_keys_every_request(monkeypatch):
+    """Tokens with made-up key ids (no valid signature needed) must not each re-download Cognito's keys.
+
+    Uses the real PyJWKClient; only the HTTP request for the key set is replaced, and counted.
+    """
+    import io
+    import json
+    import urllib.request
+
+    from app import auth
+    from app.config import get_settings
+    settings = get_settings()
+    monkeypatch.setattr(settings, "cognito_user_pool_id", "ap-south-1_TEST")
+    monkeypatch.setattr(settings, "cognito_app_client_id", "client123")
+    monkeypatch.setattr(auth, "_jwks_client", None)       # build a fresh real client
+    private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    jwk = jwt.algorithms.RSAAlgorithm.to_jwk(private.public_key(), as_dict=True) | {
+        "kid": "real", "alg": "RS256", "use": "sig"}
+    fetches = []
+    monkeypatch.setattr(urllib.request.OpenerDirector, "open", lambda self, request, *a, **kw:
+                        fetches.append(1) or io.BytesIO(json.dumps({"keys": [jwk]}).encode()))
+    now = int(time.time())
+    claims = {"sub": "abc-123", "email": "asha@iisc.ac.in", "aud": "client123", "token_use": "id",
+              "iss": "https://cognito-idp.ap-south-1.amazonaws.com/ap-south-1_TEST", "iat": now, "exp": now + 3600}
+
+    def token(kid):
+        return jwt.encode(claims, private, algorithm="RS256", headers={"kid": kid})
+
+    def rejected(kid):
+        with pytest.raises(HTTPException) as exc:
+            auth.verify_cognito_id_token(token(kid))
+        return exc.value.status_code == 401
+
+    for _ in range(5):                                    # valid key id: fetched once, then cached
+        assert auth.verify_cognito_id_token(token("real"))["sub"] == "abc-123"
+    assert all(rejected(f"made-up-{i}") for i in range(10))    # 10 different unknown key ids
+    assert all(rejected("made-up") for _ in range(10))         # the same unknown key id, 10 times
+    assert len(fetches) == 1
+
+    # A real key rotation is still picked up: after the cooldown, one unknown key id refreshes once.
+    auth._jwks_client._last_successful_fetch -= auth._jwks_client.cooldown_duration + 1
+    assert all(rejected("made-up") for _ in range(10))
+    assert len(fetches) == 2
+
+
 @pytest.mark.parametrize("override", [{"aud": "someone-else"}, {"token_use": "access"},
                                       {"exp": int(time.time()) - 10}, {"iss": "https://evil.example"}])
 def test_bad_cognito_tokens_rejected(cognito, override):

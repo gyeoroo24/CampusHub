@@ -1,11 +1,15 @@
 # CampusHub developer guide
 
 What each part of the codebase does, how the parts work together, and how to change them. For installing
-and running CampusHub, see [README.md](README.md). For the original requirements, see [PRD.md](PRD.md).
+and running CampusHub, see [readme.md](readme.md). For what was built, see [PRD.md](PRD.md) (v2). The
+requirement IDs used in this guide (FR-1 to FR-23, NFR-1 to NFR-8) come from the original v1 PRD,
+[Cloud_Computing_Project-PRD.pdf](Cloud_Computing_Project-PRD.pdf); PRD.md v2 does not number them.
 
-The application code is the same on both submission branches. This guide follows `main` (serverless).
-On `baseline-infra-restore` the backend runs on EC2 instead: the infrastructure differences are in
-[section 6](#6-infrastructure-terraform), and that branch's README has its deploy steps.
+This guide follows `main`, the only live branch (serverless). The EC2 baseline used for the load-test
+comparison lives on the stale branch `STALE]-baseline-infra` (`origin/STALE]-baseline-infra`), which is no
+longer maintained. Its application code matched `main` at benchmark time (6 November 2026) and has not kept
+up since. Its infrastructure differences are in [section 6](#6-infrastructure-terraform), and that branch's
+README has its deploy steps.
 
 ## Table of contents
 
@@ -25,13 +29,13 @@ On `baseline-infra-restore` the backend runs on EC2 instead: the infrastructure 
 
 | Part | Language / tool | What it is |
 |---|---|---|
-| `backend/` | Python 3.11+, FastAPI, asyncpg | The whole API: every module, sign-in, permissions, uploads, notifications, ML features |
+| `backend/` | Python 3.12 or 3.13 locally (3.11 on Lambda), FastAPI, asyncpg | The whole API: every module, sign-in, permissions, uploads, notifications, ML features |
 | `backend/db/` | PostgreSQL 16 | Schema, migrations and reference data |
 | `frontend/` | Dart, Flutter (web) | The user interface |
 | `terraform/` | Terraform (HCL) | All AWS infrastructure, plus deploy and snapshot scripts |
 | `locust_load_testing/` (on `main`) | Python, Locust, Tkinter | Load-test suite and the Lambda-vs-EC2 benchmark results |
 | `.github/workflows/` | GitHub Actions | Builds and publishes the web app on pushes to `main` |
-| `docs/` | Markdown, PNG/SVG | API reference, schema diagrams, deployment logs, session notes |
+| `docs/` | Markdown, PNG/SVG | API reference, schema diagrams, deployment logs, accuracy reports |
 
 The same backend code runs in three places. Only configuration changes, never the code:
 
@@ -39,7 +43,7 @@ The same backend code runs in three places. Only configuration changes, never th
 |---|---|---|
 | Your machine | `app.main:app` | `cd backend && uvicorn app.main:app --reload --env-file .env` |
 | AWS Lambda (this branch) | `app.main.handler` (Mangum wraps the FastAPI app) | API Gateway |
-| EC2 (`baseline-infra-restore`) | `app.main:app` | uvicorn under systemd, behind an ALB |
+| EC2 (stale branch `STALE]-baseline-infra`) | `app.main:app` | uvicorn under systemd, behind an ALB |
 
 ## 2. How a request flows
 
@@ -51,10 +55,12 @@ Flutter web app                          frontend/lib/features/buy_sell/...
   -> ApiClient (Dio): adds "Authorization: Bearer <Cognito ID token>"
         |
         v
-CloudFront   /api/v1/listings* is an edge-cached path (20 s, key includes Authorization + query)
-        |  miss
+CloudFront   /api/v1/listings* is an edge-cached path (20 s, key includes Authorization + query),
+             but only guest responses are cached: the API marks signed-in GETs "private, no-store"
+        |  miss (always, for this signed-in request)
         v
-API Gateway (HTTP API)  route /api/v1/listings/{proxy+}  ->  buy-sell Lambda
+API Gateway (HTTP API)  route ANY /api/v1/listings  ->  buy-sell Lambda
+                        (sub-paths such as /api/v1/listings/{id} match ANY /api/v1/listings/{proxy+})
         |
         v
 app/main.py   handler = Mangum(app)  ->  FastAPI
@@ -87,7 +93,7 @@ Database constraint errors are turned into clear HTTP 4xx responses by `app/erro
 | `main.py` | Builds the FastAPI app: CORS, error handlers, routers under `/api/v1`, Swagger sign-in button, the Lambda `handler`. Refuses to start with dev sign-in inside Lambda |
 | `config.py` | All settings, from environment variables prefixed `CAMPUSHUB_` (or `.env`). Picks Lambda-specific defaults (pool size 2, `/docs` off) |
 | `auth.py` | Who is calling: verifies Cognito ID tokens (signature, expiry, issuer, audience, `email_verified`), or the `X-Dev-User` header in local dev mode. Creates the user's row on first sign-in and relinks a re-created Cognito account by email |
-| `permissions.py` | Role checks for PRD §3.1: admin, module moderators, department and course moderators (Academic Help), forum moderators; writes the moderation log |
+| `permissions.py` | Role checks for v1 PRD §3.1: admin, module moderators, department and course moderators (Academic Help), forum moderators; writes the moderation log |
 | `db.py` | The asyncpg connection pool, created on first use and recreated if the event loop changes (Lambda). Reads the database password from Secrets Manager |
 | `cache.py` | Redis cache-aside for list endpoints. No-op without `CAMPUSHUB_REDIS_HOST`; any Redis error counts as a miss |
 | `storage.py` | S3: presigned upload URLs (with signed size and SHA-256 checksum, NFR-8), upload verification, `pending` / `attached` tags, download links (optionally signed CloudFront URLs) |
@@ -97,7 +103,7 @@ Database constraint errors are turned into clear HTTP 4xx responses by `app/erro
 | `common.py` | Pagination (`Page`, `page_params`), shared reference models, text types, PATCH helper (`set_clause`), `not_found` / `forbidden` |
 | `cognito_accounts.py` | Checks that a person's Cognito account still exists and is enabled (moderator grants). If the check cannot be made, it logs and allows |
 | `otp.py` | Email and phone codes for dev sign-in and phone verification |
-| `jobs.py` | Scheduled jobs: notification purge, meal alerts |
+| `jobs.py` | Background jobs: notification purge (`purge_handler`), meal alerts (`meal_alerts_handler`) |
 | `alerts.py` | Saved-search and Wanted-post alerts for new items |
 | `screening.py` | Automatic flagging of new posts: keywords, gibberish, spam, category model, obscene-photo check |
 | `seller_trust.py` | Seller strikes and the "Negative Seller" / "Blocked Seller" tags, driven only by moderator-confirmed removals |
@@ -113,11 +119,12 @@ Database constraint errors are turned into clear HTTP 4xx responses by `app/erro
 ### 3.2 Routers (`backend/app/routers/`)
 
 Each file is one module of the API. All are mounted under `/api/v1`, and every route runs `optional_user`, so a
-bad or expired token always gets 401, even on pages guests can read.
+bad or expired token always gets 401, even on pages guests can read. The one exception is
+`POST /me/reactivate`, which must accept a deactivated account's token (see `app/main.py`).
 
 | File | Module | PRD |
 |---|---|---|
-| `users.py` | Health check, my profile, phone verification, public profiles, admin account controls (deactivate, hand over admin) | FR-1 |
+| `users.py` | Health check, my profile, phone verification, public profiles, deactivating and reactivating my own account, admin account list and lookup, handing over the admin role. The admin cannot deactivate other accounts | FR-1 |
 | `moderators.py` | Grant and revoke moderator roles, scoped to a module, department or course | FR-3 |
 | `listings.py` | Buy & Sell listings: create, status (Available/Reserved/Sold), search and filter, price watch, removal | FR-4, FR-5, FR-6, FR-10 |
 | `wanted.py` | Wanted posts (what buyers are looking for) | extension |
@@ -126,11 +133,11 @@ bad or expired token always gets 401, even on pages guests can read.
 | `lost_found.py` | Lost and found reports, and their matches | FR-7, FR-8, FR-9, FR-10 |
 | `academic.py` | Departments, courses, materials, feedback, course follows | FR-11, FR-12, FR-13 |
 | `survival_guide.py` | One-page summary of a course's feedback with sentiment over time | extension |
-| `forums.py` | Forums, threads and comments with votes (course, department, company) | FR-14 |
-| `placement.py` | Companies, job descriptions, pre-placement talks, hiring statistics, interview experiences, seniors, bulk imports | FR-15, FR-16, FR-17 |
+| `forums.py` | Forums, threads and comments with votes (course, department, company, event) | FR-14 |
+| `placement.py` | Companies, job descriptions, pre-placement talks, hiring statistics, interview experiences, seniors, bulk imports. Company pages, schedules, hiring statistics and seniors need sign-in (placement data is confidential); guests get the season totals from `GET /placement/stats` | FR-15, FR-16, FR-17 |
 | `events.py` | Events, tags, Past/Present/Upcoming, bookmarks, followed tags, event updates | FR-18, FR-19, FR-20 |
 | `mess.py` | Mess menus and meal alerts | extension |
-| `campus_services.py` | Health Centre, Wellness Centre and other links for the landing page | FR-21 |
+| `campus_services.py` | Health Centre, Wellness Centre and other links, shown from the app bar's Campus services button | FR-21 |
 | `notifications.py` | My notifications inbox and push devices | FR-9, FR-22 |
 | `saved_searches.py` | Saved searches and their alerts | extension |
 | `reports.py` | Reporting content, and the moderators' review queue | FR-10 |
@@ -160,7 +167,7 @@ Without the models (the Lambda zip leaves them out), matching falls back to the 
 |---|---|
 | `lambdas/cognito_pre_signup.py` | Cognito *Pre sign-up* trigger: only `iisc.ac.in` emails (FR-1). Attach to the user pool by hand |
 | `scripts/seed_dummy_data.py` | Realistic demo data (students, courses, listings, events, chats, ...) |
-| `scripts/fetch_match_models.py` | Downloads the ONNX models (`--suggest-only` for just the category model) |
+| `scripts/fetch_match_models.py` | Downloads the ONNX models (`--suggest-only` for just the category and sentiment models, 164 MB) |
 | `scripts/calibrate_*.py`, `scripts/eval_*.py`, `scripts/generate_*_eval_data.py` | Threshold calibration and accuracy evaluation for the ML features |
 | `scripts/diagnose_cloud_deploy.sh/.sql` | Checks a cloud deployment's configuration and database |
 | `requirements.txt` | Everything, including the ML and OCR packages (local runs, EC2) |
@@ -212,15 +219,16 @@ lib/
 │   ├── router/        go_router routes (/, /buy-sell, /lost-found, /courses/:id, /placements/:id, /events/:id, /mess, /messages, /profile, ...)
 │   ├── storage/       Token storage (shared_preferences)
 │   ├── services/      Upload service: asks for a ticket, PUTs the file to S3 with the checksum
+│   ├── push/          Web Push subscription (browser implementation and a stub for other platforms)
 │   ├── models/, enums/, theme/, widgets/, utils/
 └── features/          One folder per module
 ```
 
 ### 5.2 How a feature is built
 
-Every feature folder (`buy_sell`, `lost_found`, `academics`, `placement`, `events`, `mess`, `messages`,
-`forums`, `wanted`, `alerts`, `seller_trust`, `campus_services`, `profile`, `admin`, `auth`) has the same four
-layers:
+Most feature folders (`buy_sell`, `lost_found`, `academics`, `placement`, `events`, `messages`, `forums`,
+`wanted`, `alerts`, `seller_trust`, `campus_services`, `admin`, `auth`) have the same four layers. `mess` has
+only a models file and `ui/`, and `profile` only `data/` and `ui/`:
 
 | Layer | Example (`features/buy_sell/`) | Role |
 |---|---|---|
@@ -240,7 +248,7 @@ Cognito flags, the app uses the backend's dev sign-in.
 
 ## 6. Infrastructure (`terraform/`)
 
-| Module | Serverless (`main`) | EC2 baseline (`baseline-infra-restore`) |
+| Module | Serverless (`main`) | EC2 baseline (stale branch `STALE]-baseline-infra`) |
 |---|---|---|
 | `networking` | VPC, private Lambda and database subnets, security groups, VPC endpoints | Also public subnets and internet gateway for the ALB |
 | `database` | RDS PostgreSQL, password in Secrets Manager, optional RDS Proxy | same |
@@ -276,13 +284,13 @@ On `main` only. A desktop app that generates and runs Locust tests against eithe
 | `locust-automated/presets.py`, `locust-automated/custom_presets/*.json` | Saved endpoint mixes, such as `acad_placement_preset` |
 | `output/` | One folder per run, and `BENCHMARK_SUMMARY.md` |
 
-Results and analysis: [README section 9](README.md#9-performance-and-metrics).
+Results and analysis: [readme section 9](readme.md#9-performance-and-metrics).
 
 ## 8. Tests
 
 | Suite | Command | Notes |
 |---|---|---|
-| Backend | `cd backend && pytest` | More than 200 tests against the real Postgres from docker compose (database `campushub_test`) and mocked S3. `conftest.py` empties every table between tests; `as_user(email)` builds dev sign-in headers |
+| Backend | `cd backend && source .venv/bin/activate && pytest` | More than 200 tests against the real Postgres from docker compose (database `campushub_test`) and mocked S3. `conftest.py` empties every table between tests; `as_user(email)` builds dev sign-in headers |
 | ML accuracy | `pytest tests/test_category_suggest_accuracy.py tests/test_auto_flag_accuracy.py` | Skipped unless the models are downloaded (`scripts/fetch_match_models.py`) |
 | Frontend | `cd frontend && flutter test` | `live_backend_integration_test.dart` needs a running backend |
 | Load | `locust_load_testing/locust-automated/start.sh` | See section 7 |
@@ -310,7 +318,7 @@ Test files are named after the module or fix they cover (`test_listings.py`, `te
    `IF NOT EXISTS` where possible).
 2. Apply the same change to `backend/db/schema.sql` and bump its revision comment.
 3. Locally (from backend/): `docker exec -i campushub-db-1 psql -U campushub -d campushub < db/migrations/0NN_short_name.sql`.
-   On AWS: the data-tools Lambda's `migrate` action ([README step 5.7](README.md#57-load-the-database)).
+   On AWS: the data-tools Lambda's `migrate` action ([readme step 5.7](readme.md#57-load-the-database)).
 
 ### Add a frontend screen
 
@@ -344,7 +352,9 @@ Test files are named after the module or fix they cover (`test_listings.py`, `te
 
 ## 11. Requirements traceability
 
-Where each PRD functional requirement lives in the code:
+Where each functional requirement of the v1 PRD
+([Cloud_Computing_Project-PRD.pdf](Cloud_Computing_Project-PRD.pdf)) lives in the code. The IDs are the v1
+PDF's; PRD.md v2 describes the same features without numbers.
 
 | PRD | Backend | Frontend feature |
 |---|---|---|
@@ -356,10 +366,11 @@ Where each PRD functional requirement lives in the code:
 | FR-14 forums | `routers/forums.py` | `forums` |
 | FR-15 to FR-17 Placement Hub | `routers/placement.py`, `placement_*.py` | `placement` |
 | FR-18 to FR-20 events | `routers/events.py` | `events` |
-| FR-21 landing page | `routers/campus_services.py` and the module feeds | `campus_services` |
+| FR-21 landing page | The landing page is Buy & Sell (`/` redirects to `/buy`); `routers/campus_services.py` for the campus-services links | `buy_sell`, `campus_services` |
 | FR-22 notifications | `notify.py`, `routers/notifications.py` | `alerts` |
 | FR-23 chat | `routers/chat.py` | `messages` |
 | NFR-8 upload integrity | `storage.py` (signed SHA-256 checksum) | `core/services/upload_service.dart` |
 
 Features beyond the PRD (Wanted posts, seller trust, saved searches, mess menus, course survival guide,
-automatic flagging, category suggestion) are listed in the `docs/session-notes-*.md` files.
+automatic flagging, category suggestion) are described in [backend/README.md](backend/README.md) and
+[docs/api-reference.md](docs/api-reference.md).

@@ -26,7 +26,6 @@ DS252 Introduction to Cloud Computing, PRD of Order of Phoenix
 7. [Security and data protection](#7-security-and-data-protection)
 8. [Evaluation: serverless vs. EC2](#8-evaluation-serverless-vs-ec2)
 9. [Testing](#9-testing)
-10. [Team](#10-team)
 
 ## 1. Problem statement and motivation
 
@@ -74,8 +73,10 @@ per module, one notifications inbox, and one admin panel.
 CampusHub enforces four roles, checked on every request directly from the database (never from token claims),
 so a revoked moderator loses access on their very next call:
 
-1. **Guest** (not signed in) — reads every public feed: listings, Lost & Found, courses, placement pages,
-   events, mess menus. Bookmarks are kept in the browser and moved to the account at sign-in.
+1. **Guest** (not signed in) — reads the public feeds: listings, Lost & Found, courses, events and mess menus.
+   From the Placement Hub a guest sees only season totals (students selected and companies hiring per year);
+   company pages, schedules, hiring statistics and senior contacts need sign-in, because placement data is
+   confidential. Bookmarks are kept in the browser and moved to the account at sign-in.
 2. **Signed-in user** — everything a guest can do, plus creating, editing and deleting their own posts,
    feedback, forum threads and profile; messaging other users; bookmarking, following and saving searches.
 3. **Moderator** — scoped by the admin to one module (Buy & Sell, Lost & Found, Placement Hub, Events) or, for
@@ -83,18 +84,23 @@ so a revoked moderator loses access on their very next call:
    manage courses, materials and course-level moderators. Moderators remove posts in their scope and work the
    reports queue.
 4. **Administrator** — exactly one account at a time. Everything above, plus granting and revoking moderators,
-   deactivating accounts, editing landing-page campus services, and handing the admin role to someone else.
+   viewing all accounts, editing landing-page campus services, and handing the admin role to someone else.
+   (Users deactivate and reactivate their own accounts.)
 
 ## 4. Module-by-module capabilities
 
 ### 4.1 Buy & Sell
 
 Students post listings with title, description, price, category, location and photos; the system suggests a
-category from the title text. Owners move a listing through Available → Reserved → Sold. Listings are
+category from the title text. Owners move a listing through Available → Reserved → Sold. **Reserved** means
+at least one buyer has committed but the deal isn't final (no payment or handover yet): other buyers can still
+make offers and have them accepted, so the seller has backups if a buyer backs out. Only **Sold** is final —
+no offer can be accepted on a sold listing. Listings are
 searchable and filterable by category, price range and keyword. Buyers can watch a listing for price drops and
 see a "Negotiable" signal. Every listing carries a seller trust signal, driven only by moderator-confirmed
 removals (strikes, with an appeal/unblock-request flow) — never by an automated judgment. New posts are
-automatically screened (keywords, gibberish/spam detection, an image check) and flagged for a human moderator;
+automatically screened (keywords and gibberish/spam detection, plus an image check where the image model is
+deployed) and flagged for a human moderator;
 nothing is auto-removed without one. A companion **Wanted** board lets a student post what they're looking for
 and get alerted when a matching listing appears.
 
@@ -109,10 +115,11 @@ trimmed Lambda deployment), the system falls back to a same-category match rule 
 
 Students browse departments and courses; a course with no content yet returns an explicit "no data" state
 rather than an error or a blank page. Students post text course feedback, which is scored for sentiment and
-summarized into a one-page **course survival guide**. Department-level moderators (often appointed TAs or
-students who took the course) upload and curate materials — notes, slides, past assignments; department
-moderators have full CRUD over their department's courses and materials and appoint course-level moderators,
-who in turn manage only their own course's material. Students can follow a course to be told about new
+summarized into a one-page **course survival guide**. Any signed-in student can share materials — notes,
+slides, past assignments; each upload is checked automatically and held for a moderator if it looks wrong.
+Department-level moderators (often appointed TAs or students who took the course) curate them: they have full
+CRUD over their department's courses and materials and appoint course-level moderators, who in turn manage
+only their own course's material. Students can follow a course to be told about new
 materials, feedback and forum posts, and discuss in a course forum.
 
 ### 4.4 Placement Hub
@@ -123,11 +130,15 @@ a company discussion forum. Placement Hub moderators bulk-import historical plac
 and interview schedules from CSV exports of spreadsheets; malformed rows are rejected and reported back, never
 silently dropped.
 
+Placement data is confidential, so company pages, schedules, hiring statistics and senior contacts need
+sign-in. Guests see only season totals (students selected and companies hiring per year), with no company names or pay.
+
 ### 4.5 Community Events
 
 Events are browsable by category/tag (Sports, Food/Mess, Nature, Photography, Culture, …) and each one
 auto-classifies itself as Past, Present or Upcoming purely from its start/end time. Students bookmark
-individual events or follow a tag, and are notified when a bookmarked event or a followed tag's event updates.
+individual events or follow a tag. They are notified when a bookmarked event changes (time, place, title or
+details) or is cancelled, and when a new event is posted under a tag they follow.
 
 ### 4.6 Mess
 
@@ -137,8 +148,11 @@ follow option that sends a meal alert to subscribers.
 ### 4.7 Messages
 
 Each pair of signed-in users has exactly one conversation. Buy & Sell sellers and buyers can message directly
-from a listing, and a seller can send an offer that, on acceptance, reserves the listing. Messages are
-encrypted with server-held keys.
+from a listing, and either person can make an offer on it; when the other person accepts, an Available listing
+becomes Reserved (see [4.1](#41-buy--sell) for what Reserved allows). Within one chat, a newer offer replaces
+the pending one. Messages are encrypted in the browser (X25519 + AES-256-GCM) and the server stores only
+ciphertext; each user's private key is also backed up on the server so they can read their messages on any
+browser.
 
 ### 4.8 Notifications
 
@@ -160,17 +174,18 @@ modules materially more useful:
 - **Wanted posts** — a request-side companion to Buy & Sell, with alerts when a match is listed.
 - **Seller trust and moderation** — trust scores and tags driven only by confirmed moderator action, plus a
   seller appeal/unblock-request flow.
-- **Automatic content screening** — keyword, gibberish/spam and image checks that flag new posts for a human
-  moderator (content is never auto-removed by the model).
+- **Automatic content screening** — keyword and gibberish/spam checks, plus an image check where the image
+  model is deployed, that flag new posts for a human moderator (content is never auto-removed by the model).
 - **Price watch** — price-drop alerts and a "Negotiable" signal on Buy & Sell listings.
 - **Smarter category suggestion** — a listing's category is suggested from its title text.
 - **Saved searches** — persistent search filters that alert the user when a new match appears.
 - **Course survival guide** — a one-page, sentiment-scored summary of a course's accumulated feedback.
 - **Lost & Found photo + description matching** — ONNX embedding models score candidate matches instead of a
-  plain category match.
+  plain category match. The serverless deployment leaves these models out (Lambda package size), so there it
+  uses the same-category rule; category suggestion and the mess-menu OCR run there from optional Lambda layers.
 - **Mess menus** — OCR-extracted daily menus with meal-alert subscriptions.
-- **One-to-one messaging** — direct chat, including listing-reservation offers, server-side encrypted.
-- **Forums** — course, department and company discussion threads with upvotes/downvotes.
+- **One-to-one messaging** — direct chat, including listing-reservation offers, encrypted in the browser.
+- **Forums** — course, department, company and event discussion threads with upvotes/downvotes.
 - **A second, independently deployed EC2 baseline stack** — the same application built and measured against
   the serverless deployment, to produce the architecture comparison in [section 8](#8-evaluation-serverless-vs-ec2).
 - **An ElastiCache Redis cache and CloudFront edge caching** in front of the most-read list endpoints, with a
@@ -181,7 +196,7 @@ modules materially more useful:
 ### 6.1 Serverless deployment (primary)
 
 ```
-Users → Route 53 / CloudFront (CDN, edge cache on list endpoints) → S3 (Flutter web bundle)
+Users → CloudFront (CDN, edge cache on list endpoints; optional AWS WAF) → S3 (Flutter web bundle)
                                    │
                                    ├─→ API Gateway (HTTP API) → 5 Lambda functions (FastAPI via Mangum)
                                    │        buy-sell · lost-found · placement-hub · academic-hub · community-events
@@ -209,7 +224,7 @@ reached the same way through CloudFront, and backed by the same RDS and Redis.
 | Database | Amazon RDS for PostgreSQL 16 — 57 tables, 19 enum types |
 | Cache | Amazon ElastiCache for Redis (cache-aside) + CloudFront edge caching |
 | Auth | Amazon Cognito, IISc-email-gated sign-up, JWT verified on every route |
-| Object storage | Amazon S3 — static site, uploaded media, presigned direct uploads with a signed SHA-256 checksum |
+| Object storage | Amazon S3 — static site, uploaded media, presigned direct uploads with a signed SHA-256 checksum; encrypted at rest with SSE-S3 (AES-256) |
 | Infrastructure as code | Terraform (HCL), one module set, two environments (`dev` = serverless, `baseline` = EC2) |
 | Observability | CloudWatch logs, metrics and alarms; AWS Budgets |
 | Load testing | Locust, with a purpose-built Tkinter GUI, an endpoint catalogue and automated chart generation |
@@ -228,16 +243,22 @@ reached the same way through CloudFront, and backed by the same RDS and Redis.
 
 ## 7. Security and data protection
 
-- **Identity**: sign-up is gated to IISc email addresses through Cognito; every API route verifies the bearer
-  token (signature, expiry, issuer, audience) and rejects a missing, malformed or expired one.
+- **Identity**: only IISc email addresses can use CampusHub: the app's sign-in dialog accepts only
+  `iisc.ac.in` addresses, and the API refuses any account whose email isn't an IISc address (403). Every API
+  route verifies a bearer token when one is sent (signature, expiry, issuer, audience) and rejects a malformed
+  or expired one; routes that need sign-in also reject a missing one.
 - **Authorization**: all four roles are enforced per module from the database, including department- and
   course-scoped Academic Help moderators.
-- **Transport and storage encryption**: TLS 1.2+ on every public endpoint (CloudFront, RDS `force_ssl`, Redis
-  TLS); RDS is encrypted at rest with KMS; application secrets live only in Secrets Manager, never in Lambda
-  environment variables.
+- **Transport and storage encryption**: HTTPS through CloudFront for every client, and TLS on the internal
+  connections to RDS (`force_ssl`) and Redis. At rest, RDS is encrypted with the AWS-managed KMS key, Redis is
+  encrypted at rest and in transit, and S3 buckets use SSE-S3 (AES-256): a customer-managed KMS key falls
+  outside the AWS Free Tier this project runs on, so it is the proposed design if the project is funded.
+  Application secrets live in Secrets Manager (database credentials, Redis token) and SSM Parameter Store
+  SecureString (the Web Push private key), never in Lambda environment variables.
 - **Upload integrity**: every file goes straight to S3 through a presigned URL carrying a signed size limit and
   SHA-256 checksum, which S3 itself enforces before accepting the object.
-- **Least privilege**: each AWS service runs under its own IAM role, scoped to only what it needs.
+- **Least privilege**: the five API functions share one execution role; the Web Push sender and the data-tools
+  function each run under their own role.
 - **Moderation trail**: every moderator action (removal, grant, revocation) is written to an audit log.
 
 ## 8. Evaluation: serverless vs. EC2
@@ -263,7 +284,7 @@ The fix — Amazon RDS Proxy, which multiplexes a bounded pool of database conne
 containers — is already built into the Terraform module (`enable_rds_proxy`) and was simply not switched on
 for this run as this is not supported in AWS Free Tier. EC2 degraded differently under the same load (request queuing rather than connection exhaustion).
 
-Full per-endpoint results, interactive reports and charts: [`README.md` §9](README.md#9-performance-and-metrics)
+Full per-endpoint results, interactive reports and charts: [`readme.md` §9](readme.md#9-performance-and-metrics)
 and [`locust_load_testing/output/BENCHMARK_SUMMARY.md`](locust_load_testing/output/BENCHMARK_SUMMARY.md).
 
 ## 9. Testing
@@ -276,5 +297,5 @@ and [`locust_load_testing/output/BENCHMARK_SUMMARY.md`](locust_load_testing/outp
 - **Load testing**: the Locust suite described in [section 8](#8-evaluation-serverless-vs-ec2), covering 65
   endpoints across 10 modules, runnable against either deployment or a local backend.
 - **Deployment verification**: a `curl`-based smoke-test sequence checks health, CloudFront edge caching and
-  authentication on every fresh deploy (`README.md` §5.9).
+  authentication on every fresh deploy (`readme.md` §5.9).
 

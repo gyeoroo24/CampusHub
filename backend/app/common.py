@@ -35,6 +35,28 @@ def search_text(q: str | None) -> str | None:
     return q.strip()
 
 
+def keyword_tsquery(text_sql: str) -> str:
+    """SQL for the full-text query a search box's text asks for (`text_sql` is a parameter or column).
+
+    The same as websearch_to_tsquery('english', text), except that a last word still being typed also
+    matches as a prefix: "phon" finds "phone", and "phone c" finds "phone charger". A word counts as
+    still being typed when the text ends in it (no trailing space) and it stands alone: letters and
+    digits after a space or at the start, not negated ("-case"), not inside an open quote, not "or".
+    Anything else keeps the plain websearch meaning. An empty result (only stop words) means no
+    keyword filter, as before. The result doesn't depend on the row, so the GIN index still applies.
+    """
+    last = f"substring({text_sql} from '([[:alnum:]]+)$')"
+    head = f"left({text_sql}, length({text_sql}) - length({last}))"
+    typing = (f"{last} IS NOT NULL AND lower({last}) <> 'or' AND ({head} = '' OR {head} ~ '\\s$')"
+              f" AND (length({head}) - length(replace({head}, '\"', ''))) % 2 = 0")
+    prefix = f"to_tsquery('english', {last} || ':*')"
+    words = f"websearch_to_tsquery('english', {head})"
+    return (f"(CASE WHEN NOT ({typing}) THEN websearch_to_tsquery('english', {text_sql})"
+            f" WHEN {head} ~ '^\\s*$' THEN {prefix}"
+            f" WHEN {head} ~* '(^|\\s)or\\s+$' THEN {words} || {prefix}"  # "phone or cha": either word
+            f" ELSE {words} && {prefix} END)")
+
+
 def like_pattern(q: str) -> str:
     """Escape LIKE wildcards so a search for "50%" matches the text "50%"; use with ESCAPE '\\'."""
     return q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
