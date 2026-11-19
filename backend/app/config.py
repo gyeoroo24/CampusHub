@@ -27,6 +27,15 @@ class Settings(BaseSettings):
     db_statement_cache_size: int = 0
     # A container frozen longer than this may hold connections the proxy has closed; replace them.
     db_idle_reconnect_seconds: int = 300
+    # Fail fast when the database stalls (RDS Multi-AZ failover, network blip, exhausted
+    # connections) instead of hanging until the client or Lambda gives up. A timed-out request
+    # gets a 503 the client can retry. All three stay well under the 29 s Lambda timeout.
+    db_connect_timeout_seconds: float = 5.0    # opening a new connection
+    db_acquire_timeout_seconds: float = 10.0   # waiting for a free connection from the pool
+    db_command_timeout_seconds: float = 10.0   # any single query (asyncpg command_timeout)
+    db_cancel_timeout_seconds: float = 2.0     # cancelling a timed-out query on the server (see db.py)
+    # GET /health checks the database with this much tighter limit, so it answers quickly either way.
+    health_db_timeout_seconds: float = 2.0
 
     # --- Auth ---
     # "cognito": verify the Cognito ID token sent as "Authorization: Bearer <token>".

@@ -12,6 +12,8 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from .db import DatabaseUnavailable
+
 log = logging.getLogger(__name__)
 
 
@@ -55,6 +57,21 @@ def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(asyncpg.exceptions.NotNullViolationError)
     async def _not_null(_: Request, exc: asyncpg.PostgresError) -> JSONResponse:
         return JSONResponse(status_code=422, content=_body("A required value is missing.", exc))
+
+    # The database stalled or dropped the connection (failover, network blip, pool exhausted):
+    # db.py's timeouts end the wait, and the client gets a retryable 503 rather than a hang or a bare 500.
+    # DatabaseUnavailable comes from get_conn; TimeoutError / ConnectionError can also come from
+    # opening a connection or waiting for a free one (asyncpg raises TimeoutError since Python 3.11).
+    # Nothing else in the app lets either escape: SMTP, push, JWKS and Redis handle their own errors.
+    async def _db_unavailable(_: Request, exc: Exception) -> JSONResponse:
+        cause = exc.__cause__ if isinstance(exc, DatabaseUnavailable) and exc.__cause__ else exc
+        log.warning("Database unavailable: %s: %s", type(cause).__name__, cause)
+        return JSONResponse(status_code=503, headers={"Retry-After": "5"},
+                            content={"detail": "The service is temporarily unavailable. Please try again."})
+
+    for exc_type in (DatabaseUnavailable, TimeoutError, ConnectionError,
+                     asyncpg.exceptions.ConnectionDoesNotExistError, asyncpg.exceptions.CannotConnectNowError):
+        app.add_exception_handler(exc_type, _db_unavailable)
 
     # Values the database can't store, e.g. an id larger than a 32-bit integer.
     @app.exception_handler(asyncpg.exceptions.DataError)

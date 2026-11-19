@@ -123,6 +123,8 @@ def create_app() -> FastAPI:
     # No blanket `optional_user` dependency here: POST /me/reactivate has to work for a deactivated
     # account's token, which optional_user would otherwise 403 before the route ever runs.
     app.include_router(users.reactivate_router, prefix=settings.api_prefix)
+    # Nor here: GET /health must answer within its own short DB timeout even while the DB is stalled.
+    app.include_router(users.health_router, prefix=settings.api_prefix)
     _add_sign_in_to_docs(app)
     return app
 

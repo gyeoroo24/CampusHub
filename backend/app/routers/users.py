@@ -1,4 +1,5 @@
 """Health check, the caller's own profile, other users' public profiles, and the admin's account list and hand-over."""
+import logging
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
@@ -12,16 +13,28 @@ from ..auth import CurrentUser, current_user, current_user_allow_deactivated, op
 from ..common import (Contact, Page, PageParams, forbidden, like_pattern, make_page, not_found, page_params,
                       search_text, set_clause, text)
 from ..config import get_settings
-from ..db import get_conn
+from ..db import get_conn, ping
 from ..permissions import log_moderation
 from .moderators import notify_role_change
 
+log = logging.getLogger("campushub.health")
 router = APIRouter(tags=["Users"])
+# Mounted without main.py's blanket optional_user dependency: that takes a pooled connection
+# (get_conn) on every request, so during a DB stall /health would wait on it before its own check ran.
+health_router = APIRouter()
 
 
-@router.get("/health", tags=["Health"], summary="Health check (used by the CloudWatch canary)")
-async def health(conn: asyncpg.Connection = Depends(get_conn)) -> dict:
-    await conn.fetchval("SELECT 1")
+@health_router.get("/health", tags=["Health"], summary="Health check (used by the CloudWatch canary)",
+            responses={503: {"description": "The database did not answer in time"}})
+async def health(response: Response) -> dict:
+    # Still touches the database (the Lambda warmer relies on this to open the pool), but with a
+    # short limit of its own: during a DB stall it answers 503 in ~2 s instead of hanging.
+    try:
+        await ping(get_settings().health_db_timeout_seconds)
+    except Exception:  # noqa: BLE001 - any failure here just means "not healthy"
+        log.warning("Health check: database unavailable", exc_info=True)
+        response.status_code = 503
+        return {"status": "unavailable", "database": "unreachable"}
     return {"status": "ok"}
 
 
